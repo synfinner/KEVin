@@ -34,3 +34,7 @@ The missing API for CISA's Known Exploited Vulnerabilities Catalog ([here](https
 ## Considerations
 
 **You should not expose mongodb to the broader internet.**
+
+## Contributing
+
+Contributions are welcome! If you find any issues or have ideas for improvements, please feel free to open an issue or submit a pull request. I won't have a whole lot of time to improve this at the moment
