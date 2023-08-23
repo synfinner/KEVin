@@ -30,7 +30,8 @@ def serialize_vulnerability(vulnerability):
         'requiredAction': vulnerability["requiredAction"],
         'shortDescription': vulnerability["shortDescription"],
         'vendorProject': vulnerability["vendorProject"],
-        'vulnerabilityName': vulnerability["vulnerabilityName"]
+        'vulnerabilityName': vulnerability["vulnerabilityName"],
+        'githubPocs': vulnerability["githubPocs"]
     }
     
     return serialized_vulnerability
