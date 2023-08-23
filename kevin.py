@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import Flask
+from flask import Flask, jsonify
 from flask_restful import Api, Resource, reqparse
 from pymongo import MongoClient
 from datetime import datetime, timedelta
@@ -53,6 +53,11 @@ class NewVulnerabilitiesResource(Resource):
                 pass  # Ignore invalid date formats
 
         return new_vulnerabilities
+
+# Define error handler for 404s
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({"error": "You found nothing! Congratulations!"}), 404
 
 # Define resource routes
 api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>")
