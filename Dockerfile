@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 8444
 
 # Command to run Gunicorn with your Flask app
-CMD ["gunicorn", "--bind", "0.0.0.0:8444", "kevin:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8444", "--workers", "4", "kevin:app"]
