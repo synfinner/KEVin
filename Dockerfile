@@ -14,7 +14,7 @@ RUN pip install -r requirements.txt
 COPY . .
 
 # Expose the port that Gunicorn will listen on
-EXPOSE 8000
+EXPOSE 8444
 
 # Command to run Gunicorn with your Flask app
 CMD ["gunicorn", "--bind", "0.0.0.0:8444", "kevin:app"]
