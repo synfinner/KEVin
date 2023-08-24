@@ -60,19 +60,19 @@ def nvd_processor():
                     nvd_data_array.append({
                         "attackVector": cvss_metrics_v31["attackVector"],
                         "attackComplexity": cvss_metrics_v31["attackComplexity"],
-                        "privilegesRequired": cvss_metrics_v31["privilegesRequired"],
+                        "baseSeverity": cvss_metrics_v31["baseSeverity"],
                         "exploitabilityScore": vuln_data["metrics"]["cvssMetricV31"][0]["exploitabilityScore"],
-                        "impactScore": vuln_data["metrics"]["cvssMetricV31"][0]["impactScore"]
+                        "baseScore": cvss_metrics_v31["baseScore"]
                     })
                 except:
                     # fall back to cvss2 if cvss3 is not available
                     cvss_metrics_v2 = vuln_data["metrics"]["cvssMetricV2"][0]["cvssData"]
                     nvd_data_array.append({
-                        "attackVector": cvss_metrics_v2["attackVector"],
-                        "attackComplexity": cvss_metrics_v2["attackComplexity"],
-                        "privilegesRequired": cvss_metrics_v2["privilegesRequired"],
+                        "attackVector": cvss_metrics_v2["accessVector"],
+                        "attackComplexity": cvss_metrics_v2["accessComplexity"],
+                        "baseSeverity": vuln_data["metrics"]["cvssMetricV2"][0]["baseSeverity"],
                         "exploitabilityScore": vuln_data["metrics"]["cvssMetricV2"][0]["exploitabilityScore"],
-                        "impactScore": vuln_data["metrics"]["cvssMetricV2"][0]["impactScore"]
+                        "baseScore": cvss_metrics_v2["baseScore"]
                     })
                 finally:
                     # Update the nvdData array in the mongo document
