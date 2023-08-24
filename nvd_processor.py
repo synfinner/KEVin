@@ -49,10 +49,18 @@ def nvd_processor():
         # check if the document has a "nvdData" array in the json object
         if "nvdData" not in vulnerability:# or vulnerability["nvdData"]['attackVector'] == None:
             # if nvdData does not exist, call the get_nvd_data function and pass the cveID
+            print("[+] Calling get_nvd_data for " + vulnerability["cveID"])
             nvd_data = get_nvd_data(vulnerability["cveID"])
             # if the nvd_data is not None, add the nvdData to the mongo document
             if nvd_data:
-                vuln_data = nvd_data["vulnerabilities"][0]["cve"]
+                try:
+                    vuln_data = nvd_data["vulnerabilities"][0]["cve"]
+                except:
+                    # skip this vuln as it does not have nvd data
+                    continue
+                # if baseScore not in vuln_data, continue to the next object. This is because NVD is "analyzing" and data isn't available yet
+                if "baseScore" not in vuln_data:
+                    continue
                 nvd_data_array = []  # Initialize an empty array
                 try:
                     cvss_metrics_v31 = vuln_data["metrics"]["cvssMetricV31"][0]["cvssData"]
