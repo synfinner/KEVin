@@ -91,7 +91,7 @@ def nvd_processor():
             #Print the cve id we added nvd data to
             print("[+] Added nvdData to " + vulnerability["cveID"])
             # nvd rate limit
-            sleep(6)
+            sleep(3)
     #close mongodb connection
     client.close()
         

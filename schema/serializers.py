@@ -19,20 +19,30 @@ def serialize_vulnerability(vulnerability):
     else:
         due_date_str = due_date
     
+    # Handle KeyError exceptions with default values
+    notes = vulnerability.get("notes", "")
+    product = vulnerability.get("product", "")
+    required_action = vulnerability.get("requiredAction", "")
+    short_description = vulnerability.get("shortDescription", "")
+    vendor_project = vulnerability.get("vendorProject", "")
+    vulnerability_name = vulnerability.get("vulnerabilityName", "")
+    nvd_data = vulnerability.get("nvdData", [])
+    github_pocs = vulnerability.get("githubPocs", [])
+    
     # Construct the serialized vulnerability dictionary
     serialized_vulnerability = {
         '_id': str(vulnerability["_id"]),
         'cveID': vulnerability["cveID"],
         'dateAdded': date_added_str,
         'dueDate': due_date_str,
-        'notes': vulnerability["notes"],
-        'product': vulnerability["product"],
-        'requiredAction': vulnerability["requiredAction"],
-        'shortDescription': vulnerability["shortDescription"],
-        'vendorProject': vulnerability["vendorProject"],
-        'vulnerabilityName': vulnerability["vulnerabilityName"],
-        'nvdData': vulnerability["nvdData"],
-        'githubPocs': vulnerability["githubPocs"]
+        'notes': notes,
+        'product': product,
+        'requiredAction': required_action,
+        'shortDescription': short_description,
+        'vendorProject': vendor_project,
+        'vulnerabilityName': vulnerability_name,
+        'nvdData': nvd_data,
+        'githubPocs': github_pocs
     }
     
     return serialized_vulnerability
