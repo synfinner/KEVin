@@ -3,3 +3,4 @@ env/
 __pycache__/
 *.py[cod]
 poc_processor.py
+.env

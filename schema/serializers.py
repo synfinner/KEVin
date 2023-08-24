@@ -31,6 +31,7 @@ def serialize_vulnerability(vulnerability):
         'shortDescription': vulnerability["shortDescription"],
         'vendorProject': vulnerability["vendorProject"],
         'vulnerabilityName': vulnerability["vulnerabilityName"],
+        'nvdData': vulnerability["nvdData"],
         'githubPocs': vulnerability["githubPocs"]
     }
     
