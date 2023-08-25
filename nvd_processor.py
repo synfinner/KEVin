@@ -46,8 +46,8 @@ def nvd_processor():
 
     # iterate through each document in the mongo collection
     for vulnerability in collection.find():
-        # check if the document has a "nvdData" array in the json object
-        if "nvdData" not in vulnerability:# or vulnerability["nvdData"]['attackVector'] == None:
+        # check if the document has a "nvdData" array in the json object or if the nvdData array is empty
+        if "nvdData" not in vulnerability or len(vulnerability["nvdData"]) == 0:
             # if nvdData does not exist, call the get_nvd_data function and pass the cveID
             print("[+] Calling get_nvd_data for " + vulnerability["cveID"])
             nvd_data = get_nvd_data(vulnerability["cveID"])
