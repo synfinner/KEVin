@@ -4,9 +4,12 @@ from flask import Flask, jsonify
 from flask_restful import Api, Resource, reqparse
 from pymongo import MongoClient
 from datetime import datetime, timedelta
+from flask_caching import Cache
 from schema.serializers import serialize_vulnerability
 
 app = Flask(__name__)
+# Configure cache
+cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300})  # 300 seconds = 5 minutes
 api = Api(app)
 
 # MongoDB configuration
@@ -21,6 +24,7 @@ collection = db[COLLECTION_NAME]
 
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(Resource):
+    @cache.cached()
     def get(self, cve_id):
         vulnerability = collection.find_one({"cveID": cve_id})
         if vulnerability:
@@ -30,6 +34,7 @@ class VulnerabilityResource(Resource):
 
 # Resource for fetching all vulnerabilities
 class AllVulnerabilitiesResource(Resource):
+    @cache.cached()
     def get(self):
         vulnerabilities = collection.find()
         result = [serialize_vulnerability(v) for v in vulnerabilities]
@@ -37,6 +42,7 @@ class AllVulnerabilitiesResource(Resource):
 
 # Resource for fetching new vulnerabilities added in the last X days
 class NewVulnerabilitiesResource(Resource):
+    @cache.cached()
     def get(self, days):
         # Calculate the cutoff date for new vulnerabilities
         cutoff_date = datetime.utcnow() - timedelta(days=days)
