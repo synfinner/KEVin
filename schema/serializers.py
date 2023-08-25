@@ -28,7 +28,7 @@ def serialize_vulnerability(vulnerability):
     vulnerability_name = vulnerability.get("vulnerabilityName", "")
     nvd_data = vulnerability.get("nvdData", [])
     github_pocs = vulnerability.get("githubPocs", [])
-    threat_data = vulnerability.get("threatData", [])
+    threat_data = vulnerability.get("openThreatData", [])
     
     # Construct the serialized vulnerability dictionary
     serialized_vulnerability = {
@@ -44,7 +44,7 @@ def serialize_vulnerability(vulnerability):
         'vulnerabilityName': vulnerability_name,
         'nvdData': nvd_data,
         'githubPocs': github_pocs,
-        'threatData': threat_data
+        'openThreatData': threat_data
     }
     
     return serialized_vulnerability
