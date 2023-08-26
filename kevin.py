@@ -5,7 +5,7 @@ from flask_restful import Api, Resource, reqparse
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from flask_caching import Cache
-from schema.serializers import serialize_vulnerability
+from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer
 
 app = Flask(__name__)
 # Configure cache
@@ -21,6 +21,32 @@ COLLECTION_NAME = "vulns"
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 collection = db[COLLECTION_NAME]
+
+# Define a new mongodb db and collection for all vuln data
+ALL_VULNS_DB_NAME = "cveland"
+ALL_VULNS_COLLECTION_NAME = "cves"
+all_vulns_db = client[ALL_VULNS_DB_NAME]
+all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
+
+# Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection
+class cveLandResource(Resource):
+    @cache.cached()
+    def get(self, cve_id):
+        vulnerability = all_vulns_collection.find_one({"_id": cve_id})
+        if vulnerability:
+            return serialize_all_vulnerability(vulnerability)
+        else:
+            return {"message": "Vulnerability not found"}, 404
+
+# Resource for NVD data from the cveland via CVE-ID, which is the _id field in the cveland collection
+class cveNVDResource(Resource):
+    @cache.cached()
+    def get(self, cve_id):
+        vulnerability = all_vulns_collection.find_one({"_id": cve_id})
+        if vulnerability:
+            return nvd_seralizer(vulnerability)
+        else:
+            return {"message": "Vulnerability not found"}, 404
 
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(Resource):
@@ -69,6 +95,8 @@ def not_found(e):
 api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>")
 api.add_resource(AllVulnerabilitiesResource, "/kev") 
 api.add_resource(NewVulnerabilitiesResource, "/kev/new/<int:days>")
+api.add_resource(cveLandResource, "/vuln/<string:cve_id>")
+api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd")
 
 if __name__ == "__main__":
     app.run(debug=False)

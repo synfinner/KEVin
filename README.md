@@ -30,6 +30,8 @@ The missing API for CISA's Known Exploited Vulnerabilities Catalog ([here](https
 - Fetch KEV entries by CVE: `/kev/CVE-2023-1234`
 - Retrieve all KEV entries: `/kev`
 - Get new vulns added in the last X days: `/kev/new/7`
+- Pull CISA, MITRE, NVD data for a CVE: `/vuln/<string:cve_id>`
+- Pull just NVD data for a CVE: `/vuln/<string:cve_id>/nvd`
 
 ## Considerations
 

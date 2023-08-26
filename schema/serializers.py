@@ -1,6 +1,41 @@
 from bson import ObjectId
 from datetime import datetime
 
+
+def serialize_all_vulnerability(vulnerability):
+    # Handle KeyError exceptions with default values
+    gsd = vulnerability.get("GSD", {})
+    description = gsd.get("description", "")
+    references = gsd.get("references", [])
+    namespaces = vulnerability.get("namespaces", {})
+    cisa_data = namespaces.get("cisa.gov", {})
+    cve_org = namespaces.get("cve.org", {})
+    nvd_data = namespaces.get("nvd.nist.gov", {})
+
+    serialized_data = {
+        'cveID': str(vulnerability["_id"]),
+        'description': description,
+        'references': references,
+        'cisaData': cisa_data,
+        'cve.Org': cve_org,
+        'nvdData': nvd_data
+    }
+
+    return serialized_data
+
+def nvd_seralizer(vulnerability):
+    # Handle KeyError exceptions with default values
+    gsd = vulnerability.get("gsd", {})
+    namespaces = vulnerability.get("namespaces", {})
+    nvd_data = namespaces.get("nvd.nist.gov", {})
+
+    serialized_data = {
+        'cveID': str(vulnerability["_id"]),
+        'nvdData': nvd_data
+    }
+
+    return serialized_data
+
 def serialize_vulnerability(vulnerability):
     # Define the date format for serialization
     date_format = "%Y-%m-%d"
