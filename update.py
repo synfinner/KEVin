@@ -4,8 +4,13 @@ import json
 import requests
 from pymongo import MongoClient
 
+# load env using python-dotenv
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
 # MongoDB configuration
-MONGO_URI = "mongodb://localhost:27017/"
+MONGO_URI = os.getenv("MONGODB_URI_PROD")
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
 

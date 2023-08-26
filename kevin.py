@@ -7,13 +7,18 @@ from datetime import datetime, timedelta
 from flask_caching import Cache
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer
 
+# load env using python-dotenv
+from dotenv import load_dotenv
+load_dotenv()
+import os
+
 app = Flask(__name__)
 # Configure cache
 cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300})  # 300 seconds = 5 minutes
 api = Api(app)
 
 # MongoDB configuration
-MONGO_URI = "mongodb://localhost:27017/"
+MONGO_URI = os.getenv("MONGO_URI_PROD")
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
 
@@ -92,11 +97,11 @@ def not_found(e):
     return jsonify({"error": "You found nothing! Congratulations!"}), 404
 
 # Define resource routes
-api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>")
-api.add_resource(AllVulnerabilitiesResource, "/kev") 
+api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>", strict_slashes=False)
+api.add_resource(AllVulnerabilitiesResource, "/kev", strict_slashes=False) 
 api.add_resource(NewVulnerabilitiesResource, "/kev/new/<int:days>")
-api.add_resource(cveLandResource, "/vuln/<string:cve_id>")
-api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd")
+api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
+api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
 
 if __name__ == "__main__":
     app.run(debug=False)

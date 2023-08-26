@@ -16,7 +16,7 @@ api_key = os.getenv("API_KEY")
 
 
 #mongodb config
-MONGO_URI = "mongodb://localhost:27017/"
+MONGO_URI = os.getenv("MONGODB_URI_PROD")
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
 
