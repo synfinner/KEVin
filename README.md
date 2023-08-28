@@ -14,16 +14,55 @@ The missing API for CISA's Known Exploited Vulnerabilities Catalog ([here](https
 - `source env/bin/activate`
 - `pip3 install -r requirements.txt`
 
+### Add .env
+
+Add necessary API KEYS. 
+
+- API_KEY = nvd api key -- [Obtained here](https://nvd.nist.gov/developers/request-an-api-key)
+
+```
+API_KEY=xxx
+MONGODB_URI_PROD=mongodb://MONGO_PROD_IP:27017/
+MONGODB_URI_DEV=mongodb://localhost:27017/
+```
+
+Feel free to edit the mongodb in use or variable names. I have both in here since I work on prod and dev mongodbs for the hosted version of KEVin at kevin.gtfkd.com/*.
+
 **Set up MongoDB:**
 
 - Install MongoDB: [MongoDB Installation Guide](https://www.mongodb.com/docs/manual/installation/)
 - Start MongoDB server
 - Configure MongoDB details in kevin.py:
 
-
 **Run update.py**
 
 `update.py` will pull data from CISA and populate your mongodb. Enjoy.
+
+## Deploying to docker
+
+Below is an example docker-compose.yml file for deploying the web half of KEVin.
+
+**make sure your .env file has the correct values!!!**
+
+```
+version: '3'
+services:
+  flask_app:
+    build:
+      context: .  # The build context is now the KEVin folder
+      dockerfile: Dockerfile  # Use the Dockerfile we created inside KEVin
+    container_name: KEVin
+    env_file:
+      - .env
+    networks:
+      - gtfkdProd
+    ports:
+      - "8444:8444"  # Map host port to container port
+    restart: unless-stopped
+networks:
+  gtfkdProd:
+    external: true
+```
 
 ## Usage
 
