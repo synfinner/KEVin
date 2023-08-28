@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import re
+from urllib.parse import unquote
 from flask import Flask, jsonify, request
 from flask_restful import Api, Resource, reqparse
 from pymongo import MongoClient
@@ -65,8 +66,10 @@ class VulnerabilityResource(Resource):
             return {"message": "Vulnerability not found"}, 404
         
 def sanitize_query(query):
-    # Remove special characters from query
-    query = re.sub(r"[^a-zA-Z0-9\s]", "", query)
+    # URL decode the query
+    query = unquote(query)
+    # Allow alphanumeric characters, spaces, and common punctuation
+    query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
     # Remove extra whitespace from query
     query = re.sub(r"\s+", " ", query)
     return query
