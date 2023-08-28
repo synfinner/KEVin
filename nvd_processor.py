@@ -47,7 +47,7 @@ def nvd_processor():
     # iterate through each document in the mongo collection
     for vulnerability in collection.find():
         # check if the document has a "nvdData" array in the json object or if the nvdData array is empty
-        if "nvdData" not in vulnerability or len(vulnerability["nvdData"]) == 0:
+        if ("nvdData" not in vulnerability or len(vulnerability["nvdData"]) == 0) or "nvdReferences" not in vulnerability["nvdData"][0]:
             # if nvdData does not exist, call the get_nvd_data function and pass the cveID
             print("[+] Calling get_nvd_data for " + vulnerability["cveID"])
             nvd_data = get_nvd_data(vulnerability["cveID"])
@@ -58,10 +58,21 @@ def nvd_processor():
                 except:
                     # skip this vuln as it does not have nvd data
                     continue
-                # if baseScore not in vuln_data, continue to the next object. This is because NVD is "analyzing" and data isn't available yet
-                if "baseScore" not in vuln_data:
-                    continue
                 nvd_data_array = []  # Initialize an empty array
+                # quick check if the vuln is in analysis phase
+                if vuln_data["vulnStatus"] == "Awaiting Analysis":
+                    nvd_data_array.append({
+                        "nvdReferences": vuln_data["references"],
+                        "vulnStatus": vuln_data["vulnStatus"]
+                    })
+                    collection.update_one(
+                        {"cveID": vulnerability["cveID"]},
+                        {"$set": {"nvdData": nvd_data_array}}
+                    )
+                    # print that the cveID was updated with the nvdData
+                    print("[+] " + vulnerability["cveID"] + " updated with nvdData")
+                    sleep(3)
+                    continue
                 try:
                     cvss_metrics_v31 = vuln_data["metrics"]["cvssMetricV31"][0]["cvssData"]
                     # Extract desired fields and append them to the array
@@ -70,8 +81,10 @@ def nvd_processor():
                         "attackComplexity": cvss_metrics_v31["attackComplexity"],
                         "baseSeverity": cvss_metrics_v31["baseSeverity"],
                         "exploitabilityScore": vuln_data["metrics"]["cvssMetricV31"][0]["exploitabilityScore"],
-                        "baseScore": cvss_metrics_v31["baseScore"]
-                    })
+                        "baseScore": cvss_metrics_v31["baseScore"],
+                        "nvdReferences": vuln_data["references"],
+                        "vulnStatus": vuln_data["vulnStatus"]
+                        })
                 except:
                     # fall back to cvss2 if cvss3 is not available
                     cvss_metrics_v2 = vuln_data["metrics"]["cvssMetricV2"][0]["cvssData"]
@@ -80,7 +93,9 @@ def nvd_processor():
                         "attackComplexity": cvss_metrics_v2["accessComplexity"],
                         "baseSeverity": vuln_data["metrics"]["cvssMetricV2"][0]["baseSeverity"],
                         "exploitabilityScore": vuln_data["metrics"]["cvssMetricV2"][0]["exploitabilityScore"],
-                        "baseScore": cvss_metrics_v2["baseScore"]
+                        "baseScore": cvss_metrics_v2["baseScore"],
+                        "nvdReferences": vuln_data["references"],
+                        "vulnStatus": vuln_data["vulnStatus"]
                     })
                 finally:
                     # Update the nvdData array in the mongo document
@@ -88,6 +103,8 @@ def nvd_processor():
                         {"cveID": vulnerability["cveID"]},
                         {"$set": {"nvdData": nvd_data_array}}
                     )
+                    # print that the cveID was updated with the nvdData
+                    print("[+] " + vulnerability["cveID"] + " updated with nvdData")
             else:
                 # If the nvd_data is None, set the nvdData array to an empty array
                 nvd_data_array = []
@@ -100,6 +117,8 @@ def nvd_processor():
             print("[+] Added nvdData to " + vulnerability["cveID"])
             # nvd rate limit
             sleep(3)
+        else:
+            continue
     #close mongodb connection
     client.close()
         

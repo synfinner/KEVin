@@ -32,9 +32,14 @@ def insert_data_to_mongodb(data):
 
     # Insert or update each vulnerability in the data
     for vulnerability in data["vulnerabilities"]:
-        query = {"cveID": vulnerability["cveID"]}
-        collection.update_one(query, {"$set": vulnerability}, upsert=True)
-    
+        # Check if the cveID already exists in the database
+        # if it does, skip. If it does not exist, insert the vulnerability and print the newly inserted vulnerability
+        if collection.find_one({"cveID": vulnerability["cveID"]}):
+            #print(f"{vulnerability['cveID']} already exists in database. Skipping.")
+            continue
+        else:
+            collection.insert_one(vulnerability)
+            print(f"Inserted vulnerability {vulnerability['cveID']} into the database.")
     client.close()
 
 if __name__ == "__main__":

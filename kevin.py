@@ -18,7 +18,7 @@ cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300}
 api = Api(app)
 
 # MongoDB configuration
-MONGO_URI = os.getenv("MONGO_URI_PROD")
+MONGO_URI = os.getenv("MONGO_URI_DEV")
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
 
@@ -90,6 +90,11 @@ class NewVulnerabilitiesResource(Resource):
                 pass  # Ignore invalid date formats
 
         return new_vulnerabilities
+
+# Define error handler for 500s
+@app.errorhandler(500)
+def internal_server_error(e):
+    return jsonify({"error": "Internal server error! Synfinner probably broke something."}), 500
 
 # Define error handler for 404s
 @app.errorhandler(404)
