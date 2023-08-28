@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from flask import Flask, jsonify
+import re
+from flask import Flask, jsonify, request
 from flask_restful import Api, Resource, reqparse
 from pymongo import MongoClient
 from datetime import datetime, timedelta
@@ -62,14 +63,36 @@ class VulnerabilityResource(Resource):
             return serialize_vulnerability(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
+        
+def sanitize_query(query):
+    # Remove special characters from query
+    query = re.sub(r"[^a-zA-Z0-9\s]", "", query)
+    # Remove extra whitespace from query
+    query = re.sub(r"\s+", " ", query)
+    return query
 
 # Resource for fetching all vulnerabilities
 class AllVulnerabilitiesResource(Resource):
-    @cache.cached()
     def get(self):
-        vulnerabilities = collection.find()
-        result = [serialize_vulnerability(v) for v in vulnerabilities]
-        return result
+        search_query = request.args.get("search", '')
+        # Sanitize the search query
+        clean_query = sanitize_query(search_query)
+        # Check if the data is already cached
+        cached_data = cache.get(clean_query)
+        if cached_data is not None:
+            vulnerabilities = cached_data
+        else:
+            if clean_query:
+                # Search for vulnerabilities that match the query
+                cursor = collection.find({"$text": {"$search": clean_query}})
+            else:
+                # No query provided, return all data
+                cursor = collection.find()
+            # Convert the cursor data to a list
+            vulnerabilities = [serialize_vulnerability(v) for v in cursor]
+            # Cache the data
+            cache.set(clean_query, vulnerabilities)
+        return vulnerabilities
 
 # Resource for fetching new vulnerabilities added in the last X days
 class NewVulnerabilitiesResource(Resource):
