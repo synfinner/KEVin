@@ -35,11 +35,23 @@ ALL_VULNS_COLLECTION_NAME = "cves"
 all_vulns_db = client[ALL_VULNS_DB_NAME]
 all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
 
+#Function for sanitizing input
+def sanitize_query(query):
+    # URL decode the query
+    query = unquote(query)
+    # Allow alphanumeric characters, spaces, and common punctuation
+    query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
+    # Remove extra whitespace from query
+    query = re.sub(r"\s+", " ", query)
+    return query
+
 # Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection
 class cveLandResource(Resource):
     @cache.cached()
     def get(self, cve_id):
-        vulnerability = all_vulns_collection.find_one({"_id": cve_id})
+        # Sanitize the input CVE ID
+        sanitized_cve_id = sanitize_query(cve_id)
+        vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if vulnerability:
             return serialize_all_vulnerability(vulnerability)
         else:
@@ -49,7 +61,9 @@ class cveLandResource(Resource):
 class cveNVDResource(Resource):
     @cache.cached()
     def get(self, cve_id):
-        vulnerability = all_vulns_collection.find_one({"_id": cve_id})
+        # Sanitize the input CVE ID
+        sanitized_cve_id = sanitize_query(cve_id)
+        vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if vulnerability:
             return nvd_seralizer(vulnerability)
         else:
@@ -59,20 +73,14 @@ class cveNVDResource(Resource):
 class VulnerabilityResource(Resource):
     @cache.cached()
     def get(self, cve_id):
-        vulnerability = collection.find_one({"cveID": cve_id})
+        # Sanitize the input CVE ID
+        sanitized_cve_id = sanitize_query(cve_id)
+        
+        vulnerability = collection.find_one({"cveID": sanitized_cve_id})
         if vulnerability:
             return serialize_vulnerability(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
-        
-def sanitize_query(query):
-    # URL decode the query
-    query = unquote(query)
-    # Allow alphanumeric characters, spaces, and common punctuation
-    query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
-    # Remove extra whitespace from query
-    query = re.sub(r"\s+", " ", query)
-    return query
 
 # Resource for fetching all vulnerabilities
 class AllVulnerabilitiesResource(Resource):
@@ -101,8 +109,18 @@ class AllVulnerabilitiesResource(Resource):
 class NewVulnerabilitiesResource(Resource):
     @cache.cached()
     def get(self, days):
+        # Sanitize the input days value
+        sanitized_days = sanitize_query(str(days))
+        # Validate the sanitized days value
+        try:
+            sanitized_days = int(sanitized_days)
+            if sanitized_days < 0:
+                raise ValueError
+        except ValueError:
+            return {"message": "Invalid value for days"}, 400
+        
         # Calculate the cutoff date for new vulnerabilities
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.utcnow() - timedelta(days=sanitized_days)
         all_vulnerabilities = collection.find()
 
         new_vulnerabilities = []
@@ -116,6 +134,8 @@ class NewVulnerabilitiesResource(Resource):
                 pass  # Ignore invalid date formats
 
         return new_vulnerabilities
+
+    
 
 # Define error handler for 500s
 @app.errorhandler(500)
