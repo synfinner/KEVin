@@ -71,6 +71,7 @@ networks:
 - Get new vulns added in the last X days: `/kev/new/7`
 - Pull CISA, MITRE, NVD data for a CVE: `/vuln/<string:cve_id>`
 - Pull just NVD data for a CVE: `/vuln/<string:cve_id>/nvd`
+- Text search KEV data `/kev?search=Microsoft`
 
 ## Considerations
 
