@@ -21,7 +21,7 @@ cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300}
 api = Api(app)
 
 # MongoDB configuration
-MONGO_URI = os.getenv("MONGO_URI_DEV")
+MONGO_URI = os.getenv("MONGO_URI_PROD")
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
 
@@ -141,7 +141,33 @@ class NewVulnerabilitiesResource(Resource):
 
         return new_vulnerabilities
 
-    
+class SortBySeverityResource(Resource):
+    def get(self):
+        # Get the sorting direction from the URL
+        sort_direction = request.args.get("sort", "asc")
+        sanitized_sort_direction = sanitize_query(sort_direction)
+        
+        # Ensure only valid values are accepted for sorting direction
+        if sanitized_sort_direction != "asc" and sanitized_sort_direction != "desc":
+            return {"message": "Invalid sorting direction"}, 400
+        
+        # Set the default sorting field
+        sort_field = 'nvdData.0.baseScore'  # Field path to baseScore within nvdData array
+        
+        # Fetch and sort the vulnerabilities
+        cursor = collection.find()
+        sorted_vulnerabilities = []
+
+        for vulnerability in cursor:
+            nvd_data = vulnerability.get('nvdData', [])
+            if nvd_data and nvd_data[0].get('baseScore') is not None:
+                sorted_vulnerabilities.append(vulnerability)
+        
+        sorted_vulnerabilities.sort(key=lambda v: v['nvdData'][0]['baseScore'], reverse=(sanitized_sort_direction == "desc"))
+        sorted_vulnerabilities = [serialize_vulnerability(v) for v in sorted_vulnerabilities]
+        
+        return sorted_vulnerabilities    
+
 
 # Define error handler for 500s
 @app.errorhandler(500)
@@ -159,6 +185,7 @@ api.add_resource(AllVulnerabilitiesResource, "/kev", strict_slashes=False)
 api.add_resource(NewVulnerabilitiesResource, "/kev/new/<int:days>")
 api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
 api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
+api.add_resource(SortBySeverityResource, "/kev/severity")
 
 if __name__ == "__main__":
     app.run(debug=False)
