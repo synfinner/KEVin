@@ -17,10 +17,18 @@
                 <li><a href="/kev?search=Microsoft">/kev?search=Microsoft</a> - Search KEV based on description</li>
                 <li><a href="/kev/CVE-2023-1234">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
                 <li><a href="/kev/new/7">/kev/new/7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
+                <li><a href="/kev/severity?sort=desc">/kev/severity?sort=desc/asc</a> - Sort all KEV by NVD baseScore (if it has one)</li>
                 <li><a href="/vuln/CVE-2023-1234">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
                 <li><a href="/vuln/CVE-2023-1234/nvd">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
-                <!-- Add more examples here -->
             </ul>
+            <p><b>Limits:</b></p>
+            <ul>
+                <li>KEVin is currently set to allow one (1) request per second. A one (1) hour block is placed on IPs violating this limit.</li>
+                <li>Edge cache is set to 3 hours. Updates may be delayed if CVE data is stuck in cache</li>
+                <li>As of <i>29 August 2023</i>, search is limited to only KEV data</li>
+            </ul>
+            <p><b>Issues/Feature Requests:</b></p>
+            <p>If you have any issues or feature requests, please feel free to submit them on our <a href="https://github.com/synfinner/KEVin/issues">GitHub repository</a>.</p>
             <hr class="my-4">
             A <a href="https://twitter.com/synfinner">Synfinner</a> project.
         </div>
