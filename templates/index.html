@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KEVin Vulnerabilty API</title>
+    <!-- Include Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="jumbotron">
+            <h1 class="display-4">Welcome to the KEVin API</h1>
+            <p class="lead">This is an API for accessing CISA's Known Exploited Vulnerabilities Catalog (KEV) and more.</p>
+            <hr class="my-4">
+            <p>You can use various endpoints to retrieve vulnerability information. Here are some examples:</p>
+            <ul>
+                <li><a href="/kev">/kev</a> - Get all Known Exploited Vulnerabilities</li>
+                <li><a href="/kev?search=Microsoft">/kev?search=Microsoft</a> - Search KEV based on description</li>
+                <li><a href="/kev/CVE-2023-1234">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
+                <li><a href="/kev/new/7">/kev/new/7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
+                <li><a href="/vuln/CVE-2023-1234">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
+                <li><a href="/vuln/CVE-2023-1234/nvd">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
+                <!-- Add more examples here -->
+            </ul>
+            <hr class="my-4">
+            A <a href="https://twitter.com/synfinner">Synfinner</a> project.
+        </div>
+    </div>
+    <!-- Include Bootstrap JS and jQuery -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

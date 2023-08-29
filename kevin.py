@@ -4,6 +4,7 @@ import re
 from urllib.parse import unquote
 from flask import Flask, jsonify, request
 from flask_restful import Api, Resource, reqparse
+from flask import render_template
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from flask_caching import Cache
@@ -34,6 +35,11 @@ ALL_VULNS_DB_NAME = "cveland"
 ALL_VULNS_COLLECTION_NAME = "cves"
 all_vulns_db = client[ALL_VULNS_DB_NAME]
 all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
+
+# Route for the root endpoint ("/")
+@app.route("/")
+def index():
+    return render_template("index.html")
 
 #Function for sanitizing input
 def sanitize_query(query):
