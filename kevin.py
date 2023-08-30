@@ -172,10 +172,8 @@ def not_found(e):
 api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>", strict_slashes=False)
 api.add_resource(AllVulnerabilitiesResource, "/kev", strict_slashes=False)
 api.add_resource(RecentVulnerabilitiesResource, "/kev/recent", strict_slashes=False) 
-#api.add_resource(NewVulnerabilitiesResource, "/kev/new/<int:days>")
 api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
 api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
-#api.add_resource(SortBySeverityResource, "/kev/severity")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
