@@ -16,8 +16,8 @@
                 <li><a href="/kev">/kev</a> - Get all Known Exploited Vulnerabilities</li>
                 <li><a href="/kev?search=Microsoft">/kev?search=Microsoft</a> - Search KEV based on description</li>
                 <li><a href="/kev/CVE-2023-1234">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
-                <li><a href="/kev/new/7">/kev/new/7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
-                <li><a href="/kev/severity?sort=desc">/kev/severity?sort=desc/asc</a> - Sort all KEV by NVD baseScore (if it has one)</li>
+                <li><a href="/kev/recent?days=7">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
+                <li><a href="/kev?sort=severity&order=desc">/kev?sort=severity&order=desc/asc</a> - Sort all KEV by NVD baseScore (if it has one). You can even add &search= ;)</li>
                 <li><a href="/vuln/CVE-2023-1234">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
                 <li><a href="/vuln/CVE-2023-1234/nvd">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
             </ul>

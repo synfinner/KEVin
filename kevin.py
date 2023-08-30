@@ -21,7 +21,7 @@ cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300}
 api = Api(app)
 
 # MongoDB configuration
-MONGO_URI = os.getenv("MONGO_URI_PROD")
+MONGO_URI = os.getenv("MONGODB_URI_PROD")
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
 
@@ -91,82 +91,71 @@ class VulnerabilityResource(Resource):
 # Resource for fetching all vulnerabilities
 class AllVulnerabilitiesResource(Resource):
     def get(self):
+        valid_sort_params = {"severity"}  # Add more valid sort parameters if needed
+        valid_order_params = {"asc", "desc"}
+        
         search_query = request.args.get("search", '')
-        # Sanitize the search query
+        sort_param = request.args.get("sort", "severity")
+        order_param = request.args.get("order", "asc")
+        
         clean_query = sanitize_query(search_query)
-        # Check if the data is already cached
-        cached_data = cache.get(clean_query)
+        sanitized_sort_param = sanitize_query(sort_param)
+        sanitized_order_param = sanitize_query(order_param)
+        
+        if sanitized_sort_param not in valid_sort_params or sanitized_order_param not in valid_order_params:
+            return {"message": "Invalid sorting parameters"}, 400
+        
+        cached_key = f"{clean_query}_{sanitized_sort_param}_{sanitized_order_param}"
+        cached_data = cache.get(cached_key)
+        
         if cached_data is not None:
             vulnerabilities = cached_data
         else:
             if clean_query:
-                # Search for vulnerabilities that match the query
                 cursor = collection.find({"$text": {"$search": clean_query}})
             else:
-                # No query provided, return all data
                 cursor = collection.find()
-            # Convert the cursor data to a list
-            vulnerabilities = [serialize_vulnerability(v) for v in cursor]
-            # Cache the data
-            cache.set(clean_query, vulnerabilities)
+            
+            if sanitized_sort_param == "severity":
+                sorted_vulnerabilities = []
+                for vulnerability in cursor:
+                    nvd_data = vulnerability.get('nvdData', [])
+                    if nvd_data and nvd_data[0].get('baseScore') is not None:
+                        sorted_vulnerabilities.append(vulnerability)
+
+                sorted_vulnerabilities.sort(key=lambda v: v['nvdData'][0]['baseScore'], reverse=(sanitized_order_param == "desc"))
+                vulnerabilities = [serialize_vulnerability(v) for v in sorted_vulnerabilities]
+            else:
+                vulnerabilities = [serialize_vulnerability(v) for v in cursor]
+            
+            cache.set(cached_key, vulnerabilities)
+        
         return vulnerabilities
 
-# Resource for fetching new vulnerabilities added in the last X days
-class NewVulnerabilitiesResource(Resource):
-    @cache.cached()
-    def get(self, days):
-        # Sanitize the input days value
-        sanitized_days = sanitize_query(str(days))
-        # Validate the sanitized days value
-        try:
-            sanitized_days = int(sanitized_days)
-            if sanitized_days < 0:
-                raise ValueError
-        except ValueError:
+# Resource for fetching recent vulnerabilities
+class RecentVulnerabilitiesResource(Resource):
+    @cache.cached(timeout=10)
+    def get(self):
+        days = request.args.get("days", type=int)
+        if days is None or days < 0:
             return {"message": "Invalid value for days"}, 400
-        
-        # Calculate the cutoff date for new vulnerabilities
-        cutoff_date = datetime.utcnow() - timedelta(days=sanitized_days)
-        all_vulnerabilities = collection.find()
 
-        new_vulnerabilities = []
-        for vulnerability in all_vulnerabilities:
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        recent_vulnerabilities = []
+
+        cursor = collection.find()
+        for vulnerability in cursor:
             date_added_str = vulnerability.get("dateAdded")
             try:
                 date_added = datetime.strptime(date_added_str, "%Y-%m-%d")
                 if date_added >= cutoff_date:
-                    new_vulnerabilities.append(serialize_vulnerability(vulnerability))
-            except ValueError:
+                    recent_vulnerabilities.append(
+                        serialize_vulnerability(vulnerability)
+                    )
+            except ValueError as e:
                 pass  # Ignore invalid date formats
 
-        return new_vulnerabilities
-
-class SortBySeverityResource(Resource):
-    def get(self):
-        # Get the sorting direction from the URL
-        sort_direction = request.args.get("sort", "asc")
-        sanitized_sort_direction = sanitize_query(sort_direction)
-        
-        # Ensure only valid values are accepted for sorting direction
-        if sanitized_sort_direction != "asc" and sanitized_sort_direction != "desc":
-            return {"message": "Invalid sorting direction"}, 400
-        
-        # Set the default sorting field
-        sort_field = 'nvdData.0.baseScore'  # Field path to baseScore within nvdData array
-        
-        # Fetch and sort the vulnerabilities
-        cursor = collection.find()
-        sorted_vulnerabilities = []
-
-        for vulnerability in cursor:
-            nvd_data = vulnerability.get('nvdData', [])
-            if nvd_data and nvd_data[0].get('baseScore') is not None:
-                sorted_vulnerabilities.append(vulnerability)
-        
-        sorted_vulnerabilities.sort(key=lambda v: v['nvdData'][0]['baseScore'], reverse=(sanitized_sort_direction == "desc"))
-        sorted_vulnerabilities = [serialize_vulnerability(v) for v in sorted_vulnerabilities]
-        
-        return sorted_vulnerabilities    
+        return recent_vulnerabilities
 
 
 # Define error handler for 500s
@@ -181,11 +170,12 @@ def not_found(e):
 
 # Define resource routes
 api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>", strict_slashes=False)
-api.add_resource(AllVulnerabilitiesResource, "/kev", strict_slashes=False) 
-api.add_resource(NewVulnerabilitiesResource, "/kev/new/<int:days>")
+api.add_resource(AllVulnerabilitiesResource, "/kev", strict_slashes=False)
+api.add_resource(RecentVulnerabilitiesResource, "/kev/recent", strict_slashes=False) 
+#api.add_resource(NewVulnerabilitiesResource, "/kev/new/<int:days>")
 api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
 api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
-api.add_resource(SortBySeverityResource, "/kev/severity")
+#api.add_resource(SortBySeverityResource, "/kev/severity")
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
