@@ -8,7 +8,7 @@ from flask import render_template
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from flask_caching import Cache
-from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer
+from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer
 
 # load env using python-dotenv
 from dotenv import load_dotenv
@@ -38,8 +38,22 @@ all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
 
 # Route for the root endpoint ("/")
 @app.route("/")
+@cache.cached()
 def index():
     return render_template("index.html")
+
+@app.route('/get_metrics')
+@cache.cached()
+def get_metrics():
+    kevs_count = collection.count_documents({})
+    cves_count = all_vulns_collection.count_documents({})
+
+    metrics = {
+        'cves_count': cves_count,
+        'kevs_count': kevs_count,
+    }
+
+    return jsonify(metrics)
 
 #Function for sanitizing input
 def sanitize_query(query):
@@ -48,6 +62,7 @@ def sanitize_query(query):
     # Allow alphanumeric characters, spaces, and common punctuation
     query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
     # Remove extra whitespace from query
+    query = query.strip()
     query = re.sub(r"\s+", " ", query)
     return query
 
@@ -74,6 +89,18 @@ class cveNVDResource(Resource):
             return nvd_seralizer(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
+        
+# Resource for Mitre data from the cveland via CVE-ID, which is the _id field in the cveland collection
+class cveMitreResource(Resource):
+    @cache.cached()
+    def get(self, cve_id):
+        # Sanitize the input CVE ID
+        sanitized_cve_id = sanitize_query(cve_id)
+        vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
+        if vulnerability:
+            return mitre_seralizer(vulnerability)
+        else:
+            return {"message": "Vulnerability not found"}, 404
 
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(Resource):
@@ -89,7 +116,7 @@ class VulnerabilityResource(Resource):
             return {"message": "Vulnerability not found"}, 404
 
 # Resource for fetching all vulnerabilities
-class AllVulnerabilitiesResource(Resource):
+class AllKevVulnerabilitiesResource(Resource):
     def get(self):
         valid_sort_params = {"severity"}  # Add more valid sort parameters if needed
         valid_order_params = {"asc", "desc"}
@@ -133,7 +160,7 @@ class AllVulnerabilitiesResource(Resource):
         return vulnerabilities
 
 # Resource for fetching recent vulnerabilities
-class RecentVulnerabilitiesResource(Resource):
+class RecentKevVulnerabilitiesResource(Resource):
     @cache.cached(timeout=10)
     def get(self):
         days = request.args.get("days", type=int)
@@ -170,10 +197,11 @@ def not_found(e):
 
 # Define resource routes
 api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>", strict_slashes=False)
-api.add_resource(AllVulnerabilitiesResource, "/kev", strict_slashes=False)
-api.add_resource(RecentVulnerabilitiesResource, "/kev/recent", strict_slashes=False) 
+api.add_resource(AllKevVulnerabilitiesResource, "/kev", strict_slashes=False)
+api.add_resource(RecentKevVulnerabilitiesResource, "/kev/recent", strict_slashes=False) 
 api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
 api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
+api.add_resource(cveMitreResource, "/vuln/<string:cve_id>/mitre", strict_slashes=False)
 
 if __name__ == "__main__":
     app.run(debug=False)
