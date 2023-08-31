@@ -36,6 +36,19 @@ def nvd_seralizer(vulnerability):
 
     return serialized_data
 
+def mitre_seralizer(vulnerability):
+    # Handle KeyError exceptions with default values
+    gsd = vulnerability.get("gsd", {})
+    namespaces = vulnerability.get("namespaces", {})
+    mitre_date = namespaces.get("cve.org", {})
+
+    serialized_data = {
+        'cveID': str(vulnerability["_id"]),
+        'mitreData': mitre_date
+    }
+
+    return serialized_data
+
 def serialize_vulnerability(vulnerability):
     # Define the date format for serialization
     date_format = "%Y-%m-%d"

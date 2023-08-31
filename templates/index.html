@@ -1,46 +1,121 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>KEVin Vulnerabilty API</title>
-        <!-- Include Bootstrap CSS -->
-        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-        <!-- Favicon Links -->
-        <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-        <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-        <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
-        <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    </head>
+<head>
+    <title>KEVin Vulnerability API</title>
+    <!-- Include Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Favicon Links -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+</head>
 <body>
-    <div class="container mt-5">
-        <div class="jumbotron">
-            <h1 class="display-4">Welcome to the KEVin API</h1>
-            <p class="lead">This is an API for accessing CISA's Known Exploited Vulnerabilities Catalog (KEV) and more.</p>
-            <hr class="my-4">
-            <p>You can use various endpoints to retrieve vulnerability information. Here are some examples:</p>
-            <ul>
-                <li><a href="/kev">/kev</a> - Get all Known Exploited Vulnerabilities</li>
-                <li><a href="/kev?search=Microsoft">/kev?search=Microsoft</a> - Search KEV based on description</li>
-                <li><a href="/kev/CVE-2023-1234">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
-                <li><a href="/kev/recent?days=7">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
-                <li><a href="/kev?sort=severity&order=desc">/kev?sort=severity&order=desc/asc</a> - Sort all KEV by NVD baseScore (if it has one). You can even add &search= ;)</li>
-                <li><a href="/vuln/CVE-2023-1234">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
-                <li><a href="/vuln/CVE-2023-1234/nvd">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
-            </ul>
-            <p><b>Limits:</b></p>
-            <ul>
-                <li>KEVin is currently set to allow one (1) request per second. A one (1) hour block is placed on IPs violating this limit.</li>
-                <li>Edge cache is set to 3 hours. Updates may be delayed if CVE data is stuck in cache</li>
-                <li>As of <i>29 August 2023</i>, search is limited to only KEV data</li>
-            </ul>
-            <p><b>Issues/Feature Requests:</b></p>
-            <p>If you have any issues or feature requests, please feel free to submit them on our <a href="https://github.com/synfinner/KEVin/issues">GitHub repository</a>.</p>
-            <hr class="my-4">
-            A <a href="https://twitter.com/synfinner">Synfinner</a> project.
+<div class="container mt-5">
+    <div class="jumbotron">
+        <h1 class="display-4">Welcome to the KEVin API</h1>
+        <p class="lead">An API for accessing CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data</p>
+        <hr class="my-4">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong><u>Number of CVEs:</u></strong></p>
+                <p id="metrics-cves">Loading...</p>
+            </div>
+            <div class="col-md-6">
+                <p><strong><u>Number of KEVs:</u></strong></p>
+                <p id="metrics-kevs">Loading...</p>
+            </div>
         </div>
-    </div>
-    <!-- Include Bootstrap JS and jQuery -->
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
-    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+        <!-- Accordion Panel for API Usage -->
+        <div id="accordion">
+            <!-- KEV API Usage Panel -->
+            <div class="card">
+                <div class="card-header" id="kev-api-usage-heading">
+                    <h5 class="mb-0">
+                        <button class="btn btn-link" data-toggle="collapse" data-target="#kev-api-usage-content" aria-expanded="true" aria-controls="kev-api-usage-content">
+                            KEV API Usage
+                        </button>
+                    </h5>
+                </div>
+
+                <div id="kev-api-usage-content" class="collapse show" aria-labelledby="kev-api-usage-heading" data-parent="#accordion">
+                    <div class="card-body">
+                        <!-- /kev Usage -->
+                        <h6>/kev Usage</h6>
+                        <ul>
+                            <li><a href="/kev" target="_blank">/kev</a> - Get all Known Exploited Vulnerabilities</li>
+                            <li><a href="/kev?search=Microsoft" target="_blank">/kev?search=Microsoft</a> - Search KEV based on description</li>
+                            <li><a href="/kev/CVE-2023-1234" target="_blank">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
+                            <li><a href="/kev/recent?days=7" target="_blank">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
+                            <li><a href="/kev?sort=severity&order=desc" target="_blank">/kev?sort=severity&order=desc/asc</a> - Sort all KEV by NVD baseScore (if it has one). You can even add &search= ;)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vuln API Usage Panel -->
+            <div class="card">
+                <div class="card-header" id="vuln-api-usage-heading">
+                    <h5 class="mb-0">
+                        <button class="btn btn-link" data-toggle="collapse" data-target="#vuln-api-usage-content" aria-expanded="true" aria-controls="vuln-api-usage-content">
+                            Vuln API Usage
+                        </button>
+                    </h5>
+                </div>
+
+                <div id="vuln-api-usage-content" class="collapse show" aria-labelledby="vuln-api-usage-heading" data-parent="#accordion">
+                    <div class="card-body">
+                        <!-- /vuln Usage -->
+                        <h6>/vuln Usage</h6>
+                        <ul>
+                            <li><a href="/vuln/CVE-2023-1234" target="_blank">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
+                            <li><a href="/vuln/CVE-2023-1234/nvd" target="_blank">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
+                            <li><a href="/vuln/CVE-2023-1234/mitre" target="_blank">/vuln/CVE-2023-1234/mitre</a> - Get all Mite/Cve.org data on a CVE</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <hr class="my-4">
+        <!-- Limits Section Header -->
+        <h5 class="mt-4">Limits</h5>
+        <!-- Limits Section Content -->
+        <ul>
+            <li>KEVin is currently set to allow one (1) request per second. A one (1) hour block is placed on IPs violating this limit.</li>
+            <li>Edge cache is set to 3 hours. Updates may be delayed if CVE data is stuck in cache</li>
+            <li>As of <i>29 August 2023</i>, search is limited to only KEV data</li>
+        </ul>
+
+        <!-- Issues/Requests Section Header -->
+        <h5 class="mt-4">Issues/Requests</h5>
+        <!-- Issues/Requests Section Content -->
+        <p>If you have any issues or feature requests, please feel free to submit them on our <a href="https://github.com/synfinner/KEVin/issues" target="_blank">GitHub repository</a>.</p>
+<hr class="my-4">
+A <a href="https://twitter.com/synfinner" target="_blank">Synfinner</a> project.
+</div>
+</div>
+<!-- Include Bootstrap JS and jQuery -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+    // Function to get the metrics
+    function getMetrics() {
+        fetch('/get_metrics') // Call the route that returns the metrics
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('metrics-cves').innerText = Number(data.cves_count).toLocaleString();
+                document.getElementById('metrics-kevs').innerText = Number(data.kevs_count).toLocaleString();
+            })
+            .catch(error => {
+                console.error('Error fetching metrics:', error);
+                document.getElementById('metrics-cves').innerText = 'Error fetching metrics';
+                document.getElementById('metrics-kevs').innerText = 'Error fetching metrics';
+            });
+    }
+
+    // Call the function when the page loads
+    getMetrics();
+</script>
 </body>
 </html>
