@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KEVin API Example</title>
+    <!-- Include Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            background-color: #292b2c;
+            color: #ffffff;
+        }
+        h1, h2, h3 {
+            color: #f0ad4e;
+        }
+        pre {
+            background-color: #333333;
+            color: #ffffff;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-5">
+    <h1>Interacting with KEVin API</h1>
+    <p>This page provides example code on how to interact with the KEVin API using Python.</p>
+    
+    <h2>Get All Known Exploited Vulnerabilities</h2>
+    <p>Retrieve all KEV data:</p>
+    <pre><code>
+import requests
+
+response = requests.get('https://kevin.gtfkd.com/kev')
+data = response.json()
+print(data)
+    </code></pre>
+    
+    <h2>Search for Vulnerabilities</h2>
+    <p>Search for vulnerabilities with a specific keyword:</p>
+    <pre><code>
+search_keyword = 'Microsoft'
+response = requests.get(f'https://kevin.gtfkd.com/kev?search={search_keyword}')
+data = response.json()
+print(data)
+    </code></pre>
+    
+    <h2>Fetch a Vulnerability by CVE-ID</h2>
+    <p>Fetch vulnerability details using a CVE-ID:</p>
+    <pre><code>
+cve_id = 'CVE-2023-1234'
+response = requests.get(f'https://kevin.gtfkd.com/kev/{cve_id}')
+data = response.json()
+print(data)
+    </code></pre>
+    
+    <h2>Get Recent Vulnerabilities</h2>
+    <p>Retrieve new vulnerabilities added in the last 7 days:</p>
+    <pre><code>
+response = requests.get('https://kevin.gtfkd.com/kev/recent?days=7')
+data = response.json()
+print(data)
+    </code></pre>
+    
+    <h2>Get Metrics</h2>
+    <p>Get the number of CVEs and KEVs:</p>
+    <pre><code>
+response = requests.get('https://kevin.gtfkd.com/get_metrics')
+data = response.json()
+print('Number of CVEs:', data['cves_count'])
+print('Number of KEVs:', data['kevs_count'])
+    </code></pre>
+</div>
+<!-- Include Bootstrap JS and jQuery -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
