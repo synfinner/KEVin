@@ -42,6 +42,12 @@ all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
 def index():
     return render_template("index.html")
 
+# Route for example page ("/example")
+@app.route("/examples")
+@cache.cached()
+def example():
+    return render_template("example.html")
+
 @app.route('/get_metrics')
 @cache.cached()
 def get_metrics():

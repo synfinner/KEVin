@@ -9,12 +9,36 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <style>
+        /* Custom CSS for dark theme */
+        body.bg-dark .jumbotron {
+            background-color: #222;
+        }
+
+        body.bg-dark .card {
+            background-color: #333;
+        }
+
+        body.bg-dark .jumbotron,
+        body.bg-dark .card {
+            color: white; /* Set text color to white in dark mode */
+        }
+
+        body.bg-dark hr {
+            border-color: #666; /* Adjust hr color in dark mode */
+        }
+    </style>
 </head>
 <body>
-<div class="container mt-5">
+<div class="container mt-5 text-dark">
     <div class="jumbotron">
         <h1 class="display-4">Welcome to the KEVin API</h1>
         <p class="lead">An API for accessing CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data</p>
+        <div class="custom-control custom-switch mt-4">
+            <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
+            <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
+        </div>
+        <p><a href="{{ url_for('example') }}" target="_blank" class="btn btn-primary mt-3">Go to Examples</a></p>
         <hr class="my-4">
         <div class="row">
             <div class="col-md-6">
@@ -116,6 +140,30 @@ A <a href="https://twitter.com/synfinner" target="_blank">Synfinner</a> project.
 
     // Call the function when the page loads
     getMetrics();
+
+// Toggle Dark Theme
+    const darkThemeToggle = document.getElementById('darkThemeToggle');
+    const body = document.body;
+
+    // Load the user's theme preference from Local Storage
+    const userThemePreference = localStorage.getItem('darkTheme');
+    if (userThemePreference === 'true') {
+        body.classList.add('bg-dark');
+        body.classList.add('text-light');
+        darkThemeToggle.checked = true;
+    }
+
+    darkThemeToggle.addEventListener('change', () => {
+        if (darkThemeToggle.checked) {
+            body.classList.add('bg-dark');
+            body.classList.add('text-light');
+            localStorage.setItem('darkTheme', 'true'); // Store the preference
+        } else {
+            body.classList.remove('bg-dark');
+            body.classList.remove('text-light');
+            localStorage.setItem('darkTheme', 'false'); // Store the preference
+        }
+    });
 </script>
 </body>
 </html>
