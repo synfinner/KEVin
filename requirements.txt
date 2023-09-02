@@ -1,5 +1,6 @@
 aniso8601==9.0.1
 blinker==1.6.2
+Brotli==1.0.9
 cachelib==0.9.0
 certifi==2023.7.22
 charset-normalizer==3.2.0
@@ -7,6 +8,7 @@ click==8.1.7
 dnspython==2.4.2
 Flask==2.3.3
 Flask-Caching==2.0.2
+Flask-Compress==1.13
 Flask-RESTful==0.3.10
 gunicorn==21.2.0
 idna==3.4
