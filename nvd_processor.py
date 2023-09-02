@@ -121,9 +121,87 @@ def nvd_processor():
             continue
     #close mongodb connection
     client.close()
-        
+
+def check_vuln_status():
+    # Connect to MongoDB
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    collection = db[COLLECTION_NAME]
+
+    # iterate through each document in the mongo collection
+    for vulnerability in collection.find():
+        # check if the document has a "nvdData" array
+        if "nvdData" in vulnerability:
+            nvd_data = vulnerability["nvdData"]
+            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and nvd_data[0]["vulnStatus"] == "Awaiting Analysis":
+                print("[+] Vulnerability " + vulnerability["cveID"] + " is awaiting analysis")
+                # Perform additional actions here if needed
+                # For example, you could call a function to process this specific status
+                print("[+] Calling get_nvd_data for " + vulnerability["cveID"])
+                nvd_data = get_nvd_data(vulnerability["cveID"])
+                # if the nvd_data is not None, add the nvdData to the mongo document
+                if nvd_data:
+                    try:
+                        vuln_data = nvd_data["vulnerabilities"][0]["cve"]
+                    except:
+                        # skip this vuln as it does not have nvd data
+                        continue
+                    nvd_data_array = []  # Initialize an empty array
+                    # quick check if the vuln is in analysis phase
+                    if vuln_data["vulnStatus"] == "Awaiting Analysis":
+                        nvd_data_array.append({
+                            "nvdReferences": vuln_data["references"],
+                            "vulnStatus": vuln_data["vulnStatus"]
+                        })
+                        collection.update_one(
+                            {"cveID": vulnerability["cveID"]},
+                            {"$set": {"nvdData": nvd_data_array}}
+                        )
+                        # print that the cveID was updated with the nvdData
+                        print("[+] " + vulnerability["cveID"] + " updated with nvdData")
+                        sleep(3)
+                        continue
+                    try:
+                        cvss_metrics_v31 = vuln_data["metrics"]["cvssMetricV31"][0]["cvssData"]
+                        # Extract desired fields and append them to the array
+                        nvd_data_array.append({
+                            "attackVector": cvss_metrics_v31["attackVector"],
+                            "attackComplexity": cvss_metrics_v31["attackComplexity"],
+                            "baseSeverity": cvss_metrics_v31["baseSeverity"],
+                            "exploitabilityScore": vuln_data["metrics"]["cvssMetricV31"][0]["exploitabilityScore"],
+                            "baseScore": cvss_metrics_v31["baseScore"],
+                            "nvdReferences": vuln_data["references"],
+                            "vulnStatus": vuln_data["vulnStatus"]
+                            })
+                    except:
+                        # fall back to cvss2 if cvss3 is not available
+                        cvss_metrics_v2 = vuln_data["metrics"]["cvssMetricV2"][0]["cvssData"]
+                        nvd_data_array.append({
+                            "attackVector": cvss_metrics_v2["accessVector"],
+                            "attackComplexity": cvss_metrics_v2["accessComplexity"],
+                            "baseSeverity": vuln_data["metrics"]["cvssMetricV2"][0]["baseSeverity"],
+                            "exploitabilityScore": vuln_data["metrics"]["cvssMetricV2"][0]["exploitabilityScore"],
+                            "baseScore": cvss_metrics_v2["baseScore"],
+                            "nvdReferences": vuln_data["references"],
+                            "vulnStatus": vuln_data["vulnStatus"]
+                        })
+                    finally:
+                        # Update the nvdData array in the mongo document
+                        collection.update_one(
+                            {"cveID": vulnerability["cveID"]},
+                            {"$set": {"nvdData": nvd_data_array}}
+                        )
+                        # print that the cveID was updated with the nvdData
+                        print("[+] " + vulnerability["cveID"] + " updated with nvdData")
+                        sleep(2)
+            else:
+                continue
+    # close mongodb connection
+    client.close()
+
 def main():
     nvd_processor()
+    check_vuln_status()
 
 if __name__ == "__main__":
     main()

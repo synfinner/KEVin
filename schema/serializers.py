@@ -96,3 +96,14 @@ def serialize_vulnerability(vulnerability):
     }
     
     return serialized_vulnerability
+
+
+def serialize_recent_cve_vulnerability(vulnerability):
+    serialized = {
+        "_id": vulnerability["_id"],
+        "pubDateKev": vulnerability["pubDateKev"].isoformat(),
+        "pubModDateKev": vulnerability["pubModDateKev"].isoformat(),
+        "nvdData": vulnerability.get("nvdData", None),  # Include nvdData
+        # Include other fields as needed
+    }
+    return serialized
