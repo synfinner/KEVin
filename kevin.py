@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 import re
+import math
 from urllib.parse import unquote
 from flask import Flask, jsonify, request
 from flask_restful import Api, Resource, reqparse
 from flask import render_template
+from flask_compress import Compress
 from pymongo import MongoClient
+from pymongo import DESCENDING
 from datetime import datetime, timedelta
 from flask_caching import Cache
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer
@@ -19,7 +22,7 @@ app = Flask(__name__)
 # Configure cache
 cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300})  # 300 seconds = 5 minutes
 api = Api(app)
-
+compress = Compress(app)
 # MongoDB configuration
 MONGO_URI = os.getenv("MONGODB_URI_PROD")
 DB_NAME = "kev"
@@ -63,6 +66,13 @@ def get_metrics():
 
 #Function for sanitizing input
 def sanitize_query(query):
+    if query is None:
+        return None
+
+    # Check if the query is an integer, if so, return it without any modifications
+    if isinstance(query, int):
+        return query
+
     # URL decode the query
     query = unquote(query)
     # Allow alphanumeric characters, spaces, and common punctuation
@@ -190,6 +200,81 @@ class RecentKevVulnerabilitiesResource(Resource):
 
         return recent_vulnerabilities
 
+class RecentVulnerabilitiesByDaysResource(Resource):
+    def get(self, query_type):
+        days = request.args.get("days")
+        page = request.args.get("page", default=1)  # Default to page 1 if not provided
+        per_page = request.args.get("per_page", default=25)  # Default to 10 if not provided
+        
+        if days is None:
+            return {"message": "You must provide 'days' parameter"}, 400
+
+        sanitized_days = sanitize_query(days)
+
+        if not isinstance(sanitized_days, int):
+            if not sanitized_days.isdigit():
+                return {"message": "Invalid value for days parameter"}, 400
+
+            max_days = 14
+            if int(sanitized_days) > max_days:
+                return {"message": f"Exceeded the maximum limit of {max_days} days"}, 400
+
+        # Sanitize the page parameter
+        sanitized_page = sanitize_query(page)
+
+        # Sanitize the page parameter
+        sanitized_page = sanitize_query(page)
+        
+        # Sanitize and limit the per_page parameter
+        per_page = request.args.get("per_page", default=10)  # Default to 10 if not provided
+        sanitized_per_page = sanitize_query(str(per_page))  # Convert to string before sanitizing
+        sanitized_per_page = min(int(sanitized_per_page), 100)  # Limit to maximum 100
+        
+        cutoff_date = (datetime.utcnow() - timedelta(days=int(sanitized_days))).strftime("%Y-%m-%d")
+        field = "pubDateKev" if query_type == "published" else "pubModDateKev"
+
+        start_index = (int(sanitized_page) - 1) * sanitized_per_page
+
+        projection = {
+            "_id": 1,
+            "pubDateKev": 1,
+            "pubModDateKev": 1,
+            "namespaces": 1
+        }
+
+        recent_vulnerabilities = all_vulns_collection.find(
+            {field: {"$gt": cutoff_date}},
+            projection
+        ).skip(start_index).limit(sanitized_per_page)
+
+        recent_vulnerabilities_list = []
+        for vulnerability in recent_vulnerabilities:
+            cve_id = vulnerability.get("_id", "")
+            namespaces = vulnerability.get("namespaces", {})
+            nvd_nist_data = namespaces.get("nvd.nist.gov", {})
+
+            vulnerability_data = {
+                "id": cve_id,
+                "nvdData": nvd_nist_data
+            }
+            recent_vulnerabilities_list.append(vulnerability_data)
+
+        total_entries = all_vulns_collection.count_documents({field: {"$gt": cutoff_date}})
+        total_pages = math.ceil(total_entries / sanitized_per_page)
+
+        pagination_info = {
+            "currentPage": int(sanitized_page),
+            "totalPages": total_pages,
+            "totalEntries": total_entries,
+            "resultsPerPage": sanitized_per_page
+        }
+
+        response_data = {
+            "pagination": pagination_info,
+            "vulnerabilities": recent_vulnerabilities_list
+        }
+
+        return response_data
 
 # Define error handler for 500s
 @app.errorhandler(500)
@@ -208,6 +293,8 @@ api.add_resource(RecentKevVulnerabilitiesResource, "/kev/recent", strict_slashes
 api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
 api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
 api.add_resource(cveMitreResource, "/vuln/<string:cve_id>/mitre", strict_slashes=False)
+api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/published", endpoint="published", defaults={"query_type": "published"})
+api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/modified", endpoint="modified", defaults={"query_type": "modified"})
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
