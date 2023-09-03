@@ -12,6 +12,7 @@ from pymongo import DESCENDING
 from datetime import datetime, timedelta
 from flask_caching import Cache
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer
+from modules.reportgen import report_gen
 
 # load env using python-dotenv
 from dotenv import load_dotenv
@@ -275,6 +276,19 @@ class RecentVulnerabilitiesByDaysResource(Resource):
         }
 
         return response_data
+    
+@app.route("/vuln/<string:cve_id>/report", methods=["GET"])
+def vulnerability_report(cve_id):
+    # Sanitize the input CVE ID
+    sanitized_cve_id = sanitize_query(cve_id)
+    vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
+    
+    if vulnerability:
+        # send the vulnerability data to the reportgen library to generate the report
+        report = report_gen(vulnerability)
+        return render_template("vulnerability_report.html", report=report)
+    else:
+        return {"message": "Vulnerability not found"}, 404
 
 # Define error handler for 500s
 @app.errorhandler(500)
