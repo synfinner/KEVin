@@ -53,6 +53,10 @@ def nvd_processor():
             nvd_data = get_nvd_data(vulnerability["cveID"])
             # if the nvd_data is not None, add the nvdData to the mongo document
             if nvd_data:
+                if len(nvd_data["vulnerabilities"]) == 0:
+                    # skip this vuln as it does not have nvd data
+                    sleep(3)
+                    continue
                 try:
                     vuln_data = nvd_data["vulnerabilities"][0]["cve"]
                 except:
@@ -60,7 +64,7 @@ def nvd_processor():
                     continue
                 nvd_data_array = []  # Initialize an empty array
                 # quick check if the vuln is in analysis phase
-                if vuln_data["vulnStatus"] == "Awaiting Analysis":
+                if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis":
                     nvd_data_array.append({
                         "nvdReferences": vuln_data["references"],
                         "vulnStatus": vuln_data["vulnStatus"]
@@ -133,7 +137,11 @@ def check_vuln_status():
         # check if the document has a "nvdData" array
         if "nvdData" in vulnerability:
             nvd_data = vulnerability["nvdData"]
-            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and nvd_data[0]["vulnStatus"] == "Awaiting Analysis":
+            try:
+                status_check = nvd_data[0]["vulnStatus"]
+            except KeyError:
+                continue
+            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and nvd_data[0]["vulnStatus"] == "Awaiting Analysis" or nvd_data[0]["vulnStatus"] == "Undergoing Analysis":
                 print("[+] Vulnerability " + vulnerability["cveID"] + " is awaiting analysis")
                 # Perform additional actions here if needed
                 # For example, you could call a function to process this specific status
@@ -148,7 +156,8 @@ def check_vuln_status():
                         continue
                     nvd_data_array = []  # Initialize an empty array
                     # quick check if the vuln is in analysis phase
-                    if vuln_data["vulnStatus"] == "Awaiting Analysis":
+                    if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis":
+                        print("[+] Vulnerability " + vulnerability["cveID"] + " is still awaiting analysis")
                         nvd_data_array.append({
                             "nvdReferences": vuln_data["references"],
                             "vulnStatus": vuln_data["vulnStatus"]
