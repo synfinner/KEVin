@@ -8,7 +8,7 @@ click==8.1.7
 dnspython==2.4.2
 Flask==2.3.3
 Flask-Caching==2.0.2
-Flask-Compress==1.13
+Flask-Compress==1.14
 Flask-RESTful==0.3.10
 gunicorn==21.2.0
 idna==3.4
