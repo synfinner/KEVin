@@ -21,16 +21,26 @@ import os
 
 app = Flask(__name__)
 # Configure cache
-cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300})  # 300 seconds = 5 minutes
+#cache = Cache(app, config={'CACHE_TYPE': 'simple', 'CACHE_DEFAULT_TIMEOUT': 300})  # 300 seconds = 5 minutes
+REDIS_IP = os.getenv("REDIS_IP")
+cache_config = {
+    'CACHE_TYPE': 'redis',
+    'CACHE_DEFAULT_TIMEOUT': 600,  # 300 seconds = 5 minutes
+    'CACHE_REDIS_HOST': REDIS_IP,
+    'CACHE_REDIS_PORT': 6379,  # default Redis port;
+    'CACHE_KEY_PREFIX': 'kevin_'  # Prefix for cache keys;
+}
+
+cache = Cache(app, config=cache_config)
 api = Api(app)
 compress = Compress(app)
 # MongoDB configuration
 MONGO_URI = os.getenv("MONGODB_URI_PROD")
+client = MongoClient(MONGO_URI, maxPoolSize=50, minPoolSize=10)
 DB_NAME = "kev"
 COLLECTION_NAME = "vulns"
-
 # Connect to MongoDB
-client = MongoClient(MONGO_URI)
+#client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 collection = db[COLLECTION_NAME]
 
@@ -178,7 +188,7 @@ class AllKevVulnerabilitiesResource(Resource):
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(Resource):
-    @cache.cached(timeout=10)
+    @cache.cached(timeout=100)
     def get(self):
         days = request.args.get("days", type=int)
         if days is None or days < 0:
@@ -278,6 +288,7 @@ class RecentVulnerabilitiesByDaysResource(Resource):
         return response_data
     
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
+@cache.cached(timeout=60)
 def vulnerability_report(cve_id):
     # Sanitize the input CVE ID
     sanitized_cve_id = sanitize_query(cve_id)
@@ -311,4 +322,4 @@ api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/published", endpoin
 api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/modified", endpoint="modified", defaults={"query_type": "modified"})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
