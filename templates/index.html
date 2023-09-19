@@ -67,15 +67,17 @@
                         <!-- /kev Usage -->
                         <h6>/kev Usage</h6>
                         <ul>
-                            <li><a href="/kev" target="_blank">/kev</a> - Get all Known Exploited Vulnerabilities</li>
-                            <li><a href="/kev?search=Microsoft" target="_blank">/kev?search=Microsoft</a> - Search KEV based on description</li>
+                            <li><a href="/kev" target="_blank">/kev</a> - Get the most recently added KEVs</li>
+                            <li><a href="/kev?page=1&per_page=25" target="_blank">/kev?page=1&per_page=25</a> - Get the first 25 Known Exploited Vulnerabilities (default pagination)</li>
+                            <li><a href="/kev?page=2&per_page=25" target="_blank">/kev?page=2&per_page=25</a> - Get the next 25 Known Exploited Vulnerabilities (default pagination)</li>
+                            <li><a href="/kev?search=Microsoft&page=1&per_page=10" target="_blank">/kev?search=Microsoft&page=1&per_page=10</a> - Search KEV based on description (first 10 results)</li>
                             <li><a href="/kev/CVE-2023-1234" target="_blank">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
-                            <li><a href="/kev/recent?days=7" target="_blank">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days (modifiable)</li>
-                            <li><a href="/kev?sort=severity&order=desc" target="_blank">/kev?sort=severity&order=desc/asc</a> - Sort all KEV by NVD baseScore (if it has one). You can even add &search= ;)</li>
+                            <li><a href="/kev/recent?days=7" target="_blank">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days</li>
+                            <li><a href="/kev?sort=date&order=desc&page=1&per_page=15" target="_blank">/kev?sort=date&order=desc&page=1&per_page=15</a> - Sort first 15 KEV by date added (newest first)</li>
+                            <li><a href="/kev?sort=severity&order=desc&page=1&per_page=15" target="_blank">/kev?sort=severity&order=desc&page=1&per_page=15</a> - Sort first 15 KEV by NVD baseScore in descending order (highest scores first)</li>
                         </ul>
                     </div>
                 </div>
-            </div>
 
             <!-- Vuln API Usage Panel -->
             <div class="card">
