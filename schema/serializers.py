@@ -1,109 +1,63 @@
 from bson import ObjectId
 from datetime import datetime
 
+def serialize_date(date_value, format="%Y-%m-%d"):
+    if isinstance(date_value, datetime):
+        return date_value.strftime(format)
+    return date_value
+
+def extract_keys(data, keys):
+    """Utility function to extract certain keys from a dictionary."""
+    return {key: data.get(key, {}) for key in keys}
 
 def serialize_all_vulnerability(vulnerability):
-    # Handle KeyError exceptions with default values
-    gsd = vulnerability.get("GSD", {})
-    description = gsd.get("description", "")
-    references = gsd.get("references", [])
-    namespaces = vulnerability.get("namespaces", {})
-    cisa_data = namespaces.get("cisa.gov", {})
-    cve_org = namespaces.get("cve.org", {})
-    nvd_data = namespaces.get("nvd.nist.gov", {})
-
-    serialized_data = {
+    data = extract_keys(vulnerability, ['GSD', 'namespaces'])
+    return {
         'cveID': str(vulnerability["_id"]),
-        'description': description,
-        'references': references,
-        'cisaData': cisa_data,
-        'cve.Org': cve_org,
-        'nvdData': nvd_data
+        'description': data['GSD'].get('description', ''),
+        'references': data['GSD'].get('references', []),
+        'cisaData': data['namespaces'].get('cisa.gov', {}),
+        'cve.Org': data['namespaces'].get('cve.org', {}),
+        'nvdData': data['namespaces'].get('nvd.nist.gov', {})
     }
-
-    return serialized_data
 
 def nvd_seralizer(vulnerability):
-    # Handle KeyError exceptions with default values
-    gsd = vulnerability.get("gsd", {})
-    namespaces = vulnerability.get("namespaces", {})
-    nvd_data = namespaces.get("nvd.nist.gov", {})
-
-    serialized_data = {
+    nvd_data = extract_keys(vulnerability.get("namespaces", {}), ["nvd.nist.gov"])
+    return {
         'cveID': str(vulnerability["_id"]),
-        'nvdData': nvd_data
+        'nvdData': nvd_data["nvd.nist.gov"]
     }
-
-    return serialized_data
 
 def mitre_seralizer(vulnerability):
-    # Handle KeyError exceptions with default values
-    gsd = vulnerability.get("gsd", {})
-    namespaces = vulnerability.get("namespaces", {})
-    mitre_date = namespaces.get("cve.org", {})
-
-    serialized_data = {
+    mitre_data = extract_keys(vulnerability.get("namespaces", {}), ["cve.org"])
+    return {
         'cveID': str(vulnerability["_id"]),
-        'mitreData': mitre_date
+        'mitreData': mitre_data["cve.org"]
     }
-
-    return serialized_data
 
 def serialize_vulnerability(vulnerability):
-    # Define the date format for serialization
-    date_format = "%Y-%m-%d"
-    
-    # Serialize dateAdded field
-    date_added = vulnerability.get("dateAdded")
-    if isinstance(date_added, datetime):
-        date_added_str = date_added.strftime(date_format)
-    else:
-        date_added_str = date_added
-    
-    # Serialize dueDate field
-    due_date = vulnerability.get("dueDate")
-    if isinstance(due_date, datetime):
-        due_date_str = due_date.strftime(date_format)
-    else:
-        due_date_str = due_date
-    
-    # Handle KeyError exceptions with default values
-    notes = vulnerability.get("notes", "")
-    product = vulnerability.get("product", "")
-    required_action = vulnerability.get("requiredAction", "")
-    short_description = vulnerability.get("shortDescription", "")
-    vendor_project = vulnerability.get("vendorProject", "")
-    vulnerability_name = vulnerability.get("vulnerabilityName", "")
-    nvd_data = vulnerability.get("nvdData", [])
-    github_pocs = vulnerability.get("githubPocs", [])
-    threat_data = vulnerability.get("openThreatData", [])
-    
-    # Construct the serialized vulnerability dictionary
-    serialized_vulnerability = {
+    # First, serialize the fields that you want at the top
+    serialized_data = {
         '_id': str(vulnerability["_id"]),
         'cveID': vulnerability["cveID"],
-        'dateAdded': date_added_str,
-        'dueDate': due_date_str,
-        'notes': notes,
-        'product': product,
-        'requiredAction': required_action,
-        'shortDescription': short_description,
-        'vendorProject': vendor_project,
-        'vulnerabilityName': vulnerability_name,
-        'nvdData': nvd_data,
-        'githubPocs': github_pocs,
-        'openThreatData': threat_data
+        'dateAdded': serialize_date(vulnerability.get("dateAdded")),
+        'dueDate': serialize_date(vulnerability.get("dueDate"))
     }
     
-    return serialized_vulnerability
-
+    # Extract other fields and update the dictionary
+    fields_to_extract = [
+        'notes', 'product', 'requiredAction', 'shortDescription', 
+        'vendorProject', 'vulnerabilityName', 'nvdData', 
+        'githubPocs', 'openThreatData'
+    ]
+    serialized_data.update(extract_keys(vulnerability, fields_to_extract))
+    
+    return serialized_data
 
 def serialize_recent_cve_vulnerability(vulnerability):
-    serialized = {
+    return {
         "_id": vulnerability["_id"],
         "pubDateKev": vulnerability["pubDateKev"].isoformat(),
         "pubModDateKev": vulnerability["pubModDateKev"].isoformat(),
-        "nvdData": vulnerability.get("nvdData", None),  # Include nvdData
-        # Include other fields as needed
+        "nvdData": vulnerability.get("nvdData", None)
     }
-    return serialized
