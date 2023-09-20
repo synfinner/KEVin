@@ -12,6 +12,6 @@ cache_config = {
     'CACHE_DEFAULT_TIMEOUT': 600,
     'CACHE_REDIS_HOST': REDIS_IP,
     'CACHE_REDIS_PORT': '6379',
-    'CACHE_KEY_PREFIX': 'kev:'
+    'CACHE_KEY_PREFIX': 'kev_'
 }
 
