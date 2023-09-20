@@ -3,7 +3,7 @@
 from utils.database import all_vulns_collection, collection
 from utils.cache_manager import cache
 from flask_restful import Resource
-from flask import request
+from flask import request, Response, json, jsonify, make_response
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta
 import re
@@ -42,9 +42,12 @@ class cveLandResource(Resource):
         sanitized_cve_id = sanitize_query(cve_id)
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if vulnerability:
-            return serialize_all_vulnerability(vulnerability)
+            data = serialize_all_vulnerability(vulnerability)
+            #return serialize_all_vulnerability(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
+        response = Response(json.dumps(data), content_type="application/json")
+        return response
 
 # Resource for NVD data from the cveland via CVE-ID, which is the _id field in the cveland collection
 class cveNVDResource(Resource):
@@ -54,9 +57,12 @@ class cveNVDResource(Resource):
         sanitized_cve_id = sanitize_query(cve_id)
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if vulnerability:
-            return nvd_seralizer(vulnerability)
+            data = nvd_seralizer(vulnerability)
+            #return nvd_seralizer(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
+        response = Response(json.dumps(data), content_type="application/json")
+        return response
         
 # Resource for Mitre data from the cveland via CVE-ID, which is the _id field in the cveland collection
 class cveMitreResource(Resource):
@@ -66,9 +72,12 @@ class cveMitreResource(Resource):
         sanitized_cve_id = sanitize_query(cve_id)
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if vulnerability:
-            return mitre_seralizer(vulnerability)
+            data = mitre_seralizer(vulnerability)
+            #return mitre_seralizer(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
+        response = Response(json.dumps(data), content_type="application/json")
+        return response
 
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(Resource):
@@ -79,9 +88,12 @@ class VulnerabilityResource(Resource):
         
         vulnerability = collection.find_one({"cveID": sanitized_cve_id})
         if vulnerability:
-            return serialize_vulnerability(vulnerability)
+            data = serialize_vulnerability(vulnerability)
+            #return serialize_vulnerability(vulnerability)
         else:
             return {"message": "Vulnerability not found"}, 404
+        response = Response(json.dumps(data), content_type="application/json")
+        return response
 
 MAX_VULNS_PER_PAGE = 100
 
@@ -138,6 +150,7 @@ class AllKevVulnerabilitiesResource(Resource):
         total_vulns = collection.count_documents({})
         total_pages = math.ceil(total_vulns / per_page)
 
+        """
         return {
             "page": page,
             "per_page": per_page,
@@ -145,11 +158,22 @@ class AllKevVulnerabilitiesResource(Resource):
             "total_pages": total_pages,
             "vulnerabilities": vulnerabilities
         }
+        """
+        data = {
+            "page": page,
+            "per_page": per_page,
+            "total_vulns": total_vulns,
+            "total_pages": total_pages,
+            "vulnerabilities": vulnerabilities
+        }
+        response = make_response(jsonify(data))
+        response.headers["Content-Type"] = "application/json"
+        return response
 
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(Resource):
-    @cache.cached(timeout=100)
+    @cache.cached(timeout=5)
     def get(self):
         days = request.args.get("days", type=int)
         if days is None or days < 0:
@@ -169,8 +193,10 @@ class RecentKevVulnerabilitiesResource(Resource):
                     )
             except ValueError as e:
                 pass  # Ignore invalid date formats
-
-        return recent_vulnerabilities
+        response = make_response(jsonify(recent_vulnerabilities))
+        response.headers["Content-Type"] = "application/json"
+        return response
+        #return recent_vulnerabilities
 
 class RecentVulnerabilitiesByDaysResource(Resource):
     def get(self, query_type):
@@ -246,4 +272,7 @@ class RecentVulnerabilitiesByDaysResource(Resource):
             "vulnerabilities": recent_vulnerabilities_list
         }
 
-        return response_data
+        #return response_data
+        response = make_response(jsonify(response_data))
+        response.headers["Content-Type"] = "application/json"
+        return response
