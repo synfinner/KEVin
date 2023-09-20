@@ -46,18 +46,18 @@ def sanitize_query(query):
 
 # Route for the root endpoint ("/")
 @app.route("/")
-@cache.cached()
+@cache.cached(timeout=1800) # 30 minute cache for the main route.
 def index():
     return render_template("index.html")
 
 # Route for example page ("/example")
 @app.route("/examples")
-@cache.cached()
+@cache.cached(timeout=3600) # 1 hour cache for the example page.
 def example():
     return render_template("example.html")
 
 @app.route('/get_metrics')
-@cache.cached()
+@cache.cached(timeout=1800) # 30 minute cache for the metrics route.
 def get_metrics():
     kevs_count = collection.count_documents({})
     cves_count = all_vulns_collection.count_documents({})
@@ -70,7 +70,7 @@ def get_metrics():
     return jsonify(metrics)
     
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
-@cache.cached(timeout=60)
+@cache.cached() # use the default 10 minute cache for the report route.
 def vulnerability_report(cve_id):
     # Sanitize the input CVE ID
     sanitized_cve_id = sanitize_query(cve_id)
