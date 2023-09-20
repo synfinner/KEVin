@@ -23,9 +23,18 @@
 <div class="container mt-5">
     <h1>Interacting with KEVin API</h1>
     <p>This page provides example code on how to interact with the KEVin API using Python.</p>
+    <h2>Fetching Vulnerabilities with Pagination</h2>
+    <p>Retrieve vulnerabilities using pagination:</p>
+    <pre><code>
+page_number = 2
+items_per_page = 50
+response = requests.get(f'https://kevin.gtfkd.com/kev?page={page_number}&amp;per_page={items_per_page}')
+data = response.json()
+print(data)
+    </code></pre>
     
-    <h2>Get All Known Exploited Vulnerabilities</h2>
-    <p>Retrieve all KEV data:</p>
+    <h2>Get Recent Known Exploited Vulnerabilities</h2>
+    <p>Retrieve recent KEV data:</p>
     <pre><code>
 import requests
 
@@ -67,6 +76,45 @@ response = requests.get('https://kevin.gtfkd.com/get_metrics')
 data = response.json()
 print('Number of CVEs:', data['cves_count'])
 print('Number of KEVs:', data['kevs_count'])
+    </code></pre>
+
+    <h2>Fetch Data from cveLand</h2>
+    <pre><code>
+cve_id = 'CVE-2023-1234'
+response = requests.get(f'https://kevin.gtfkd.com/vuln/{cve_id}')
+data = response.json()
+print(data)
+    </code></pre>
+
+    <h2>Fetch NVD Data for a CVE-ID</h2>
+    <pre><code>
+cve_id = 'CVE-2023-1234'
+response = requests.get(f'https://kevin.gtfkd.com/vuln/{cve_id}/nvd')
+data = response.json()
+print(data)
+    </code></pre>
+
+    <h2>Fetch Mitre Data for a CVE-ID</h2>
+    <pre><code>
+cve_id = 'CVE-2023-1234'
+response = requests.get(f'https://kevin.gtfkd.com/vuln/{cve_id}/mitre')
+data = response.json()
+print(data)
+    </code></pre>
+
+    <h2>Fetch Recent Vulnerabilities By Days</h2>
+    <p>Retrieve vulnerabilities published in the last 7 days:</p>
+    <pre><code>
+response = requests.get('https://kevin.gtfkd.com/recent/published?days=7')
+data = response.json()
+print(data)
+    </code></pre>
+
+    <p>Retrieve vulnerabilities modified in the last 7 days:</p>
+    <pre><code>
+response = requests.get('https://kevin.gtfkd.com/recent/modified?days=7')
+data = response.json()
+print(data)
     </code></pre>
 </div>
 <!-- Include Bootstrap JS and jQuery -->
