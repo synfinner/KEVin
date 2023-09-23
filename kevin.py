@@ -3,7 +3,7 @@
 import re
 from utils.database import collection, all_vulns_collection
 from urllib.parse import unquote
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_restful import Api, Resource
 from flask_compress import Compress
 from dotenv import load_dotenv
@@ -49,6 +49,10 @@ def sanitize_query(query):
 @cache.cached(timeout=1800) # 30 minute cache for the main route.
 def index():
     return render_template("index.html")
+
+@app.route('/robots.txt')
+def serve_robots_txt():
+    return send_from_directory(app.static_folder, 'robots.txt')
 
 # Route for example page ("/example")
 @app.route("/examples")
