@@ -1,5 +1,5 @@
 aniso8601==9.0.1
-blinker==1.6.3
+blinker==1.7.0
 Brotli==1.1.0
 cachelib==0.9.0
 certifi==2023.7.22
