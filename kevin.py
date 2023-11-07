@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import re
+import os
 from utils.database import collection, all_vulns_collection
 from urllib.parse import unquote
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -86,6 +87,20 @@ def vulnerability_report(cve_id):
         return render_template("vulnerability_report.html", report=report)
     else:
         return {"message": "Vulnerability not found"}, 404
+
+######################################################
+# OpenAI Routes
+######################################################
+# Define route for ai-plugin.json (required by OpenAI)
+@app.route('/.well-known/ai-plugin.json')
+def serve_ai_plugin_json():
+    return send_from_directory(os.path.join(app.static_folder, '.well-known'), 'ai-plugin.json')
+
+# Define route for openapi.yaml (required by OpenAPI)
+@app.route('/openapi.yaml')
+def openapi_yaml():
+    return send_from_directory('static', 'openapi.yaml')
+######################################################
 
 # Define error handler for 500s
 @app.errorhandler(500)
