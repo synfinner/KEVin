@@ -88,20 +88,6 @@ def vulnerability_report(cve_id):
     else:
         return {"message": "Vulnerability not found"}, 404
 
-######################################################
-# OpenAI Routes
-######################################################
-# Define route for ai-plugin.json (required by OpenAI)
-@app.route('/.well-known/ai-plugin.json')
-def serve_ai_plugin_json():
-    return send_from_directory(os.path.join(app.static_folder, '.well-known'), 'ai-plugin.json')
-
-# Define route for openapi.yaml (required by OpenAPI)
-@app.route('/openapi.yaml')
-def openapi_yaml():
-    return send_from_directory('static', 'openapi.yaml')
-######################################################
-
 # Define error handler for 500s
 @app.errorhandler(500)
 def internal_server_error(e):
