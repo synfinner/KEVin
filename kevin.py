@@ -19,6 +19,7 @@ from schema.api import (
     RecentKevVulnerabilitiesResource, 
     RecentVulnerabilitiesByDaysResource
 )
+from schema.serializers import serialize_vulnerability
 
 # Load environment variables using python-dotenv
 load_dotenv()
@@ -97,6 +98,28 @@ def internal_server_error(e):
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "You found nothing! Congratulations!"}), 404
+
+# OpenAI route
+
+@app.route("/openai/kev")
+def openai_kev():
+    # Extract the 'cve' query parameter from the URL
+    cve_id = request.args.get('cve')
+    if not cve_id:
+        return {"message": "CVE ID is required as a query parameter."}, 400
+
+    # Sanitize the input CVE ID as done in the VulnerabilityResource class
+    sanitized_cve_id = sanitize_query(cve_id)
+    
+    # Reuse the existing logic to fetch the vulnerability
+    vulnerability = collection.find_one({"cveID": sanitized_cve_id})
+    if vulnerability:
+        data = serialize_vulnerability(vulnerability)
+        response = jsonify(data)
+        response.content_type = "application/json"
+        return response
+    else:
+        return {"message": "Vulnerability not found"}, 404
 
 # Define resource routes
 api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>", strict_slashes=False)
