@@ -21,6 +21,13 @@ from schema.api import (
 )
 from schema.serializers import serialize_vulnerability,serialize_all_vulnerability
 
+
+# Create a cache key for openai routes based on the query parameters
+def cve_cache_key(*args, **kwargs):
+    path = request.path
+    args = str(hash(frozenset(request.args.items())))
+    return path + args
+
 # Load environment variables using python-dotenv
 load_dotenv()
 app = Flask(__name__)
@@ -102,6 +109,7 @@ def not_found(e):
 # OpenAI route
 
 @app.route("/openai/kev")
+@cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
 def openai_kev():
     # Extract the 'cve' query parameter from the URL
     cve_id = request.args.get('cve')
@@ -123,6 +131,7 @@ def openai_kev():
     
 # OpenAI route for all vulnerabilities with cve parameter
 @app.route("/openai/vuln")
+@cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
 def openai_vuln():
     # Extract the 'cve' query parameter from the URL
     cve_id = request.args.get('cve')
