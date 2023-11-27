@@ -48,7 +48,7 @@ def serialize_vulnerability(vulnerability):
     fields_to_extract = [
         'notes', 'product', 'requiredAction', 'shortDescription', 
         'vendorProject', 'vulnerabilityName', 'nvdData', 
-        'githubPocs', 'openThreatData'
+        'githubPocs', 'openThreatData', 'knownRansomwareCampaignUse'
     ]
     serialized_data.update(extract_keys(vulnerability, fields_to_extract))
     
