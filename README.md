@@ -10,6 +10,10 @@ Accessing KEVin can be done so at https://kevin.gtfkd.com/
 
 Rate limits are currently in place and caching is set to 3 hours at the edge.
 
+### Status
+
+To check the status of the hosted instance, please refer to our statuspage: https://kevinapi.statuspage.io/
+
 ## Features
 
 - Fetch vulnerability details by CVE ID
