@@ -37,20 +37,18 @@ init_cache(app)
 
 #Function for sanitizing input
 def sanitize_query(query):
-    if query is None:
+    # Convert the query to a string, in case it's an integer
+    query = str(query)
+    if query == 'None':
         return None
-
-    # Check if the query is an integer, if so, return it without any modifications
-    if isinstance(query, int):
-        return query
-
     # URL decode the query
     query = unquote(query)
-    # Allow alphanumeric characters, spaces, and common punctuation
+    # Allow alphanumeric characters, spaces, and hyphens
     query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
     # Remove extra whitespace from query
     query = query.strip()
     query = re.sub(r"\s+", " ", query)
+    # Finally, return the sanitized query
     return query
 
 # Route for the root endpoint ("/")

@@ -8,7 +8,7 @@ load_dotenv()
 REDIS_IP = os.getenv("REDIS_IP")
 
 cache_config = {
-    'CACHE_TYPE': 'redis',
+    'CACHE_TYPE': 'flask_caching.backends.RedisCache',
     'CACHE_DEFAULT_TIMEOUT': 600,
     'CACHE_REDIS_HOST': REDIS_IP,
     'CACHE_REDIS_PORT': '6379',
