@@ -41,8 +41,13 @@ def sanitize_query(query):
     query = str(query)
     if query == 'None':
         return None
-    # URL decode the query
-    query = unquote(query)
+    # Continuously decode the query until it can't be decoded any further to ensure we're not vulnerable to double URL encoding
+    while '%' in query:
+        decoded_query = unquote(query)
+        if decoded_query == query:
+            break
+        else:
+            query = decoded_query
     # Allow alphanumeric characters, spaces, and hyphens
     query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
     # Remove extra whitespace from query
