@@ -24,3 +24,7 @@ def test_sanitize_query():
     assert sanitize_query("1; DROP TABLE users") == "1 DROP TABLE users"
     assert sanitize_query("admin' --") == "admin --"
     assert sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom targetblankLinka"
+
+    # Test for double URL encoded values
+    assert sanitize_query("%253Cscript%253E") == "script"
+    assert sanitize_query("%2520") == ""
