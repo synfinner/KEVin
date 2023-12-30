@@ -54,6 +54,13 @@ def serialize_vulnerability(vulnerability):
     
     return serialized_data
 
+# Define serializers for returning the cve and githubpocs
+def serialize_githubpocs(vulnerability):
+    return {
+        'cveID': vulnerability["cveID"],
+        "githubPocs": vulnerability.get("githubPocs", None)
+    }
+
 def serialize_recent_cve_vulnerability(vulnerability):
     return {
         "_id": vulnerability["_id"],
