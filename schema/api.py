@@ -31,6 +31,7 @@ def sanitize_query(query):
             query = decoded_query
     # Allow alphanumeric characters, spaces, and hyphens
     query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
+    query = re.sub(r'\bcve\b', 'CVE', query, flags=re.IGNORECASE)
     # Remove extra whitespace from query
     query = query.strip()
     query = re.sub(r"\s+", " ", query)
