@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import re
 from urllib.parse import unquote
 import math
-from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer
+from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer, serialize_githubpocs
 
 # Load env using python-dotenv
 from dotenv import load_dotenv
@@ -86,17 +86,36 @@ class cveMitreResource(Resource):
 
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(Resource):
-    @cache.cached()
     def get(self, cve_id):
         # Sanitize the input CVE ID
         sanitized_cve_id = sanitize_query(cve_id)
-        
-        vulnerability = collection.find_one({"cveID": sanitized_cve_id})
-        if vulnerability:
-            data = serialize_vulnerability(vulnerability)
-            #return serialize_vulnerability(vulnerability)
+
+        # Get the 'references' argument and sanitize it
+        references_arg = sanitize_query(request.args.get('references'))
+
+        # Check if the user has requested for PoCs
+        if references_arg == 'pocs':
+            # Bypass the cache and call the serialize_githubpocs function
+            vulnerability = collection.find_one({"cveID": sanitized_cve_id})
+            if vulnerability:
+                data = serialize_githubpocs(vulnerability)
+            else:
+                return {"message": "Vulnerability not found"}, 404
+        elif references_arg != "pocs" and references_arg is not None:
+            return {"message": "Invalid value for references parameter"}, 400
         else:
-            return {"message": "Vulnerability not found"}, 404
+            # Use the cache and call the serialize_vulnerability function
+            vulnerability = cache.get(sanitized_cve_id)
+            if vulnerability is None:
+                vulnerability = collection.find_one({"cveID": sanitized_cve_id})
+                if vulnerability:
+                    cache.set(sanitized_cve_id, vulnerability)
+                    data = serialize_vulnerability(vulnerability)
+                else:
+                    return {"message": "Vulnerability not found"}, 404
+            else:
+                data = serialize_vulnerability(vulnerability)
+
         response = Response(json.dumps(data), content_type="application/json")
         return response
 
