@@ -1,3 +1,4 @@
+gevent==23.9.1
 aniso8601==9.0.1
 blinker==1.7.0
 Brotli==1.1.0

@@ -21,6 +21,8 @@ from schema.api import (
 )
 from schema.serializers import serialize_vulnerability,serialize_all_vulnerability
 
+from gevent.pywsgi import WSGIServer
+
 
 # Create a cache key for openai routes based on the query parameters
 def cve_cache_key(*args, **kwargs):
@@ -166,4 +168,6 @@ api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/published", endpoin
 api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/modified", endpoint="modified", defaults={"query_type": "modified"})
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    #app.run(debug=False)
+    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    http_server.serve_forever()
