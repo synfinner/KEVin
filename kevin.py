@@ -87,6 +87,23 @@ def get_metrics():
     }
 
     return jsonify(metrics)
+
+# route to returnt a bool to check if a CVE is in the kev database collection
+# example: /kev/exist?cve=CVE-2021-1234
+@app.route("/kev/exists", methods=["GET"])
+@cache.cached(timeout=15, key_prefix='cve_exist', query_string=True) # 15 sec cache for the cve_exist route.
+def cve_exist():
+    cve_id = request.args.get('cve')
+    if not cve_id:
+        return jsonify({"message": "CVE ID is required as a query parameter."}), 400
+
+    # Sanitize the input CVE ID
+    sanitized_cve_id = sanitize_query(cve_id)
+    vulnerability = collection.find_one({"cveID": sanitized_cve_id})
+    if vulnerability:
+        return jsonify({"In_KEV": True})
+    else:
+        return jsonify({"In_KEV": False})
     
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
 @cache.cached() # use the default 10 minute cache for the report route.
