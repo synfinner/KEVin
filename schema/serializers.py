@@ -10,6 +10,7 @@ def extract_keys(data, keys):
     """Utility function to extract certain keys from a dictionary."""
     return {key: data.get(key, {}) for key in keys}
 
+# Serializer for vulnerability data
 def serialize_all_vulnerability(vulnerability):
     data = extract_keys(vulnerability, ['GSD', 'namespaces'])
     return {
@@ -21,6 +22,7 @@ def serialize_all_vulnerability(vulnerability):
         'nvdData': data['namespaces'].get('nvd.nist.gov', {})
     }
 
+# Serializer for NVD vulnerability data
 def nvd_seralizer(vulnerability):
     nvd_data = extract_keys(vulnerability.get("namespaces", {}), ["nvd.nist.gov"])
     return {
@@ -28,6 +30,7 @@ def nvd_seralizer(vulnerability):
         'nvdData': nvd_data["nvd.nist.gov"]
     }
 
+# Serializer for MITRE vulnerability data
 def mitre_seralizer(vulnerability):
     mitre_data = extract_keys(vulnerability.get("namespaces", {}), ["cve.org"])
     return {
@@ -35,6 +38,7 @@ def mitre_seralizer(vulnerability):
         'mitreData': mitre_data["cve.org"]
     }
 
+# Serializer for KEV vulnerability data
 def serialize_vulnerability(vulnerability):
     # First, serialize the fields that you want at the top
     serialized_data = {

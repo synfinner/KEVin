@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+# Import the required libraries
 import re
 import os
 from utils.database import collection, all_vulns_collection
@@ -20,9 +21,7 @@ from schema.api import (
     RecentVulnerabilitiesByDaysResource
 )
 from schema.serializers import serialize_vulnerability,serialize_all_vulnerability
-
 from gevent.pywsgi import WSGIServer
-
 
 # Create a cache key for openai routes based on the query parameters
 def cve_cache_key(*args, **kwargs):
@@ -32,9 +31,15 @@ def cve_cache_key(*args, **kwargs):
 
 # Load environment variables using python-dotenv
 load_dotenv()
+
+# Initialize the Flask app and the Flask-RESTful API
 app = Flask(__name__)
 api = Api(app)
+
+# Enable GZIP compression for all routes
 compress = Compress(app)
+
+# Initialize the Flask-Caching extension
 init_cache(app)
 
 #Function for sanitizing input
@@ -75,6 +80,7 @@ def serve_robots_txt():
 def example():
     return render_template("example.html")
 
+# Route for the metrics page ("/metrics")
 @app.route('/get_metrics')
 @cache.cached(timeout=1800) # 30 minute cache for the metrics route.
 def get_metrics():
@@ -104,7 +110,7 @@ def cve_exist():
         return jsonify({"In_KEV": True})
     else:
         return jsonify({"In_KEV": False})
-    
+
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
 @cache.cached() # use the default 10 minute cache for the report route.
 def vulnerability_report(cve_id):
@@ -129,7 +135,7 @@ def internal_server_error(e):
 def not_found(e):
     return jsonify({"error": "You found nothing! Congratulations!"}), 404
 
-# OpenAI route
+# OpenAI routes
 
 @app.route("/openai/kev")
 @cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
@@ -185,6 +191,6 @@ api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/published", endpoin
 api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/modified", endpoint="modified", defaults={"query_type": "modified"})
 
 if __name__ == "__main__":
-    #app.run(debug=False)
+    # Start the Flask app with Gevent WSGI server
     http_server = WSGIServer(('0.0.0.0', 5000), app)
     http_server.serve_forever()

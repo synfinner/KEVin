@@ -194,69 +194,95 @@ class AllKevVulnerabilitiesResource(Resource):
         response.headers["Content-Type"] = "application/json"
         return response
 
-
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(Resource):
+    # Cache the response for 5 seconds to reduce server load
     @cache.cached(timeout=5)
     def get(self):
+        # Get the 'days' parameter from the query string
         days = request.args.get("days", type=int)
+        
+        # Validate the 'days' parameter
         if days is None or days < 0:
             return {"message": "Invalid value for days"}, 400
 
+        # Calculate the cutoff date based on the 'days' parameter
         cutoff_date = datetime.utcnow() - timedelta(days=days)
+        
+        # Initialize an empty list to store the recent vulnerabilities
         recent_vulnerabilities = []
 
+        # Fetch all vulnerabilities from the collection
         cursor = collection.find()
+        
+        # Iterate over the vulnerabilities
         for vulnerability in cursor:
+            # Get the date when the vulnerability was added
             date_added_str = vulnerability.get("dateAdded")
+            
             try:
+                # Convert the date from string to datetime
                 date_added = datetime.strptime(date_added_str, "%Y-%m-%d")
+                
+                # Check if the vulnerability was added within the cutoff date
                 if date_added >= cutoff_date:
+                    # If so, serialize the vulnerability and add it to the list
                     recent_vulnerabilities.append(
                         serialize_vulnerability(vulnerability)
                     )
             except ValueError as e:
-                pass  # Ignore invalid date formats
+                # Ignore vulnerabilities with invalid date formats
+                pass  
+        
+        # Convert the list of recent vulnerabilities to JSON
         response = make_response(jsonify(recent_vulnerabilities))
+        
+        # Set the Content-Type of the response to application/json
         response.headers["Content-Type"] = "application/json"
+        
+        # Return the response
         return response
-        #return recent_vulnerabilities
 
 class RecentVulnerabilitiesByDaysResource(Resource):
     def get(self, query_type):
+        # Get the query parameters
         days = request.args.get("days")
         page = request.args.get("page", default=1)  # Default to page 1 if not provided
-        per_page = request.args.get("per_page", default=25)  # Default to 10 if not provided
+        per_page = request.args.get("per_page", default=25)  # Default to 25 if not provided
         
+        # Check if 'days' parameter is provided
         if days is None:
             return {"message": "You must provide 'days' parameter"}, 400
 
+        # Sanitize the 'days' parameter
         sanitized_days = sanitize_query(days)
 
+        # Check if 'days' parameter is a valid integer
         if not isinstance(sanitized_days, int):
             if not sanitized_days.isdigit():
                 return {"message": "Invalid value for days parameter"}, 400
 
+            # Limit the 'days' parameter to a maximum of 14
             max_days = 14
             if int(sanitized_days) > max_days:
                 return {"message": f"Exceeded the maximum limit of {max_days} days"}, 400
 
-        # Sanitize the page parameter
-        sanitized_page = sanitize_query(page)
-
-        # Sanitize the page parameter
+        # Sanitize the 'page' parameter
         sanitized_page = sanitize_query(page)
         
-        # Sanitize and limit the per_page parameter
+        # Sanitize and limit the 'per_page' parameter
         per_page = request.args.get("per_page", default=10)  # Default to 10 if not provided
         sanitized_per_page = sanitize_query(str(per_page))  # Convert to string before sanitizing
         sanitized_per_page = min(int(sanitized_per_page), 100)  # Limit to maximum 100
         
+        # Calculate the cutoff date based on the 'days' parameter
         cutoff_date = (datetime.utcnow() - timedelta(days=int(sanitized_days))).strftime("%Y-%m-%d")
         field = "pubDateKev" if query_type == "published" else "pubModDateKev"
 
+        # Calculate the start index for pagination
         start_index = (int(sanitized_page) - 1) * sanitized_per_page
 
+        # Define the fields to return in the response
         projection = {
             "_id": 1,
             "pubDateKev": 1,
@@ -264,11 +290,13 @@ class RecentVulnerabilitiesByDaysResource(Resource):
             "namespaces": 1
         }
 
+        # Query the database for recent vulnerabilities
         recent_vulnerabilities = all_vulns_collection.find(
             {field: {"$gt": cutoff_date}},
             projection
         ).skip(start_index).limit(sanitized_per_page)
 
+        # Process the query results
         recent_vulnerabilities_list = []
         for vulnerability in recent_vulnerabilities:
             cve_id = vulnerability.get("_id", "")
@@ -281,9 +309,11 @@ class RecentVulnerabilitiesByDaysResource(Resource):
             }
             recent_vulnerabilities_list.append(vulnerability_data)
 
+        # Calculate the total number of entries and pages
         total_entries = all_vulns_collection.count_documents({field: {"$gt": cutoff_date}})
         total_pages = math.ceil(total_entries / sanitized_per_page)
 
+        # Prepare the pagination info
         pagination_info = {
             "currentPage": int(sanitized_page),
             "totalPages": total_pages,
@@ -291,12 +321,13 @@ class RecentVulnerabilitiesByDaysResource(Resource):
             "resultsPerPage": sanitized_per_page
         }
 
+        # Prepare the response data
         response_data = {
             "pagination": pagination_info,
             "vulnerabilities": recent_vulnerabilities_list
         }
 
-        #return response_data
+        # Create the response with the correct content type
         response = make_response(jsonify(response_data))
         response.headers["Content-Type"] = "application/json"
         return response
