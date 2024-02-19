@@ -21,7 +21,7 @@ MarkupSafe==2.1.5
 packaging==23.2
 pluggy==1.4.0
 pymongo==4.6.1
-pytest==8.0.0
+pytest==8.0.1
 python-dotenv==1.0.1
 pytz==2024.1
 redis==5.0.1
