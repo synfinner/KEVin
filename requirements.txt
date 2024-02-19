@@ -10,7 +10,7 @@ Flask==3.0.2
 Flask-Caching==2.1.0
 Flask-Compress==1.14
 Flask-RESTful==0.3.10
-gevent==23.9.1
+gevent==24.2.1
 greenlet==3.0.3
 gunicorn==21.2.0
 idna==3.6
