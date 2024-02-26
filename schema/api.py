@@ -139,20 +139,7 @@ class AllKevVulnerabilitiesResource(Resource):
         sanitized_order_param = sanitize_query(order_param)
         sanitized_filter_param = sanitize_query(filter_param)
 
-        if sanitized_sort_param not in valid_sort_params or sanitized_order_param not in valid_order_params:
-            return {"message": "Invalid sorting parameters"}, 400
-
-        cached_key = f"{clean_query}_{sanitized_sort_param}_{sanitized_order_param}_{page}_{per_page}_{sanitized_filter_param}"
-        cached_data = cache.get(cached_key)
-
-        vulnerabilities = []
-
-        if cached_data is not None:
-            vulnerabilities = cached_data
-        else:
-            skip = (page - 1) * per_page
-
-            query = {"$text": {"$search": clean_query}} if clean_query else {}
+        query = {"$text": {"$search": clean_query}} if clean_query else {}
         if sanitized_filter_param.lower() == 'ransomware':
             query['knownRansomwareCampaignUse'] = 'Known'
 
