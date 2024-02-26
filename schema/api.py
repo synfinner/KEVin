@@ -121,31 +121,48 @@ class VulnerabilityResource(Resource):
 
 MAX_VULNS_PER_PAGE = 100
 
-# Resource for fetching all vulnerabilities
 class AllKevVulnerabilitiesResource(Resource):
     def get(self):
-        valid_sort_params = {"severity", "date"}  # Changed "dateAdded" to "date"
+        valid_sort_params = {"severity", "date"}
         valid_order_params = {"asc", "desc"}
 
         search_query = request.args.get("search", '')
         sort_param = request.args.get("sort", "date")
         order_param = request.args.get("order", "desc")
+        filter_param = request.args.get("filter", '')
 
-        # Pagination parameters
         page = int(request.args.get("page", 1))
         per_page = int(request.args.get("per_page", 25))
-        if per_page > MAX_VULNS_PER_PAGE:
-            per_page = MAX_VULNS_PER_PAGE
 
         clean_query = sanitize_query(search_query)
         sanitized_sort_param = sanitize_query(sort_param)
         sanitized_order_param = sanitize_query(order_param)
+        sanitized_filter_param = sanitize_query(filter_param)
 
         if sanitized_sort_param not in valid_sort_params or sanitized_order_param not in valid_order_params:
             return {"message": "Invalid sorting parameters"}, 400
 
-        cached_key = f"{clean_query}_{sanitized_sort_param}_{sanitized_order_param}_{page}_{per_page}"
+        cached_key = f"{clean_query}_{sanitized_sort_param}_{sanitized_order_param}_{page}_{per_page}_{sanitized_filter_param}"
         cached_data = cache.get(cached_key)
+
+        vulnerabilities = []
+
+        if cached_data is not None:
+            vulnerabilities = cached_data
+        else:
+            skip = (page - 1) * per_page
+
+            query = {"$text": {"$search": clean_query}} if clean_query else {}
+        if sanitized_filter_param.lower() == 'ransomware':
+            query['knownRansomwareCampaignUse'] = 'Known'
+
+        total_vulns = collection.count_documents(query)  # Count documents matching the query
+        total_pages = math.ceil(total_vulns / per_page)
+
+        cached_key = f"{clean_query}_{sanitized_sort_param}_{sanitized_order_param}_{page}_{per_page}_{sanitized_filter_param}"
+        cached_data = cache.get(cached_key)
+
+        vulnerabilities = []
 
         if cached_data is not None:
             vulnerabilities = cached_data
@@ -153,36 +170,17 @@ class AllKevVulnerabilitiesResource(Resource):
             skip = (page - 1) * per_page
 
             if sanitized_sort_param == "date":
-                sort_criteria = [('dateAdded', ASCENDING if sanitized_order_param == "asc" else DESCENDING)]  # Sorting by "dateAdded" in MongoDB
-                if clean_query:
-                    cursor = collection.find({"$text": {"$search": clean_query}}).sort(sort_criteria).skip(skip).limit(per_page)
-                else:
-                    cursor = collection.find().sort(sort_criteria).skip(skip).limit(per_page)
+                sort_criteria = [('dateAdded', ASCENDING if sanitized_order_param == "asc" else DESCENDING)]
+                cursor = collection.find(query).sort(sort_criteria).skip(skip).limit(per_page)
                 vulnerabilities = [serialize_vulnerability(v) for v in cursor]
-
             else:  # Default to "severity"
-                if clean_query:
-                    cursor = collection.find({"$text": {"$search": clean_query}}).skip(skip).limit(per_page)
-                else:
-                    cursor = collection.find().skip(skip).limit(per_page)
+                cursor = collection.find(query).skip(skip).limit(per_page)
                 sorted_vulnerabilities = [v for v in cursor if v.get('nvdData') and v['nvdData'][0].get('baseScore') is not None]
                 sorted_vulnerabilities.sort(key=lambda v: v['nvdData'][0]['baseScore'], reverse=(sanitized_order_param == "desc"))
                 vulnerabilities = [serialize_vulnerability(v) for v in sorted_vulnerabilities]
 
             cache.set(cached_key, vulnerabilities)
 
-        total_vulns = collection.count_documents({})
-        total_pages = math.ceil(total_vulns / per_page)
-
-        """
-        return {
-            "page": page,
-            "per_page": per_page,
-            "total_vulns": total_vulns,
-            "total_pages": total_pages,
-            "vulnerabilities": vulnerabilities
-        }
-        """
         data = {
             "page": page,
             "per_page": per_page,
