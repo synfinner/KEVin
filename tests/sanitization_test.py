@@ -60,3 +60,4 @@ def test_api_sanitize_query():
     # Test for double URL encoded values
     assert api_sanitize_query("%253Cscript%253E") == "script"
     assert api_sanitize_query("%2520") == ""
+    
