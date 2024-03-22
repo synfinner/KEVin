@@ -299,3 +299,4 @@ class RecentVulnerabilitiesByDaysResource(Resource):
         response = make_response(jsonify(response_data))
         response.headers["Content-Type"] = "application/json"
         return response
+    

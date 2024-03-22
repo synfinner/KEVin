@@ -17,3 +17,4 @@ def init_cache(app):
     """
     # Call the init_app method on the cache object, passing in the app and the cache_config
     cache.init_app(app, config=cache_config)
+    
