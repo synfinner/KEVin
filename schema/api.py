@@ -152,8 +152,8 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 "total_pages": total_pages,
                 "vulnerabilities": vulnerabilities
             })
-        except Exception as e:
-            return self.handle_error(str(e), 500)
+        except:
+            return self.handle_error("An internal server error occurred", 500)
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
