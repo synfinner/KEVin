@@ -24,27 +24,29 @@ class BaseResource(Resource):
     def make_json_response(self, data, status=200):
         return make_response(jsonify(data), status)
 
-# Add the function and class definitions here...
-#Function for sanitizing input
+# Pre-compile regex patterns for sanitizing input to improve performance
+ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
+EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
+CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
+
+# Function for sanitizing input
 def sanitize_query(query):
-    # Convert the query to a string, in case it's an integer
-    query = str(query)
-    if query == 'None':
+    if query is None:
         return None
-    # Continuously decode the query until it can't be decoded any further to ensure we're not vulnerable to double URL encoding
+    # Ensure the input is a string
+    query = str(query).strip()
+    # URL decode iteratively to handle multiple encodings
     while '%' in query:
         decoded_query = unquote(query)
         if decoded_query == query:
             break
-        else:
-            query = decoded_query
-    # Allow alphanumeric characters, spaces, and hyphens
-    query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
-    query = re.sub(r'\bcve\b', 'CVE', query, flags=re.IGNORECASE)
-    # Remove extra whitespace from query
-    query = query.strip()
-    query = re.sub(r"\s+", " ", query)
-    # Finally, return the sanitized query
+        query = decoded_query
+    # Remove non-alphanumeric, non-space, non-hyphen, non-underscore characters
+    query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub("", query)  # Use the updated regex
+    # Normalize "cve" to "CVE"
+    query = CVE_RE.sub("CVE", query)
+    # Replace multiple spaces with a single space
+    query = EXTRA_WHITESPACE_RE.sub(" ", query).strip()
     return query
 
 # Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection

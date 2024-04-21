@@ -55,7 +55,7 @@ def test_api_sanitize_query():
     assert api_sanitize_query("<img src='x' onerror='alert(1)'>") == "img srcx onerroralert1"
     assert api_sanitize_query("1; DROP TABLE users") == "1 DROP TABLE users"
     assert api_sanitize_query("admin' --") == "admin --"
-    assert api_sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom targetblankLinka"
+    assert api_sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom target_blankLinka"
 
     # Test for double URL encoded values
     assert api_sanitize_query("%253Cscript%253E") == "script"
