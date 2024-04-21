@@ -6,3 +6,4 @@ poc_processor.py
 .env
 intel_processor.py
 pubdate.py
+.pytest_cache/
