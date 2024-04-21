@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 
-# Import the required libraries
-import re
+# Standard Library Imports
 import os
-from utils.database import collection, all_vulns_collection
+import re
 from urllib.parse import unquote
+
+# Third-Party Library Imports
+from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_restful import Api, Resource
 from flask_compress import Compress
-from dotenv import load_dotenv
+from gevent.pywsgi import WSGIServer
+
+# Project-Specific Imports
+from utils.database import collection, all_vulns_collection
 from utils.cache_manager import cache, init_cache
 from modules.reportgen import report_gen
 from schema.api import (
-    cveLandResource, 
-    cveNVDResource, 
-    cveMitreResource, 
-    VulnerabilityResource, 
-    AllKevVulnerabilitiesResource, 
-    RecentKevVulnerabilitiesResource, 
+    cveLandResource,
+    cveNVDResource,
+    cveMitreResource,
+    VulnerabilityResource,
+    AllKevVulnerabilitiesResource,
+    RecentKevVulnerabilitiesResource,
     RecentVulnerabilitiesByDaysResource
 )
-from schema.serializers import serialize_vulnerability,serialize_all_vulnerability
-from gevent.pywsgi import WSGIServer
+from schema.serializers import serialize_vulnerability, serialize_all_vulnerability
+
 
 # Create a cache key for openai routes based on the query parameters
 def cve_cache_key(*args, **kwargs):
