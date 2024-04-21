@@ -2,6 +2,7 @@
 
 from utils.database import all_vulns_collection, collection
 from utils.cache_manager import cache
+from functools import partial
 from flask_restful import Resource
 from flask import request, Response, json, jsonify, make_response
 from pymongo import ASCENDING, DESCENDING
@@ -10,7 +11,6 @@ import re
 from urllib.parse import unquote
 import math
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer, serialize_githubpocs
-from functools import partial
 
 # Load env using python-dotenv
 from dotenv import load_dotenv
