@@ -200,7 +200,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Sanitize the 'days' parameter
         days = sanitize_query(days)
         if not days.isdigit() or int(days) < 0:
-            return self.handle_error("Invalid value for days parameter", 400)
+            return self.handle_error("Invalid value for days parameter. Please provide a non-negative integer no greater than 14.", 400)
         if int(days) > 14:  # Limit the 'days' parameter to a maximum of 14
             return self.handle_error("Exceeded the maximum limit of 14 days", 400)
         cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
