@@ -132,10 +132,10 @@ class AllKevVulnerabilitiesResource(BaseResource):
         try:
             page = int(request.args.get("page", 1))
             per_page = max(1, min(100, int(request.args.get("per_page", 25))))
-            sort_param = sanitize_query(request.args.get("sort", "date"))
+            sort_param = sanitize_query(request.args.get("sort", "dateAdded"))  # Changed from "date" to "dateAdded"
             order_param = sanitize_query(request.args.get("order", "desc"))
             search_query = sanitize_query(request.args.get("search", ''))
-            
+
             query = {"$text": {"$search": search_query}} if search_query else {}
             sort_order = DESCENDING if order_param == "desc" else ASCENDING
             sort_criteria = [(sort_param, sort_order)]
