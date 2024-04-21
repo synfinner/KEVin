@@ -8,7 +8,7 @@ from urllib.parse import unquote
 # Third-Party Library Imports
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, send_from_directory
-from flask_restful import Api, Resource
+from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
 
