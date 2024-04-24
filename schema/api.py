@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import re
 from urllib.parse import unquote
 import math
-from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_seralizer, mitre_seralizer, serialize_githubpocs
+from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
 
 # Load env using python-dotenv
 from dotenv import load_dotenv
@@ -79,7 +79,7 @@ class cveNVDResource(BaseResource):
         if not vulnerability:
             return self.handle_error("Vulnerability not found")
 
-        data = nvd_seralizer(vulnerability)
+        data = nvd_serializer(vulnerability)
         return self.make_json_response(data)
 
         
@@ -94,8 +94,8 @@ class cveMitreResource(BaseResource):
         if not vulnerability:
             # If the vulnerability is not found, return a 404 error with a message
             return self.handle_error("Vulnerability not found")
-        # If the vulnerability is found, serialize it using the 'mitre_seralizer' function
-        data = mitre_seralizer(vulnerability)
+        # If the vulnerability is found, serialize it using the 'mitre_serializer' function
+        data = mitre_serializer(vulnerability)
         # Return the JSON response with the serialized data
         return self.make_json_response(data)
     

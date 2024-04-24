@@ -42,7 +42,7 @@ def serialize_all_vulnerability(vulnerability):
     }
 
 # Serializer for NVD vulnerability data
-def nvd_seralizer(vulnerability):
+def nvd_serializer(vulnerability):
     nvd_data = extract_keys(vulnerability.get("namespaces", {}), ["nvd.nist.gov"])
     return {
         'cveID': str(vulnerability["_id"]),
@@ -50,7 +50,7 @@ def nvd_seralizer(vulnerability):
     }
 
 # Serializer for MITRE vulnerability data
-def mitre_seralizer(vulnerability):
+def mitre_serializer(vulnerability):
     mitre_data = extract_keys(vulnerability.get("namespaces", {}), ["cve.org"])
     return {
         'cveID': str(vulnerability["_id"]),
