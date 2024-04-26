@@ -109,7 +109,6 @@ def get_metrics():
 # Route to check if a specific CVE ID exists in the KEV database collection
 # Example usage: /kev/exists?cve=CVE-2021-1234
 @app.route("/kev/exists", methods=["GET"])
-@cache.cached(timeout=15, key_prefix='cve_exist', query_string=True) # 15 second cache for the cve_exist route.
 def cve_exist():
     # Extract the 'cve' query parameter from the URL
     cve_id = request.args.get('cve')
