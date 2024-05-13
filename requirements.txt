@@ -7,7 +7,7 @@ charset-normalizer==3.3.2
 click==8.1.7
 dnspython==2.6.1
 Flask==3.0.3
-Flask-Caching==2.1.0
+Flask-Caching==2.3.0
 Flask-Compress==1.14
 Flask-RESTful==0.3.10
 gevent==24.2.1
