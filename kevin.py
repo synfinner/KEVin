@@ -84,6 +84,10 @@ def index():
 def serve_robots_txt():
     return send_from_directory(app.static_folder, 'robots.txt')
 
+@app.route('/privacy-policy')
+def serve_privacy_policy():
+    return send_from_directory(app.static_folder, 'privacy.html')
+
 # Route for example page ("/example")
 @app.route("/examples")
 @cache.cached(timeout=3600) # 1 hour cache for the example page.
