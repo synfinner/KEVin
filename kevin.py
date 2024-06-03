@@ -88,6 +88,10 @@ def serve_robots_txt():
 def serve_privacy_policy():
     return send_from_directory(app.static_folder, 'privacy.html')
 
+@app.route('/donate')
+def serve_donate():
+    return send_from_directory(app.static_folder, 'donate.html')
+
 # Route for example page ("/example")
 @app.route("/examples")
 @cache.cached(timeout=3600) # 1 hour cache for the example page.
