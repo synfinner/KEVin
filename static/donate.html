@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donate to Our Project</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .crypto-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .crypto-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .crypto-item:last-child {
+            border-bottom: none;
+        }
+        .crypto-item .name {
+            font-weight: bold;
+        }
+        .crypto-item .address {
+            font-family: 'Courier New', Courier, monospace;
+            word-break: break-all;
+        }
+        @media (max-width: 600px) {
+            .crypto-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cryptocurrency Addresses</h1>
+        <ul class="crypto-list">
+            <li class="crypto-item">
+                <span class="name">Bitcoin (BTC):</span>
+                <span class="address">bc1qz54vrq4sz5p80d0gxg07uruln0l99hxh5gplrs</span>
+            </li>
+            <li class="crypto-item">
+                <span class="name">Ethereum (ETH):</span>
+                <span class="address">0x03F9C1047481f184010ff7DfB0a758d3EF1a7279</span>
+            </li>
+            <li class="crypto-item">
+                <span class="name">Dogecoin (DOGE):</span>
+                <span class="address">DRWTzhDmQboyw5MQSedm9eJkPigAx66Lcf</span>
+            </li>
+        </ul>
+    </div>
+</body>
+</html>
