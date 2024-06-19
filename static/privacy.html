@@ -13,13 +13,16 @@
             max-width: 800px;
             margin: auto;
         }
+        a {
+            color: #007bff; /* Ensure link color has enough contrast */
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <section class="section">
+        <section class="section" role="region" aria-labelledby="policy-title">
             <div class="content">
-                <h1 class="title">KEVin API Privacy Policy</h1>
+                <h1 class="title" id="policy-title">KEVin API Privacy Policy</h1>
                 <hr>
                 <h2 class="subtitle">No Personal Data Collection</h2>
                 <p>
@@ -31,7 +34,7 @@
                     To enhance the security and performance of our services, GTFKD utilizes Cloudflare as its gateway provider. Cloudflare may collect certain data, such as IP addresses, User-Agents, and behaviors, as part of its operational requirements. The collection and use of this data by Cloudflare are purely for maintaining network security and operational integrity.
                 </p>
                 <p>
-                    Please be aware that Cloudflare’s data collection and use are governed by their own privacy policy, which we recommend you review to understand their data handling practices. GTFKD does not control or assume responsibility for the data collected by Cloudflare. For more details, please refer to Cloudflare’s Privacy Policy <a href="https://www.cloudflare.com/privacypolicy/" target="_blank">here</a>.
+                    Please be aware that Cloudflare’s data collection and use are governed by their own privacy policy, which we recommend you review to understand their data handling practices. GTFKD does not control or assume responsibility for the data collected by Cloudflare. For more details, please refer to <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" aria-label="Cloudflare Privacy Policy">Cloudflare’s Privacy Policy</a>.
                 </p>
 
                 <h2 class="subtitle">Changes to This Privacy Policy</h2>
@@ -41,7 +44,7 @@
 
                 <h2 class="subtitle">Contact Us</h2>
                 <p>
-                    If you have any questions or concerns about our privacy policy, please contact us at <a href="https://x.com/synfinner" target="_blank">https://x.com/synfinner</a>. We are committed to addressing your inquiries and resolving any issues you may have.
+                    If you have any questions or concerns about our privacy policy, please contact us at <a href="https://x.com/synfinner" target="_blank" aria-label="Contact us via X.com">https://x.com/synfinner</a>. We are committed to addressing your inquiries and resolving any issues you may have.
                 </p>
                 <h3 class="subtitle">Additional Contact Information</h3>
                 <p>

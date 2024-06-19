@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>KEVin Vulnerability API</title>
+    <meta charset="UTF-8">
     <meta name="description" content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API. Retrieve information about CVEs, KEVs, and more.">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Include Bootstrap CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <!-- Favicon Links -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}" alt="Apple Touch Icon">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}" alt="Apple Touch Icon">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}" alt="Apple Touch Icon">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
     <style>
         /* Custom CSS for dark theme */
@@ -60,7 +61,7 @@
                     <h5 class="mb-0">
                         <button class="btn btn-link" data-toggle="collapse" data-target="#kev-api-usage-content" aria-expanded="true" aria-controls="kev-api-usage-content">
                             KEV API Usage
-                        </button>
+                        </button>                        
                     </h5>
                 </div>
 
