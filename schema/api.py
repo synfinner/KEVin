@@ -130,6 +130,7 @@ class VulnerabilityResource(BaseResource):
 
 # This class defines a resource for fetching all KEV vulnerabilities
 class AllKevVulnerabilitiesResource(BaseResource):
+    @cache.cached(timeout=120, key_prefix='kev_all_listing', query_string=True)
     def get(self):
         try:
             page = int(request.args.get("page", 1))
@@ -137,8 +138,11 @@ class AllKevVulnerabilitiesResource(BaseResource):
             sort_param = sanitize_query(request.args.get("sort", "dateAdded"))  # Changed from "date" to "dateAdded"
             order_param = sanitize_query(request.args.get("order", "desc"))
             search_query = sanitize_query(request.args.get("search", ''))
+            filter_ransomware = sanitize_query(request.args.get("filter", ''))
 
             query = {"$text": {"$search": search_query}} if search_query else {}
+            if filter_ransomware.lower() == 'ransomware':
+                query["knownRansomwareCampaignUse"] = "Known"
             sort_order = DESCENDING if order_param == "desc" else ASCENDING
             sort_criteria = [(sort_param, sort_order)]
 
@@ -159,7 +163,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
-    @cache.cached(timeout=5)
+    @cache.cached(timeout=60, key_prefix='kev_recent', query_string=True)
     def get(self):
         # Get the 'days' parameter from the query string
         days = request.args.get("days", type=int)
