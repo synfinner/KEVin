@@ -7,7 +7,7 @@ from urllib.parse import unquote
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory, make_response
 from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
@@ -81,22 +81,56 @@ def index():
     return render_template("index.html")
 
 @app.route('/robots.txt')
+# 1 hour cache.
+@cache.cached(timeout=3600)
 def serve_robots_txt():
-    return send_from_directory(app.static_folder, 'robots.txt')
+    file_pah = os.path.join(app.static_folder, 'robots.txt')
+    with open(file_pah, 'r') as file:
+        file_content = file.read()
+    response = make_response(file_content)
+    response.headers['Content-Type'] = 'text/plain'
+    return response
 
 @app.route('/privacy-policy')
+# 1 hour cache.
+@cache.cached(timeout=3600)
 def serve_privacy_policy():
-    return send_from_directory(app.static_folder, 'privacy.html')
+    file_path = os.path.join(app.static_folder, 'privacy.html')
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+    response = make_response(file_content)
+    response.headers['Content-Type'] = 'text/html'
+    return response
 
 @app.route('/donate')
+# 1 hour cache.
+@cache.cached(timeout=3600)
 def serve_donate():
-    return send_from_directory(app.static_folder, 'donate.html')
+    file_path = os.path.join(app.static_folder, 'donate.html')
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+    response = make_response(file_content)
+    response.headers['Content-Type'] = 'text/html'
+    return response
 
 # Route for example page ("/example")
 @app.route("/examples")
 @cache.cached(timeout=3600) # 1 hour cache for the example page.
 def example():
     return render_template("example.html")
+
+@app.route("/agreement")
+@cache.cached(timeout=3600)  # 1 hour cache for the agreement page.
+def user_agreement():
+    # Read the file content into memory
+    file_path = os.path.join(app.static_folder, 'agreement.html')
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+    
+    # Create a response object with the file content
+    response = make_response(file_content)
+    response.headers['Content-Type'] = 'text/html'
+    return response
 
 # Route for the metrics page ("/get_metrics")
 @app.route('/get_metrics')
