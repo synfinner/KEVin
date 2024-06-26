@@ -195,6 +195,7 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         return self.make_json_response(recent_vulnerabilities)
 
 class RecentVulnerabilitiesByDaysResource(BaseResource):
+    @cache.cached(timeout=60, key_prefix='kev_recent_days', query_string=True)
     def get(self, query_type):
         # Get the query parameters
         days = request.args.get("days")
