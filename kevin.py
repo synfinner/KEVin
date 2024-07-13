@@ -105,7 +105,7 @@ def serve_privacy_policy():
 @app.route('/about')
 # 1 hour cache.
 @cache.cached(timeout=3600)
-def serve_privacy_policy():
+def serve_about_page():
     file_path = os.path.join(app.static_folder, 'about.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
