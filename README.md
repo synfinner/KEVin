@@ -2,9 +2,7 @@
 
 The missing API for CISA's Known Exploited Vulnerabilities Catalog ([here](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)).
 
-## Hosted Instance
-
-I am currently hosting an instance of KEVin (with some extra features not included in this source). 
+## Public Host
 
 Accessing KEVin can be done so at https://kevin.gtfkd.com/
 
