@@ -102,6 +102,17 @@ def serve_privacy_policy():
     response.headers['Content-Type'] = 'text/html'
     return response
 
+@app.route('/about')
+# 1 hour cache.
+@cache.cached(timeout=3600)
+def serve_about_page():
+    file_path = os.path.join(app.static_folder, 'about.html')
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+    response = make_response(file_content)
+    response.headers['Content-Type'] = 'text/html'
+    return response
+
 @app.route('/donate')
 # 1 hour cache.
 @cache.cached(timeout=3600)
