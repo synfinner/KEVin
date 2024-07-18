@@ -49,6 +49,23 @@ init_cache(app)
 
 # Function for sanitizing input to prevent SQL injection attacks and such
 def sanitize_query(query):
+    """
+    Sanitize the input query to prevent malicious input.
+
+    This function checks and sanitizes the provided query string by:
+    - Returning None if the query is None or exceeds a specified length.
+    - Iteratively URL decoding the query to handle encoded characters.
+    - Whitelisting allowed characters (alphanumeric, spaces, hyphens, underscores).
+    - Normalizing occurrences of "cve" to "CVE".
+    - Replacing multiple spaces with a single space.
+    - Checking for potential SQL injection patterns and returning None for suspicious queries.
+
+    Parameters:
+    query (str): The input query string to sanitize.
+
+    Returns:
+    str or None: The sanitized query string if valid, or None if the input is invalid or suspicious.
+    """
     # Check if the query is None
     if query is None:
         return None
@@ -170,6 +187,21 @@ def get_metrics():
 @app.route("/kev/exists", methods=["GET"])
 @cache.cached(timeout=15, key_prefix='cve_exist', query_string=True) # 15 second cache for the cve_exist route.
 def cve_exist():
+    """
+    Check if a specific CVE ID exists in the KEV database.
+
+    This function extracts the 'cve' query parameter from the request URL,
+    sanitizes it to prevent SQL injection attacks, and checks the database
+    for the existence of the corresponding vulnerability. It returns a JSON
+    response indicating whether the CVE ID exists in the KEV database.
+
+    Query Parameters:
+    - cve (str): The CVE ID to check for existence in the KEV database.
+
+    Returns:
+    Response: A JSON response indicating whether the CVE ID exists in the
+              KEV database. Returns a 400 error if the CVE ID is not provided.
+    """
     # Extract the 'cve' query parameter from the URL
     cve_id = request.args.get('cve')
     # If the 'cve' query parameter is not provided, return an error message
@@ -218,6 +250,23 @@ def not_found(e):
 @app.route("/openai/kev")
 @cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
 def openai_kev():
+    """
+    Retrieve KEV vulnerability data for a specific CVE ID from the database.
+
+    This function extracts the 'cve' query parameter from the request URL,
+    sanitizes it to prevent SQL injection attacks, and fetches the corresponding
+    vulnerability from the database. If the vulnerability is found, it serializes
+    the data and returns it as a JSON response. If the CVE ID is not provided
+    or the vulnerability is not found, it returns an appropriate error message.
+
+    Query Parameters:
+    - cve (str): The CVE ID of the vulnerability to retrieve.
+
+    Returns:
+    Response: A JSON response containing the serialized KEV vulnerability data
+              or an error message if the CVE ID is missing or the vulnerability
+              is not found.
+    """
     # Extract the 'cve' query parameter from the URL
     cve_id = request.args.get('cve')
     # If the 'cve' query parameter is not provided, return an error message
@@ -242,6 +291,23 @@ def openai_kev():
 @app.route("/openai/vuln")
 @cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
 def openai_vuln():
+    """
+    Retrieve vulnerability data for a specific CVE ID from the database.
+
+    This function extracts the 'cve' query parameter from the request URL,
+    sanitizes it to prevent SQL injection attacks, and fetches the corresponding
+    vulnerability from the database. If the vulnerability is found, it serializes
+    the data and returns it as a JSON response. If the CVE ID is not provided
+    or the vulnerability is not found, it returns an appropriate error message.
+
+    Query Parameters:
+    - cve (str): The CVE ID of the vulnerability to retrieve.
+
+    Returns:
+    Response: A JSON response containing the serialized vulnerability data
+              or an error message if the CVE ID is missing or the vulnerability
+              is not found.
+    """
     # Extract the 'cve' query parameter from the URL
     cve_id = request.args.get('cve')
     # If the 'cve' query parameter is not provided, return an error message

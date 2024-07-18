@@ -31,6 +31,23 @@ CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
 
 # Function for sanitizing input
 def sanitize_query(query):
+    """
+    Sanitize the input query to prevent malicious input.
+
+    This function checks and sanitizes the provided query string by:
+    - Returning None if the query is None or exceeds a specified length.
+    - Iteratively URL decoding the query to handle encoded characters.
+    - Whitelisting allowed characters (alphanumeric, spaces, hyphens, underscores).
+    - Normalizing occurrences of "cve" to "CVE".
+    - Replacing multiple spaces with a single space.
+    - Checking for potential SQL injection patterns and returning None for suspicious queries.
+
+    Parameters:
+    query (str): The input query string to sanitize.
+
+    Returns:
+    str or None: The sanitized query string if valid, or None if the input is invalid or suspicious.
+    """
     # Check if the query is None
     if query is None:
         return None
@@ -65,6 +82,22 @@ def sanitize_query(query):
 # Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection
 class cveLandResource(BaseResource):
     def get(self, cve_id):
+        """
+        Retrieve vulnerability data by CVE ID.
+
+        This method checks the cache for existing data associated with the
+        provided CVE ID. If cached data is found, it returns that data.
+        If not, it sanitizes the CVE ID, queries the database for the
+        corresponding vulnerability, and caches the result for future requests.
+
+        Parameters:
+        cve_id (str): The CVE ID to look up.
+
+        Returns:
+        Response: A JSON response containing the vulnerability data or an
+                  error message if the input parameters are invalid or the
+                  vulnerability is not found.
+        """
         # Use partial to create a new function that includes the cve_id in the key prefix
         cache_key_func = partial(self.make_cache_key, cve_id=cve_id)
         cached_data = cache.get(cache_key_func())
@@ -86,6 +119,21 @@ class cveLandResource(BaseResource):
 class cveNVDResource(BaseResource):
     @cache.cached()
     def get(self, cve_id):
+        """
+        Retrieve NVD data for a specific CVE ID.
+
+        This method fetches vulnerability information from the 'all_vulns_collection'
+        based on the provided CVE ID. It sanitizes the input to prevent injection
+        attacks and returns the serialized NVD data. If the vulnerability is not
+        found, it returns a 404 error.
+
+        Parameters:
+        cve_id (str): The CVE ID of the vulnerability to retrieve.
+
+        Returns:
+        Response: A JSON response containing the serialized NVD data or an
+                  error message if the vulnerability is not found.
+        """
         # Sanitize the input CVE ID
         sanitized_cve_id = sanitize_query(cve_id)
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
@@ -100,6 +148,21 @@ class cveNVDResource(BaseResource):
 class cveMitreResource(BaseResource):
     @cache.cached()  # Use caching to improve performance
     def get(self, cve_id):
+        """
+        Retrieve Mitre data for a specific CVE ID.
+
+        This method fetches vulnerability information from the 'all_vulns_collection'
+        based on the provided CVE ID. It sanitizes the input to prevent injection
+        attacks and returns the serialized Mitre data. If the vulnerability is not
+        found, it returns a 404 error.
+
+        Parameters:
+        cve_id (str): The CVE ID of the vulnerability to retrieve.
+
+        Returns:
+        Response: A JSON response containing the serialized Mitre data or an
+                  error message if the vulnerability is not found.
+        """
         # Sanitize the input CVE ID to prevent injection attacks
         sanitized_cve_id = sanitize_query(cve_id)
         # Fetch the vulnerability with the sanitized CVE ID from the 'all_vulns_collection'
@@ -115,6 +178,28 @@ class cveMitreResource(BaseResource):
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(BaseResource):
     def get(self, cve_id):
+        """
+        Retrieve vulnerability details by CVE ID.
+
+        This method fetches vulnerability information based on the provided
+        CVE ID. It supports optional retrieval of references, specifically
+        for Proof of Concepts (PoCs). The method sanitizes the input
+        parameters and checks the cache for existing data before querying
+        the database.
+
+        Parameters:
+        cve_id (str): The CVE ID of the vulnerability to retrieve.
+
+        Query Parameters:
+        - references (str): Optional parameter to specify if PoCs should be
+                            returned. If set to 'pocs', the method retrieves
+                            PoCs instead of the standard vulnerability data.
+
+        Returns:
+        Response: A JSON response containing the vulnerability data or an
+                  error message if the input parameters are invalid or the
+                  vulnerability is not found.
+        """
         # Sanitize the input CVE ID
         sanitized_cve_id = sanitize_query(cve_id)
         # Get the 'references' argument and sanitize it
@@ -145,6 +230,26 @@ class VulnerabilityResource(BaseResource):
 class AllKevVulnerabilitiesResource(BaseResource):
     @cache.cached(timeout=120, key_prefix='kev_all_listing', query_string=True)
     def get(self):
+        """
+        Retrieve all KEV vulnerabilities with optional filtering, sorting, and pagination.
+
+        This method fetches vulnerabilities from the database, allowing for
+        pagination, sorting, and filtering based on user-defined parameters.
+        It returns a structured response containing the vulnerabilities and
+        pagination information.
+
+        Query Parameters:
+        - page (int): The page number for pagination (default is 1).
+        - per_page (int): The number of results per page (default is 25, max is 100).
+        - sort (str): The field to sort by (default is "dateAdded").
+        - order (str): The sort order, either "asc" or "desc" (default is "desc").
+        - search (str): A search term to filter vulnerabilities.
+        - filter (str): A filter to include only vulnerabilities related to ransomware.
+
+        Returns:
+        Response: A JSON response containing pagination info and a list of
+                  vulnerabilities, or an error message if an internal error occurs.
+        """
         try:
             page = int(request.args.get("page", 1))
             per_page = max(1, min(100, int(request.args.get("per_page", 25))))
@@ -178,6 +283,20 @@ class AllKevVulnerabilitiesResource(BaseResource):
 class RecentKevVulnerabilitiesResource(BaseResource):
     @cache.cached(timeout=60, key_prefix='kev_recent', query_string=True)
     def get(self):
+        """
+        Retrieve recent KEV vulnerabilities added within a specified number of days.
+
+        This method fetches vulnerabilities from the database that were added
+        within the specified number of days. It validates the 'days' parameter
+        and returns a list of serialized vulnerabilities that meet the criteria.
+
+        Query Parameters:
+        - days (int): The number of days to look back for recent vulnerabilities.
+
+        Returns:
+        Response: A JSON response containing a list of recent vulnerabilities
+                  or an error message if the input parameter is invalid.
+        """
         # Get the 'days' parameter from the query string
         days = request.args.get("days", type=int)
         # Validate the 'days' parameter
@@ -210,6 +329,28 @@ class RecentKevVulnerabilitiesResource(BaseResource):
 class RecentVulnerabilitiesByDaysResource(BaseResource):
     @cache.cached(timeout=60, key_prefix='kev_recent_days', query_string=True)
     def get(self, query_type):
+        """
+        Retrieve recent vulnerabilities based on the specified number of days.
+
+        This method fetches vulnerabilities that were published or modified
+        within a specified number of days. It supports pagination and
+        returns a structured response containing the vulnerabilities and
+        pagination information.
+
+        Parameters:
+        query_type (str): The type of query to perform, either "published" 
+                          or "modified".
+
+        Query Parameters:
+        - days (int): The number of days to look back for recent vulnerabilities.
+        - page (int): The page number for pagination (default is 1).
+        - per_page (int): The number of results per page (default is 25).
+
+        Returns:
+        Response: A JSON response containing the list of recent vulnerabilities
+                  and pagination information, or an error message if the input
+                  parameters are invalid.
+        """
         # Get the query parameters
         days = request.args.get("days")
         page = request.args.get("page", default=1, type=int)  # Default to page 1 if not provided

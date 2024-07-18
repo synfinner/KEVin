@@ -23,6 +23,24 @@ def extract_keys(data, keys):
 
 # This function serializes vulnerability data for easier consumption by the client
 def serialize_all_vulnerability(vulnerability):
+    """
+    Serializes vulnerability data into a structured format for easier consumption.
+
+    Parameters:
+    vulnerability (dict): The vulnerability data to be serialized, which must include
+                          an '_id' field and a 'GSD' key containing 'description'
+                          and 'references', as well as 'namespaces' containing
+                          'cisa.gov', 'cve.org', and 'nvd.nist.gov'.
+
+    Returns:
+    dict: A dictionary containing the serialized vulnerability data, including:
+          - 'cveID': The string representation of the '_id' field.
+          - 'description': The description from the 'GSD' data or an empty string.
+          - 'references': The references from the 'GSD' data or an empty list.
+          - 'cisaData': The data from the 'cisa.gov' namespace or an empty dictionary.
+          - 'cve.Org': The data from the 'cve.org' namespace or an empty dictionary.
+          - 'nvdData': The data from the 'nvd.nist.gov' namespace or an empty dictionary.
+    """
     # Extract the 'GSD' and 'namespaces' keys from the vulnerability data
     data = extract_keys(vulnerability, ['GSD', 'namespaces'])
     # Return a dictionary with the serialized data
