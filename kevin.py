@@ -90,8 +90,8 @@ def index():
 # 1 hour cache.
 @cache.cached(timeout=3600)
 def serve_robots_txt():
-    file_pah = os.path.join(app.static_folder, 'robots.txt')
-    with open(file_pah, 'r') as file:
+    file_path = os.path.join(app.static_folder, 'robots.txt')
+    with open(file_path, 'r') as file:
         file_content = file.read()
     response = make_response(file_content)
     response.headers['Content-Type'] = 'text/plain'
