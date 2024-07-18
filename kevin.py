@@ -49,29 +49,35 @@ init_cache(app)
 
 # Function for sanitizing input to prevent SQL injection attacks and such
 def sanitize_query(query):
-    # Convert the query to a string, in case it's an integer
-    query = str(query)
-    # If the query is 'None', return None
-    if query == 'None':
+    # Check if the query is None
+    if query is None:
         return None
-    # Continuously decode the query until it can't be decoded any further to ensure we're not vulnerable to double URL encoding
+    
+    query = str(query).strip()
+    # Length check
+    if len(query) > 50:
+        return None
+    
+    # URL decode iteratively
     while '%' in query:
         decoded_query = unquote(query)
-        # If decoding doesn't change the query, break the loop
         if decoded_query == query:
             break
-        else:
-            # If decoding changes the query, update the query with the decoded version and continue the loop
-            query = decoded_query
-    # Allow alphanumeric characters, spaces, and hyphens in the query, remove all other characters
-    query = re.sub(r"[^a-zA-Z0-9\s-]", "", query)
-    # Replace 'cve' with 'CVE' in the query, ignoring case
+        query = decoded_query
+    
+    # Whitelist allowed characters (alphanumeric, spaces, hyphens, underscores)
+    query = re.sub(r"[^\w\s-]", "", query)
+    
+    # Normalize "cve" to "CVE"
     query = re.sub(r'\bcve\b', 'CVE', query, flags=re.IGNORECASE)
-    # Remove extra whitespace from the start and end of the query
-    query = query.strip()
-    # Replace multiple consecutive spaces in the query with a single space
-    query = re.sub(r"\s+", " ", query)
-    # Finally, return the sanitized query
+    
+    # Replace multiple spaces with a single space
+    query = re.sub(r"\s+", " ", query).strip()
+    
+    # Check for potential SQL injection patterns (without logging)
+    if re.search(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|;|--)\b)", query, re.IGNORECASE):
+        return None  # Return None for suspicious queries
+    
     return query
 
 # Route for the root endpoint ("/")

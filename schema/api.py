@@ -31,22 +31,35 @@ CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
 
 # Function for sanitizing input
 def sanitize_query(query):
+    # Check if the query is None
     if query is None:
         return None
-    # Ensure the input is a string
+
     query = str(query).strip()
-    # URL decode iteratively to handle multiple encodings
+    # Length check
+    if len(query) > 50:
+        return None
+    
+    # URL decode iteratively
     while '%' in query:
         decoded_query = unquote(query)
         if decoded_query == query:
             break
         query = decoded_query
-    # Remove non-alphanumeric, non-space, non-hyphen, non-underscore characters
-    query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub("", query)  # Use the updated regex
+    
+    # Whitelist allowed characters (alphanumeric, spaces, hyphens, underscores)
+    query = re.sub(r"[^\w\s-]", "", query)
+    
     # Normalize "cve" to "CVE"
-    query = CVE_RE.sub("CVE", query)
+    query = re.sub(r'\bcve\b', 'CVE', query, flags=re.IGNORECASE)
+    
     # Replace multiple spaces with a single space
-    query = EXTRA_WHITESPACE_RE.sub(" ", query).strip()
+    query = re.sub(r"\s+", " ", query).strip()
+    
+    # Check for potential SQL injection patterns (without logging)
+    if re.search(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|;|--)\b)", query, re.IGNORECASE):
+        return None  # Return None for suspicious queries
+    
     return query
 
 # Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection
