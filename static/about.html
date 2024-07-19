@@ -42,7 +42,13 @@
                 </ul>
                 <h2 class="subtitle"></h2>
                 <hr>
-                <p>© 2024 GTFKD. All rights reserved.</p>
+                <p id="copyright">© 2024 GTFKD. All rights reserved.</p>
+                <script>
+                    window.onload = function() {
+                        const currentYear = new Date().getFullYear();
+                        document.getElementById('copyright').innerHTML = `© ${currentYear} GTFKD. All rights reserved.`;
+                    };
+                </script>
             </div>
         </section>
     </div>
