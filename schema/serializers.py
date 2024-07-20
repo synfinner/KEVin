@@ -52,27 +52,27 @@ def serialize_all_vulnerability(vulnerability):
         # Extract the 'references' field from the 'GSD' data, or use an empty list if it's not present
         'references': data['GSD'].get('references', []),
         # Extract the 'cisa.gov' namespace data, or use an empty dictionary if it's not present
-        'cisaData': data['namespaces'].get('cisa.gov', {}),
+        'cisaData': data['namespaces'].get('cisa_gov', {}),
         # Extract the 'cve.org' namespace data, or use an empty dictionary if it's not present
-        'cve.Org': data['namespaces'].get('cve.org', {}),
+        'cve.Org': data['namespaces'].get('cve_org', {}),
         # Extract the 'nvd.nist.gov' namespace data, or use an empty dictionary if it's not present
-        'nvdData': data['namespaces'].get('nvd.nist.gov', {})
+        'nvdData': data['namespaces'].get('nvd_nist_gov', {})
     }
 
 # Serializer for NVD vulnerability data
 def nvd_serializer(vulnerability):
-    nvd_data = extract_keys(vulnerability.get("namespaces", {}), ["nvd.nist.gov"])
+    nvd_data = extract_keys(vulnerability.get("namespaces", {}), ["nvd_nist_gov"])
     return {
         'cveID': str(vulnerability["_id"]),
-        'nvdData': nvd_data["nvd.nist.gov"]
+        'nvdData': nvd_data["nvd_nist_gov"]
     }
 
 # Serializer for MITRE vulnerability data
 def mitre_serializer(vulnerability):
-    mitre_data = extract_keys(vulnerability.get("namespaces", {}), ["cve.org"])
+    mitre_data = extract_keys(vulnerability.get("namespaces", {}), ["cve_org"])
     return {
         'cveID': str(vulnerability["_id"]),
-        'mitreData': mitre_data["cve.org"]
+        'mitreData': mitre_data["cve_org"]
     }
 
 # This function serializes vulnerability data for easier consumption by the client
