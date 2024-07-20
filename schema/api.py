@@ -100,7 +100,7 @@ class cveLandResource(BaseResource):
         """
         # Sanitize the CVE ID fist. Fix #179
         sanitized_cve_id = sanitize_query(cve_id)
-        if sanitize_query is None:
+        if sanitized_cve_id is None:
             return self.handle_error("Invalid CVE ID", 400)
         # Use partial to create a new function that includes the cve_id in the key prefix
         cache_key_func = partial(self.make_cache_key, cve_id=sanitized_cve_id)
