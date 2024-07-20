@@ -98,12 +98,15 @@ class cveLandResource(BaseResource):
                   error message if the input parameters are invalid or the
                   vulnerability is not found.
         """
+        # Sanitize the CVE ID fist. Fix #179
+        sanitized_cve_id = sanitize_query(cve_id)
+        if sanitize_query is None:
+            return self.handle_error("Invalid CVE ID", 400)
         # Use partial to create a new function that includes the cve_id in the key prefix
-        cache_key_func = partial(self.make_cache_key, cve_id=cve_id)
+        cache_key_func = partial(self.make_cache_key, cve_id=sanitized_cve_id)
         cached_data = cache.get(cache_key_func())
         if cached_data:
             return self.make_json_response(cached_data)
-        sanitized_cve_id = sanitize_query(cve_id)
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if not vulnerability:
             return self.handle_error("Vulnerability not found")
@@ -302,6 +305,9 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         # Validate the 'days' parameter
         if days is None or days < 0:
             return self.handle_error("Invalid value for days", 400)
+        # Limit days to a maximum of 100
+        if days > 100:
+            return self.handle_error("Exceeded the maximum limit of 100 days", 400)
         # Calculate the cutoff date based on the 'days' parameter
         cutoff_date = datetime.utcnow() - timedelta(days=days)
         recent_vulnerabilities = []
