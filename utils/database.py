@@ -12,7 +12,6 @@ load_dotenv()
 
 # Import the Queue class from the queue module
 from queue import Queue
-import sys
 
 # Create a queue for logging messages
 log_queue = Queue()
