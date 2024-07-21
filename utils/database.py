@@ -72,12 +72,23 @@ ALL_VULNS_COLLECTION_NAME = "cves"
 all_vulns_db = client[ALL_VULNS_DB_NAME]
 all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
 
-def monitor_connection(client, uri):
-    while True:
+import threading
+
+stop_event = threading.Event()
+
+def monitor_connection(client, uri, stop_event):
+    while not stop_event.is_set():
         print("Checking MongoDB connection...")  # Log the connection check
         client = ensure_connection(client, uri)
-        time.sleep(10)  # Check every 10 seconds
+        stop_event.wait(10)  # Check every 10 seconds or until stopped
 
+# Start the connection monitoring in a separate thread
+connection_thread = threading.Thread(target=monitor_connection, args=(client, MONGO_URI, stop_event), daemon=True)
+connection_thread.start()
+
+# Ensure to stop the logging thread and monitoring thread when done
+log_queue.put(None)  # Signal the logging thread to exit
+stop_event.set()  # Signal the monitoring thread to exit
 # Start the connection monitoring in a separate thread
 connection_thread = threading.Thread(target=monitor_connection, args=(client, MONGO_URI), daemon=True)
 connection_thread.start()
