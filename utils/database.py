@@ -51,7 +51,7 @@ def check_connection(client):
         return False
 
 # Get the value of the MONGODB_URI_PROD environment variable
-MONGO_URI = os.getenv("MONGODB_URI_DEV")
+MONGO_URI = os.getenv("MONGODB_URI_PROD")
 # Create a new MongoClient object
 client = create_client(MONGO_URI)
 # Ensure connection with retries
