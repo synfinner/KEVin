@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory,
 from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
+from gevent import spawn, joinall
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
@@ -170,10 +171,24 @@ def user_agreement():
 @app.route('/get_metrics')
 @cache.cached(timeout=1800) # 30 minute cache for the metrics route.
 def get_metrics():
-    # Count the number of documents in the 'collection' (KEVs)
-    kevs_count = collection.count_documents({})
-    # Count the number of documents in the 'all_vulns_collection' (CVEs)
-    cves_count = all_vulns_collection.count_documents({})
+    # Use Gevent to spawn greenlets for counting documents
+    def count_kevs():
+        return collection.count_documents({})
+
+    def count_cves():
+        return all_vulns_collection.count_documents({})
+
+    # Spawn the greenlets
+    kevs_greenlet = spawn(count_kevs)
+    cves_greenlet = spawn(count_cves)
+
+    # Wait for the greenlets to finish
+    joinall([kevs_greenlet, cves_greenlet])
+
+    # Get the results from the greenlets
+    kevs_count = kevs_greenlet.value
+    cves_count = cves_greenlet.value
+
     # Create a dictionary to hold the metrics
     metrics = {
         'cves_count': cves_count, # Number of CVEs
@@ -209,8 +224,19 @@ def cve_exist():
         return jsonify({"message": "CVE ID is required as a query parameter."}), 400
     # Sanitize the input CVE ID to prevent SQL injection attacks
     sanitized_cve_id = sanitize_query(cve_id)
-    # Use the sanitized CVE ID to fetch the corresponding vulnerability from the database
-    vulnerability = collection.find_one({"cveID": sanitized_cve_id})
+
+    # Use Gevent to spawn a greenlet for the database query
+    def fetch_vulnerability():
+        return collection.find_one({"cveID": sanitized_cve_id})
+
+    # Spawn the greenlet
+    greenlet = spawn(fetch_vulnerability)
+    # Wait for the greenlet to finish
+    joinall([greenlet])
+
+    # Get the result from the greenlet
+    vulnerability = greenlet.value
+
     # If the vulnerability is found, return a JSON response indicating that the CVE ID exists in the KEV database
     if vulnerability:
         return jsonify({"In_KEV": True})

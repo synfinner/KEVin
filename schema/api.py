@@ -11,6 +11,7 @@ import re
 from urllib.parse import unquote
 import math
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
+from gevent import spawn, joinall
 
 # Load env using python-dotenv
 from dotenv import load_dotenv
@@ -98,21 +99,41 @@ class cveLandResource(BaseResource):
                   error message if the input parameters are invalid or the
                   vulnerability is not found.
         """
-        # Sanitize the CVE ID fist. Fix #179
+        # Sanitize the CVE ID first. Fix #179
         sanitized_cve_id = sanitize_query(cve_id)
         if sanitized_cve_id is None:
             return self.handle_error("Invalid CVE ID", 400)
+
         # Use partial to create a new function that includes the cve_id in the key prefix
         cache_key_func = partial(self.make_cache_key, cve_id=sanitized_cve_id)
-        cached_data = cache.get(cache_key_func())
+
+        # Spawn greenlets for concurrent execution
+        greenlets = []
+        greenlets.append(spawn(self.get_cached_data, cache_key_func))
+        greenlets.append(spawn(self.query_vulnerability, sanitized_cve_id))
+
+        # Wait for all greenlets to complete
+        joinall(greenlets)
+
+        cached_data = greenlets[0].value
+        vulnerability = greenlets[1].value
+
         if cached_data:
             return self.make_json_response(cached_data)
-        vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if not vulnerability:
             return self.handle_error("Vulnerability not found")
+
         data = serialize_all_vulnerability(vulnerability)
-        cache.set(cache_key_func(), data)  # Manually caching the data
+        cache.set(cache_key_func(), data,timeout=180)  # Manually caching the data
         return self.make_json_response(data)
+
+    def get_cached_data(self, cache_key_func):
+        """Fetch cached data."""
+        return cache.get(cache_key_func())
+
+    def query_vulnerability(self, sanitized_cve_id):
+        """Query the database for the vulnerability."""
+        return all_vulns_collection.find_one({"_id": sanitized_cve_id})
 
     def make_cache_key(self, cve_id):
         """ Generate a unique cache key including the CVE ID. """
@@ -217,17 +238,34 @@ class VulnerabilityResource(BaseResource):
         elif references_arg != "pocs" and references_arg is not None:
             return self.handle_error("Invalid value for references parameter", 400)
         else:
-            # Use the cache and call the serialize_vulnerability function
-            vulnerability = cache.get(sanitized_cve_id)
-            if vulnerability is None:
-                vulnerability = collection.find_one({"cveID": sanitized_cve_id})
-                if not vulnerability:
-                    return self.handle_error("Vulnerability not found")
+            # Spawn greenlets for cache check and database query
+            greenlets = []
+            greenlets.append(spawn(self.get_cached_data, sanitized_cve_id))
+            greenlets.append(spawn(self.query_vulnerability, sanitized_cve_id))
+
+            # Wait for all greenlets to complete
+            joinall(greenlets)
+
+            cached_data = greenlets[0].value
+            vulnerability = greenlets[1].value
+
+            if cached_data:
+                data = serialize_vulnerability(cached_data)
+            elif not vulnerability:
+                return self.handle_error("Vulnerability not found")
+            else:
                 cache.set(sanitized_cve_id, vulnerability)
                 data = serialize_vulnerability(vulnerability)
-            else:
-                data = serialize_vulnerability(vulnerability)
+
         return self.make_json_response(data)
+
+    def get_cached_data(self, sanitized_cve_id):
+        """Fetch cached data."""
+        return cache.get(sanitized_cve_id)
+
+    def query_vulnerability(self, sanitized_cve_id):
+        """Query the database for the vulnerability."""
+        return collection.find_one({"cveID": sanitized_cve_id})
 
 # This class defines a resource for fetching all KEV vulnerabilities
 class AllKevVulnerabilitiesResource(BaseResource):
@@ -254,9 +292,12 @@ class AllKevVulnerabilitiesResource(BaseResource):
                   vulnerabilities, or an error message if an internal error occurs.
         """
         try:
-            page = int(request.args.get("page", 1))
-            per_page = max(1, min(100, int(request.args.get("per_page", 25))))
-            sort_param = sanitize_query(request.args.get("sort", "dateAdded"))  # Changed from "date" to "dateAdded"
+            try:
+                page = int(request.args.get("page", 1))
+                per_page = max(1, min(100, int(request.args.get("per_page", 25))))
+            except ValueError:
+                return self.handle_error("Invalid page or per_page parameter. Must be integers.", 400)
+            sort_param = sanitize_query(request.args.get("sort", "dateAdded"))
             order_param = sanitize_query(request.args.get("order", "desc"))
             search_query = sanitize_query(request.args.get("search", ''))
             filter_ransomware = sanitize_query(request.args.get("filter", ''))
@@ -267,10 +308,18 @@ class AllKevVulnerabilitiesResource(BaseResource):
             sort_order = DESCENDING if order_param == "desc" else ASCENDING
             sort_criteria = [(sort_param, sort_order)]
 
-            total_vulns = collection.count_documents(query)
+            # Spawn greenlets for concurrent execution
+            greenlets = []
+            greenlets.append(spawn(self.count_documents, query))
+            greenlets.append(spawn(self.fetch_vulnerabilities, query, sort_criteria, page, per_page))
+
+            # Wait for all greenlets to complete
+            joinall(greenlets)
+
+            total_vulns = greenlets[0].value
+            vulnerabilities = greenlets[1].value
+
             total_pages = math.ceil(total_vulns / per_page)
-            cursor = collection.find(query).sort(sort_criteria).skip((page - 1) * per_page).limit(per_page)
-            vulnerabilities = [serialize_vulnerability(v) for v in cursor]
 
             return self.make_json_response({
                 "page": page,
@@ -279,8 +328,25 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 "total_pages": total_pages,
                 "vulnerabilities": vulnerabilities
             })
-        except:
-            return self.handle_error("An internal server error occurred", 500)
+        except Exception as e:
+            return self.handle_error("An internal server error occurred: " + str(e), 500)
+
+    def count_documents(self, query):
+        """Count the total number of vulnerabilities matching the query."""
+        try:
+            return collection.count_documents(query)
+        except Exception as e:
+            # Handle specific exceptions if needed
+            raise e
+
+    def fetch_vulnerabilities(self, query, sort_criteria, page, per_page):
+        """Fetch vulnerabilities from the database."""
+        try:
+            cursor = collection.find(query).sort(sort_criteria).skip((page - 1) * per_page).limit(per_page)
+            return [serialize_vulnerability(v) for v in cursor]
+        except Exception as e:
+            # Handle specific exceptions if needed
+            raise e
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
@@ -310,27 +376,36 @@ class RecentKevVulnerabilitiesResource(BaseResource):
             return self.handle_error("Exceeded the maximum limit of 100 days", 400)
         # Calculate the cutoff date based on the 'days' parameter
         cutoff_date = datetime.utcnow() - timedelta(days=days)
-        recent_vulnerabilities = []
+
         # Fetch all vulnerabilities from the collection
         cursor = collection.find()
-        # Iterate over the vulnerabilities
+        greenlets = []
+
+        # Spawn greenlets for processing each vulnerability
         for vulnerability in cursor:
-            date_added_str = vulnerability.get("dateAdded")
-            try:
-                # Convert the date from string to datetime
-                date_added = datetime.strptime(date_added_str, "%Y-%m-%d")
-                
-                # Check if the vulnerability was added within the cutoff date
-                if date_added >= cutoff_date:
-                    # Serialize the vulnerability and add it to the list
-                    recent_vulnerabilities.append(
-                        serialize_vulnerability(vulnerability)
-                    )
-            except ValueError:
-                # Ignore vulnerabilities with invalid date formats
-                continue
+            greenlets.append(spawn(self.process_vulnerability, vulnerability, cutoff_date))
+
+        # Wait for all greenlets to complete
+        joinall(greenlets)
+
+        # Collect results from greenlets
+        recent_vulnerabilities = [g.value for g in greenlets if g.value]
+
         # Return the JSON response with the serialized data
         return self.make_json_response(recent_vulnerabilities)
+
+    def process_vulnerability(self, vulnerability, cutoff_date):
+        """Process a single vulnerability to check if it meets the cutoff date."""
+        date_added_str = vulnerability.get("dateAdded")
+        try:
+            # Convert the date from string to datetime
+            date_added = datetime.strptime(date_added_str, "%Y-%m-%d")
+            # Check if the vulnerability was added within the cutoff date
+            if date_added >= cutoff_date:
+                return serialize_vulnerability(vulnerability)
+        except ValueError:
+            # Ignore vulnerabilities with invalid date formats
+            return None
 
 class RecentVulnerabilitiesByDaysResource(BaseResource):
     @cache.cached(timeout=60, key_prefix='kev_recent_days', query_string=True)
@@ -376,20 +451,23 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             if query_type == "published" 
             else "namespaces.nvd_nist_gov.cve.lastModified"
         )
-        # Define the fields to return in the response
-        projection = {"_id": 1, "pubDateKev": 1, "pubModDateKev": 1, "namespaces": 1}
-        # Query the database for recent vulnerabilities
-        recent_vulnerabilities = all_vulns_collection.find(
-            {field: {"$gt": cutoff_date}},
-            projection
-        ).skip((page - 1) * per_page).limit(per_page)
-        recent_vulnerabilities_list = [
-            {"id": v.get("_id", ""), "nvdData": v.get("namespaces", {}).get("nvd_nist_gov", {})}
-            for v in recent_vulnerabilities
-        ]
+
+        # Create a list of greenlets for concurrent execution
+        greenlets = []
+
+        # Spawn a greenlet for querying the database
+        greenlets.append(spawn(self.query_database, field, cutoff_date))
+
+        # Wait for all greenlets to complete
+        joinall(greenlets)
+
+        # Assuming query_database returns the result
+        recent_vulnerabilities_list = greenlets[0].value
+
         # Calculate the total number of entries and pages
-        total_entries = all_vulns_collection.count_documents({field: {"$gt": cutoff_date}})
+        total_entries = len(recent_vulnerabilities_list)  # Example, replace with actual count logic
         total_pages = math.ceil(total_entries / per_page)
+
         # Prepare the pagination info and response data
         pagination_info = {
             "currentPage": page,
@@ -402,5 +480,13 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             "vulnerabilities": recent_vulnerabilities_list
         }
         return self.make_json_response(response_data)
+
+    def query_database(self, field, cutoff_date):
+        # This method should contain the logic to query the database
+        # and return the results.
+        recent_vulnerabilities = all_vulns_collection.find(
+            {field: {"$gt": cutoff_date}}
+        )
+        return [v for v in recent_vulnerabilities]  # Convert cursor to list
 
     
