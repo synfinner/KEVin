@@ -371,7 +371,11 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         if int(days) > 14:  # Limit the 'days' parameter to a maximum of 14
             return self.handle_error("Exceeded the maximum limit of 14 days", 400)
         cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
-        field = "namespaces.nvd_nist_gov.cve.published" if query_type == "published" else "namespaces.nvd_nist_gov.cve.lastModified"
+        field = (
+            "namespaces.nvd_nist_gov.cve.published" 
+            if query_type == "published" 
+            else "namespaces.nvd_nist_gov.cve.lastModified"
+        )
         # Define the fields to return in the response
         projection = {"_id": 1, "pubDateKev": 1, "pubModDateKev": 1, "namespaces": 1}
         # Query the database for recent vulnerabilities
