@@ -11,7 +11,8 @@ load_dotenv()
 # Get the value of the MONGODB_URI_PROD environment variable
 MONGO_URI = os.getenv("MONGODB_URI_PROD")
 # Create a new MongoClient object with the MongoDB URI, a maximum pool size of 50, and a minimum pool size of 10
-client = MongoClient(MONGO_URI, maxPoolSize=50, minPoolSize=10)
+# Use snappy compression for the database, #183
+client = MongoClient(MONGO_URI, maxPoolSize=50, minPoolSize=10, compressors='snappy')
 
 # Define the name of the database and the collection
 DB_NAME = "kev"
