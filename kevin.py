@@ -355,14 +355,23 @@ def openai_vuln():
         return {"message": "Vulnerability not found"}, 404
 
 # Define resource routes
-api.add_resource(VulnerabilityResource, "/kev/<string:cve_id>", strict_slashes=False)
-api.add_resource(AllKevVulnerabilitiesResource, "/kev", strict_slashes=False)
-api.add_resource(RecentKevVulnerabilitiesResource, "/kev/recent", strict_slashes=False) 
-api.add_resource(cveLandResource, "/vuln/<string:cve_id>", strict_slashes=False)
-api.add_resource(cveNVDResource, "/vuln/<string:cve_id>/nvd", strict_slashes=False)
-api.add_resource(cveMitreResource, "/vuln/<string:cve_id>/mitre", strict_slashes=False)
-api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/published", endpoint="published", defaults={"query_type": "published"})
-api.add_resource(RecentVulnerabilitiesByDaysResource, "/vuln/modified", endpoint="modified", defaults={"query_type": "modified"})
+resources = [
+    (VulnerabilityResource, "/kev/<string:cve_id>"),
+    (AllKevVulnerabilitiesResource, "/kev"),
+    (RecentKevVulnerabilitiesResource, "/kev/recent"),
+    (cveLandResource, "/vuln/<string:cve_id>"),
+    (cveNVDResource, "/vuln/<string:cve_id>/nvd"),
+    (cveMitreResource, "/vuln/<string:cve_id>/mitre"),
+    (RecentVulnerabilitiesByDaysResource, "/vuln/published", {"query_type": "published"}),
+    (RecentVulnerabilitiesByDaysResource, "/vuln/modified", {"query_type": "modified"}),
+]
+
+for resource in resources:
+    if len(resource) == 2:
+        api.add_resource(resource[0], resource[1], strict_slashes=False)
+    else:
+        # Use resource_class_kwargs to pass query_type
+        api.add_resource(resource[0], resource[1], strict_slashes=False, resource_class_kwargs=resource[2], endpoint=f"{resource[0].__name__}_{resource[1].replace('/', '_')}")
 
 if __name__ == "__main__":
     # Start the Flask app with Gevent WSGI server

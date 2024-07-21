@@ -408,8 +408,11 @@ class RecentKevVulnerabilitiesResource(BaseResource):
             return None
 
 class RecentVulnerabilitiesByDaysResource(BaseResource):
+    def __init__(self, query_type=None):
+        self.query_type = query_type  # Store the query_type for use in the get method
+
     @cache.cached(timeout=60, key_prefix='kev_recent_days', query_string=True)
-    def get(self, query_type):
+    def get(self):
         """
         Retrieve recent vulnerabilities based on the specified number of days.
 
@@ -417,10 +420,6 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         within a specified number of days. It supports pagination and
         returns a structured response containing the vulnerabilities and
         pagination information.
-
-        Parameters:
-        query_type (str): The type of query to perform, either "published" 
-                          or "modified".
 
         Query Parameters:
         - days (int): The number of days to look back for recent vulnerabilities.
@@ -448,7 +447,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
         field = (
             "namespaces.nvd_nist_gov.cve.published" 
-            if query_type == "published" 
+            if self.query_type == "published" 
             else "namespaces.nvd_nist_gov.cve.lastModified"
         )
 
@@ -482,8 +481,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         return self.make_json_response(response_data)
 
     def query_database(self, field, cutoff_date):
-        # This method should contain the logic to query the database
-        # and return the results.
+        """Query the database for recent vulnerabilities."""
         recent_vulnerabilities = all_vulns_collection.find(
             {field: {"$gt": cutoff_date}}
         )
