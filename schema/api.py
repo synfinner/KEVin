@@ -329,7 +329,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 "vulnerabilities": vulnerabilities
             })
         except Exception as e:
-            return self.handle_error("An internal server error occurred: " + str(e), 500)
+            return self.handle_error("An internal server error occurred! ", 500)
 
     def count_documents(self, query):
         """Count the total number of vulnerabilities matching the query."""
