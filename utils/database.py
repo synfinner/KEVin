@@ -51,7 +51,7 @@ def check_connection(client):
         return False
 
 # Get the value of the MONGODB_URI_PROD environment variable
-MONGO_URI = os.getenv("MONGODB_URI_PROD")
+MONGO_URI = os.getenv("MONGODB_URI_DEV")
 # Create a new MongoClient object
 client = create_client(MONGO_URI)
 # Ensure connection with retries
@@ -88,9 +88,3 @@ connection_thread.start()
 # Ensure to stop the logging thread and monitoring thread when done
 log_queue.put(None)  # Signal the logging thread to exit
 stop_event.set()  # Signal the monitoring thread to exit
-# Start the connection monitoring in a separate thread
-connection_thread = threading.Thread(target=monitor_connection, args=(client, MONGO_URI), daemon=True)
-connection_thread.start()
-
-# Ensure to stop the logging thread when done
-log_queue.put(None)  # Signal the logging thread to exit
