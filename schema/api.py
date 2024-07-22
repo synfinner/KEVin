@@ -454,14 +454,18 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Create a list of greenlets for concurrent execution
         greenlets = []
 
-        # Spawn a greenlet for querying the database
-        greenlets.append(spawn(self.query_database, field, cutoff_date))
+        # Spawn a greenlet for querying the database with the correct parameters
+        greenlets.append(spawn(self.query_database, field, cutoff_date, page, per_page))
 
         # Wait for all greenlets to complete
         joinall(greenlets)
 
         # Assuming query_database returns the result
         recent_vulnerabilities_list = greenlets[0].value
+
+        # Check if recent_vulnerabilities_list is None
+        if recent_vulnerabilities_list is None:
+            return self.handle_error("No vulnerabilities found", 404)
 
         # Calculate the total number of entries and pages
         total_entries = len(recent_vulnerabilities_list)  # Example, replace with actual count logic
@@ -480,11 +484,12 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         }
         return self.make_json_response(response_data)
 
-    def query_database(self, field, cutoff_date):
-        """Query the database for recent vulnerabilities."""
+    def query_database(self, field, cutoff_date, page, per_page):
+        """Query the database for recent vulnerabilities with pagination."""
+        skip = (page - 1) * per_page  # Calculate how many documents to skip
         recent_vulnerabilities = all_vulns_collection.find(
             {field: {"$gt": cutoff_date}}
-        )
+        ).skip(skip).limit(per_page)  # Apply pagination
         return [v for v in recent_vulnerabilities]  # Convert cursor to list
 
     
