@@ -411,7 +411,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
     def __init__(self, query_type=None):
         self.query_type = query_type  # Store the query_type for use in the get method
 
-    @cache.cached(timeout=60, key_prefix='kev_recent_days', query_string=True)
+    @cache.cached(timeout=21600, key_prefix='kev_recent_days', query_string=True)  # 6 hours = 21600 seconds
     def get(self):
         """
         Retrieve recent vulnerabilities based on the specified number of days.
