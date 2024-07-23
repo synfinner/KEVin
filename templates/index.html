@@ -17,16 +17,6 @@
         body.bg-dark .jumbotron {
             background-color: #222;
         }
-
-        body.bg-dark .card {
-            background-color: #333;
-        }
-
-        body.bg-dark .jumbotron,
-        body.bg-dark .card {
-            color: white; /* Set text color to white in dark mode */
-        }
-
         body.bg-dark hr {
             border-color: #666; /* Adjust hr color in dark mode */
         }
@@ -80,10 +70,11 @@
                             <li><a href="/kev/recent?days=7" target="_blank">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days</li>
                             <li><a href="/kev?sort=date&order=desc&page=1&per_page=15" target="_blank">/kev?sort=date&order=desc&page=1&per_page=15</a> - Sort first 15 KEV by date added (newest first)</li>
                             <li><a href="/kev?sort=severity&order=desc&page=1&per_page=15" target="_blank">/kev?sort=severity&order=desc&page=1&per_page=15</a> - Sort first 15 KEV by NVD baseScore in descending order (highest scores first)</li>
+                            <li><a href="/kev?actor=Lazarus%20Group" target="_blank">/kev?actor=Lazarus%20Group</a> - Search for vulnerabilities related to the Lazarus Group</li>
                         </ul>
                     </div>
                 </div>
-
+            </div>
             <!-- Vuln API Usage Panel -->
             <div class="card">
                 <div class="card-header" id="vuln-api-usage-heading">
@@ -101,8 +92,8 @@
                         <ul>
                             <li><a href="/vuln/CVE-2023-1234" target="_blank">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
                             <li><a href="/vuln/CVE-2023-1234/nvd" target="_blank">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
-                            <li><a href="/vuln/CVE-2023-1234/mitre" target="_blank">/vuln/CVE-2023-1234/mitre</a> - Get all Mite/Cve.org data on a CVE</li>
-                            <li><a href="/vuln/published?days=7" target="_blank">/vuln/published?days=7</a> - Get all NVD vulns published in the last X days.</li>
+                            <li><a href="/vuln/CVE-2023-1234/mitre" target="_blank">/vuln/CVE-2023-1234/mitre</a> - Get all MITRE/CVE.org data on a CVE</li>
+                            <li><a href="/vuln/published?days=7" target="_blank">/vuln/published?days=7</a> - Get all NVD vulns published in the last 7 days.</li>
                             <li><a href="/vuln/published?days=7&page=2" target="_blank">/vuln/published?days=7&page=2</a> - Get all NVD vulns published recently on page 2 (responses are paginated)</li>
                             <li><a href="/vuln/published?days=7&page=1&per_page=30" target="_blank">/vuln/published?days=7&page=1&per_page=30</a> - Get NVD vulns published and limit results to 30 per page</li>
                         </ul>
@@ -137,9 +128,7 @@
                 <li><a href="https://kevin.gtfkd.com/donate" target="_blank">KEVin API Donations Page</a></li>
             </ul>
         </p>
-<hr class="my-4">
-A <a href="https://twitter.com/synfinner" target="_blank">Synfinner</a> project.
-</div>
+    </div>
 </div>
 <!-- Include Bootstrap JS and jQuery -->
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
@@ -164,7 +153,7 @@ A <a href="https://twitter.com/synfinner" target="_blank">Synfinner</a> project.
     // Call the function when the page loads
     getMetrics();
 
-// Toggle Dark Theme
+    // Toggle Dark Theme
     const darkThemeToggle = document.getElementById('darkThemeToggle');
     const body = document.body;
 
