@@ -269,7 +269,6 @@ class VulnerabilityResource(BaseResource):
 
 # This class defines a resource for fetching all KEV vulnerabilities
 class AllKevVulnerabilitiesResource(BaseResource):
-    @cache.cached(timeout=120, key_prefix='kev_all_listing', query_string=True)
     def get(self):
         """
         Retrieve all KEV vulnerabilities with optional filtering, sorting, and pagination.
@@ -286,6 +285,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
         - order (str): The sort order, either "asc" or "desc" (default is "desc").
         - search (str): A search term to filter vulnerabilities.
         - filter (str): A filter to include only vulnerabilities related to ransomware.
+        - actor (str): A search term to filter vulnerabilities by potential threat actors.
 
         Returns:
         Response: A JSON response containing pagination info and a list of
@@ -297,27 +297,41 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 per_page = max(1, min(100, int(request.args.get("per_page", 25))))
             except ValueError:
                 return self.handle_error("Invalid page or per_page parameter. Must be integers.", 400)
+
             sort_param = sanitize_query(request.args.get("sort", "dateAdded"))
             order_param = sanitize_query(request.args.get("order", "desc"))
             search_query = sanitize_query(request.args.get("search", ''))
             filter_ransomware = sanitize_query(request.args.get("filter", ''))
+            actor_query = sanitize_query(request.args.get("actor", ''))
 
             query = {"$text": {"$search": search_query}} if search_query else {}
             if filter_ransomware.lower() == 'ransomware':
                 query["knownRansomwareCampaignUse"] = "Known"
+            if actor_query and actor_query.strip():  # Ensure actor_query is not empty or just whitespace
+                # Fuzzy match for actor search
+                actor_query = {"$or": [
+                    {"openThreatData.communityAdversaries": {"$regex": actor_query.strip(), "$options": "i"}},
+                    {"openThreatData.adversaries": {"$regex": actor_query.strip(), "$options": "i"}}
+                ]}
+                query.update(actor_query)  # Merge actor query into the main query
+
             sort_order = DESCENDING if order_param == "desc" else ASCENDING
             sort_criteria = [(sort_param, sort_order)]
 
-            # Spawn greenlets for concurrent execution
-            greenlets = []
-            greenlets.append(spawn(self.count_documents, query))
-            greenlets.append(spawn(self.fetch_vulnerabilities, query, sort_criteria, page, per_page))
+            # Check if actor_query is present to decide on caching
+            if actor_query:
+                # No caching if actor is specified
+                total_vulns = self.count_documents(query)
+                vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
+            else:
+                # Use caching when actor is not specified
+                @cache.cached(timeout=120, key_prefix='kev_all_listing', query_string=True)
+                def cached_fetch():
+                    total_vulns = self.count_documents(query)
+                    vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
+                    return total_vulns, vulnerabilities
 
-            # Wait for all greenlets to complete
-            joinall(greenlets)
-
-            total_vulns = greenlets[0].value
-            vulnerabilities = greenlets[1].value
+                total_vulns, vulnerabilities = cached_fetch()
 
             total_pages = math.ceil(total_vulns / per_page)
 
@@ -326,7 +340,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 "per_page": per_page,
                 "total_vulns": total_vulns,
                 "total_pages": total_pages,
-                "vulnerabilities": vulnerabilities
+                "vulnerabilities": [serialize_vulnerability(v) for v in vulnerabilities]
             })
         except Exception as e:
             return self.handle_error("An internal server error occurred! ", 500)
@@ -336,16 +350,14 @@ class AllKevVulnerabilitiesResource(BaseResource):
         try:
             return collection.count_documents(query)
         except Exception as e:
-            # Handle specific exceptions if needed
             raise e
 
     def fetch_vulnerabilities(self, query, sort_criteria, page, per_page):
         """Fetch vulnerabilities from the database."""
         try:
             cursor = collection.find(query).sort(sort_criteria).skip((page - 1) * per_page).limit(per_page)
-            return [serialize_vulnerability(v) for v in cursor]
+            return list(cursor)  # Return cursor as a list
         except Exception as e:
-            # Handle specific exceptions if needed
             raise e
 
 # Resource for fetching recent vulnerabilities
@@ -492,7 +504,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             return self.make_json_response(response_data)
 
         return fetch_vulnerabilities()
-
+ 
     def count_total_entries(self, field, cutoff_date):
         """Count the total number of vulnerabilities matching the query."""
         return all_vulns_collection.count_documents({field: {"$gt": cutoff_date}})
