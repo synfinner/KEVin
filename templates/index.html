@@ -12,18 +12,179 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}" alt="Apple Touch Icon">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}" alt="Apple Touch Icon">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        /* Custom CSS for dark theme */
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(to right, #f8f9fa, #e9ecef);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+        }
+        .jumbotron {
+            background: linear-gradient(to right, #ffffff, #f1f1f1);
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            transition: box-shadow 0.3s;
+        }
+        .jumbotron:hover {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        }
+        hr {
+            border-color: #dee2e6;
+        }
+        a {
+            color: #007bff;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        a:hover {
+            color: #0056b3;
+        }
+        .card {
+            background: linear-gradient(to right, #ffffff, #f8f9fa);
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            transition: box-shadow 0.3s, transform 0.3s;
+        }
+        .card:hover {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            transform: translateY(-5px);
+        }
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: 500;
+        }
+        .btn-primary {
+            background: linear-gradient(to right, #007bff, #0056b3);
+            border: none;
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 50px;
+            transition: background 0.3s, color 0.3s, transform 0.3s;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(to right, #0056b3, #004085);
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+        .custom-control-label {
+            color: #212529;
+        }
+
+        /* Dark mode styles */
+        body.bg-dark {
+            background: linear-gradient(to right, #121212, #1E1E1E);
+            color: #E0E0E0;
+        }
         body.bg-dark .jumbotron {
-            background-color: #222;
+            background: linear-gradient(to right, #1E1E1E, #2E2E2E);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
         }
         body.bg-dark hr {
-            border-color: #666; /* Adjust hr color in dark mode */
+            border-color: #333;
+        }
+        body.bg-dark a {
+            color: #BB86FC;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+        body.bg-dark a:hover {
+            color: #FF79C6;
+        }
+        body.bg-dark .card {
+            background: linear-gradient(to right, #2C2C2C, #3C3C3C);
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            margin-bottom: 20px;
+        }
+        body.bg-dark .card:hover {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+            transform: translateY(-5px);
+        }
+        body.bg-dark .card-header {
+            background-color: #292929;
+            border-bottom: 1px solid #333;
+            font-weight: 500;
+        }
+        body.bg-dark .card-body {
+            color: #E0E0E0;
+        }
+        body.bg-dark .btn-primary {
+            background: linear-gradient(to right, #BB86FC, #9C64FE);
+            border: none;
+            color: #ffffff;
+            padding: 10px 20px;
+            border-radius: 50px;
+            transition: background 0.3s, color 0.3s, transform 0.3s;
+        }
+        body.bg-dark .btn-primary:hover {
+            background: linear-gradient(to right, #FF79C6, #FF4081);
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+        body.bg-dark .custom-control-label {
+            color: #E0E0E0;
+        }
+
+        /* Flexbox layout for buttons */
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Responsive design adjustments */
+        @media (max-width: 768px) {
+            .button-group {
+                flex-direction: column;
+            }
+        }
+
+        /* Custom toggle switch */
+        .custom-switch .custom-control-input:checked ~ .custom-control-label::before {
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+        .custom-switch .custom-control-input:checked ~ .custom-control-label::after {
+            background-color: #ffffff;
+            transform: translateX(1.25rem);
+        }
+        .custom-switch .custom-control-label::before {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .custom-switch .custom-control-label::after {
+            transition: background-color 0.3s, transform 0.3s;
+        }
+
+        /* Animations */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
 <body>
-<div class="container mt-5 text-dark">
+<div class="container mt-5 fade-in">
     <div class="jumbotron">
         <h1 class="display-4">Welcome to the KEVin API</h1>
         <p class="lead">An API for accessing CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data</p>
@@ -31,7 +192,10 @@
             <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
             <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
         </div>
-        <p><a href="{{ url_for('example') }}" target="_blank" class="btn btn-primary mt-3">Go to Examples</a>|<a href="https://kevin.gtfkd.com/about" target="_blank" class="btn btn-primary mt-3">About KEVin</a></p>
+        <div class="button-group mt-3">
+            <a href="{{ url_for('example') }}" target="_blank" class="btn btn-primary">Go to Examples</a>
+            <a href="https://kevin.gtfkd.com/about" target="_blank" class="btn btn-primary">About KEVin</a>
+        </div>
         <hr class="my-4">
         <div class="row">
             <div class="col-md-6">
