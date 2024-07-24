@@ -325,11 +325,21 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
             else:
                 # Use caching when actor is not specified
-                @cache.cached(timeout=120, key_prefix='kev_all_listing', query_string=True)
-                def cached_fetch():
+                if actor_query:
+                    # No caching if actor is specified
                     total_vulns = self.count_documents(query)
                     vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
-                    return total_vulns, vulnerabilities
+                else:
+                    # Use caching when actor is not specified
+                    cache_key = f"all_listing_page_{page}_per_page_{per_page}_sort_{sort_param}_order_{order_param}_search_{search_query}_filter_{filter_ransomware}"
+                    
+                    @cache.cached(timeout=600, key_prefix=cache_key)
+                    def cached_fetch():
+                        total_vulns = self.count_documents(query)
+                        vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
+                        return total_vulns, vulnerabilities
+
+                    total_vulns, vulnerabilities = cached_fetch()
 
                 total_vulns, vulnerabilities = cached_fetch()
 

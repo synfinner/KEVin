@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browse KEVs</title>
+    <!-- Include Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- Include DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.21/css/jquery.dataTables.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+/* Body styles */
+/* Body styles */
+body {
+    font-family: 'Roboto', sans-serif;
+    background: linear-gradient(to right, #f8f9fa, #e9ecef);
+    transition: background-color 0.3s, color 0.3s;
+}
+.container {
+    max-width: 1200px;
+    margin: auto;
+    padding: 20px;
+    text-align: center;
+}
+.jumbotron {
+    background: linear-gradient(to right, #ffffff, #f1f1f1);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+    transition: box-shadow 0.3s;
+    margin-bottom: 20px;
+    text-align: center;
+}
+.jumbotron:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+hr {
+    border-color: #dee2e6;
+}
+a {
+    color: #007bff;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+a:hover {
+    color: #0056b3;
+}
+.card {
+    background: linear-gradient(to right, #ffffff, #f8f9fa);
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    transition: box-shadow 0.3s;
+}
+.card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 500;
+}
+.btn-primary {
+    background: linear-gradient(to right, #007bff, #0056b3);
+    border: none;
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 50px;
+    transition: background 0.3s, color 0.3s, transform 0.3s;
+}
+.btn-primary:hover {
+    background: linear-gradient(to right, #0056b3, #004085);
+    color: #ffffff;
+    transform: scale(1.05);
+}
+.custom-control-label {
+    color: #212529;
+}
+
+/* Dark mode styles */
+body.bg-dark {
+    background: linear-gradient(to right, #121212, #1E1E1E);
+    color: #E0E0E0;
+}
+body.bg-dark .jumbotron {
+    background: linear-gradient(to right, #1E1E1E, #2E2E2E);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+body.bg-dark hr {
+    border-color: #333;
+}
+body.bg-dark a {
+    color: #BB86FC;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+body.bg-dark a:hover {
+    color: #FF79C6;
+}
+body.bg-dark .card {
+    background: linear-gradient(to right, #2C2C2C, #3C3C3C);
+    border: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    margin-bottom: 20px;
+}
+body.bg-dark .card:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
+}
+body.bg-dark .card-header {
+    background-color: #292929;
+    border-bottom: 1px solid #333;
+    font-weight: 500;
+}
+body.bg-dark .card-body {
+    color: #E0E0E0;
+}
+body.bg-dark .btn-primary {
+    background: linear-gradient(to right, #BB86FC, #9C64FE);
+    border: none;
+    color: #ffffff;
+    padding: 10px 20px;
+    border-radius: 50px;
+    transition: background 0.3s, color 0.3s, transform 0.3s;
+}
+body.bg-dark .btn-primary:hover {
+    background: linear-gradient(to right, #FF79C6, #FF4081);
+    color: #ffffff;
+    transform: scale(1.05);
+}
+body.bg-dark .custom-control-label {
+    color: #E0E0E0;
+}
+
+/* DataTables specific dark mode styles */
+body.bg-dark .dataTables_wrapper .dataTables_filter input {
+    background-color: #333;
+    color: #E0E0E0;
+    border: 1px solid #444;
+}
+body.bg-dark .dataTables_wrapper .dataTables_length select {
+    background-color: #333;
+    color: #E0E0E0;
+    border: 1px solid #444;
+}
+body.bg-dark .dataTables_wrapper .dataTables_info, 
+body.bg-dark .dataTables_wrapper .dataTables_paginate {
+    color: #E0E0E0;
+}
+
+/* New pagination button styles */
+body.bg-dark .dataTables_wrapper .dataTables_paginate .paginate_button {
+    background-color: #444; /* Dark background for buttons */
+    color: #E0E0E0; /* Light text color */
+    border: 1px solid #666; /* Border color */
+}
+
+body.bg-dark .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background-color: #555; /* Slightly lighter background on hover */
+    color: #FFF; /* Light text color */
+}
+
+body.bg-dark .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background-color: #666; /* Highlighted background for current page */
+    color: #FFF; /* Light text color */
+}
+
+body.bg-dark .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+    background-color: #333;
+    color: #666;
+}
+body.bg-dark #kevTable thead th {
+    background-color: #333;
+    color: #E0E0E0;
+}
+body.bg-dark #kevTable tbody td {
+    background-color: #2C2C2C;
+    color: #E0E0E0;
+}
+
+/* Left-align text in the Description field, make it scrollable, and reduce font size */
+td.description {
+    text-align: left;
+    max-width: 300px;
+    max-height: 100px; /* Set a max-height to limit the cell height */
+    overflow-y: auto; /* Enable vertical scrolling */
+    white-space: normal; /* Allow wrapping of text */
+    font-size: 0.9em; /* Make the font size slightly smaller */
+}
+
+/* Modal styles for improved visual experience */
+.modal-content {
+    border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.modal-title {
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.modal-body {
+    padding-top: 0;
+}
+
+.card {
+    margin-bottom: 20px;
+}
+
+.card-body {
+    font-size: 1em;
+}
+
+.scrollable {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    background-color: #f8f9fa;
+}
+
+.scrollable ul {
+    padding-left: 20px;
+}
+
+.scrollable ul li {
+    margin-bottom: 5px;
+    list-style: none;
+    background-color: #f8f9fa; /* Light background for list items */
+    padding: 5px;
+    border-radius: 5px;
+}
+
+.scrollable ul li a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.scrollable ul li a:hover {
+    text-decoration: underline;
+}
+
+/* Dark mode styles for the modal */
+body.bg-dark .modal-content {
+    background-color: #292929;
+    color: #E0E0E0;
+}
+
+body.bg-dark .scrollable {
+    background-color: #2C2C2C;
+    border-color: #444;
+}
+
+body.bg-dark .scrollable ul li {
+    background-color: #333; /* Darker background for list items in dark mode */
+}
+
+body.bg-dark .scrollable ul li a {
+    color: #BB86FC;
+}
+
+body.bg-dark .scrollable ul li a:hover {
+    color: #FF79C6;
+}
+
+/* Responsive styles */
+.table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+    </style>
+</head>
+<body>
+<div class="container mt-5 fade-in">
+    <div class="jumbotron">
+        <h1>Browse Known Exploited Vulnerabilities (KEVs)</h1>
+        <div class="custom-control custom-switch mt-4">
+            <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
+            <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body p-0">
+            <table id="kevTable" class="display" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>CVE ID</th>
+                        <th>Description</th>
+                        <th>Published Date</th>
+                        <th>Severity</th>
+                        <th>Details</th>
+                        <th>GitHub PoCs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data will be populated here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kevModal" tabindex="-1" role="dialog" aria-labelledby="kevModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="kevModalLabel">Vulnerability Details</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="modalContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include Bootstrap JS and jQuery -->
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
+<script>
+    $(document).ready(function() {
+    $('#kevTable').DataTable({
+        serverSide: true,
+        processing: true,
+        ajax: function(data, callback, settings) {
+            const page = Math.ceil(data.start / data.length) + 1;
+            fetch(`/kev?page=${page}&per_page=${data.length}`)
+                .then(response => response.json())
+                .then(data => {
+                    const formattedData = data.vulnerabilities.map(kev => ({
+                        cveId: kev.cveID,
+                        description: kev.shortDescription,
+                        publishedDate: new Date(kev.dateAdded).toLocaleDateString(),
+                        severity: kev.nvdData[0]?.baseSeverity || 'Unknown',
+                        link: `<a href="#" class="view-link" data-id="${kev.cveID}">View</a>`,
+                        githubPocs: kev.githubPocs
+                    }));
+                    callback({
+                        draw: data.draw,
+                        recordsTotal: data.total_vulns,
+                        recordsFiltered: data.total_vulns,
+                        data: formattedData
+                    });
+                })
+                .catch(error => console.error('Error fetching KEV data:', error));
+        },
+        columns: [
+            { data: 'cveId' },
+            { data: 'description', className: 'description' },
+            { data: 'publishedDate' },
+            { data: 'severity' },
+            { data: 'link' },
+            {
+                data: 'githubPocs',
+                render: function(data) {
+                    return data.length === 0 ?
+                        '<span style="color: red;">&#10006;</span>' :
+                        'Potential PoCs Available';
+                }
+            }
+        ],
+        pageLength: 25,
+        lengthMenu: [25, 50, 100],
+        order: [[2, 'desc']],
+        searching: false
+    });
+
+    $(document).on('click', '.view-link', function(e) {
+        e.preventDefault();
+        const cveId = $(this).data('id');
+        fetchVulnerabilityDetails(cveId);
+    });
+
+    function fetchVulnerabilityDetails(cveId) {
+        fetch(`/kev/${cveId}`)
+            .then(response => response.json())
+            .then(data => {
+                $('#kevModalLabel').text(`Vulnerability Details for ${data.cveID}`);
+                
+                // Extract threat actors
+                const threatActors = new Set(); // Use a Set to ensure uniqueness
+                if (data.openThreatData && data.openThreatData.length > 0) {
+                    const threatData = data.openThreatData[0];
+                    threatData.adversaries.forEach(actor => threatActors.add(actor));
+                    threatData.communityAdversaries.forEach(actor => threatActors.add(actor));
+                }
+
+                // Create a string for the unique threat actors
+                const threatActorsHtml = threatActors.size > 0
+                    ? `<ul>${Array.from(threatActors).map(actor => `<li>${actor}</li>`).join('')}</ul>`
+                    : '<p>No Threat Actors available.</p>';
+
+                const githubPocsHtml = data.githubPocs.length > 0
+                    ? `<ul class="list-group">${data.githubPocs.map(poc => `<li class="list-group-item"><a href="${poc}" target="_blank" rel="noopener noreferrer">${poc}</a></li>`).join('')}</ul>`
+                    : '<p>No PoCs available.</p>';
+
+                $('#modalContent').html(`
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">${data.vulnerabilityName}</h5>
+                            <p class="card-text">${data.shortDescription}</p>
+                            <p><strong>Published Date:</strong> ${data.dateAdded}</p>
+                            <p><strong>Severity:</strong> ${data.nvdData[0]?.baseSeverity || 'Unknown'}</p>
+                            <p><strong>Required Action:</strong> ${data.requiredAction}</p>
+                            <div class="scrollable">
+                                <strong>Threat Actors:</strong>
+                                <div class="scrollable">
+                                    ${threatActorsHtml} <!-- Insert Threat Actors list -->
+                                </div>
+                            </div>
+                            <div class="scrollable">
+                                <strong>GitHub PoCs:</strong>
+                                ${githubPocsHtml}
+                            </div>
+                            
+                        </div>
+                    </div>
+                `);
+                $('#kevModal').modal('show');
+            })
+            .catch(error => console.error('Error fetching vulnerability details:', error));
+    }
+
+    // Dark Theme Toggle
+    const darkThemeToggle = document.getElementById('darkThemeToggle');
+    const body = document.body;
+
+    // Load the user's theme preference from Local Storage
+    const userThemePreference = localStorage.getItem('darkTheme');
+    if (userThemePreference === 'true') {
+        body.classList.add('bg-dark');
+        body.classList.add('text-light');
+        darkThemeToggle.checked = true;
+    }
+
+    darkThemeToggle.addEventListener('change', () => {
+        if (darkThemeToggle.checked) {
+            body.classList.add('bg-dark');
+            body.classList.add('text-light');
+            localStorage.setItem('darkTheme', 'true'); // Store the preference
+        } else {
+            body.classList.remove('bg-dark');
+            body.classList.remove('text-light');
+            localStorage.setItem('darkTheme', 'false'); // Store the preference
+        }
+    });
+});
+</script>
+</body>
+</html>
