@@ -115,6 +115,15 @@ def serve_robots_txt():
     response.headers['Content-Type'] = 'text/plain'
     return response
 
+@app.route('/graph')
+def serve_graph_html():
+    file_path = os.path.join(app.static_folder, 'cve_visualization.html')
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+    response = make_response(file_content)
+    response.headers['Content-Type'] = 'text/html'
+    return response
+
 @app.route('/viz')
 #@cache.cached(timeout=3600)
 def serve_viz_html():
