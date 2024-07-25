@@ -1,82 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CVE Visualization</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"> <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <!-- Font Awesome for icons -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body {
             font-family: 'Roboto', sans-serif;
-            background: linear-gradient(to right, #f8f9fa, #e9ecef); /* Light theme */
+            background: linear-gradient(to right, #f8f9fa, #e9ecef);
+            /* Light theme */
             transition: background-color 0.3s, color 0.3s;
         }
+
         body.bg-dark {
-            background: linear-gradient(to right, #1a1a1a, #333); /* Dark theme */
-            color: #E0E0E0; /* Light text color for dark theme */
+            background: linear-gradient(to right, #1a1a1a, #333);
+            /* Dark theme */
+            color: #E0E0E0;
+            /* Light text color for dark theme */
         }
+
         #chart {
             width: 100%;
-            height: 800px; /* Increased height from 600px to 800px */
+            height: 800px;
+            /* Increased height from 600px to 800px */
             margin: 20px auto;
             border: 1px solid #dee2e6;
             border-radius: 5px;
-            background-color: #fff; /* Light background for chart */
+            background-color: #fff;
+            /* Light background for chart */
             position: relative;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); /* Added shadow for depth */
-            max-width: 1200px; /* Set a maximum width for the chart */
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            /* Added shadow for depth */
+            max-width: 1200px;
+            /* Set a maximum width for the chart */
         }
+
         body.bg-dark #chart {
-            background-color: #2C2C2C; /* Dark background for chart */
-            border-color: #444; /* Darker border for dark theme */
+            background-color: #2C2C2C;
+            /* Dark background for chart */
+            border-color: #444;
+            /* Darker border for dark theme */
         }
+
         .tooltip {
             position: absolute;
             text-align: center;
             width: auto;
             padding: 8px;
             font: 12px sans-serif;
-            background: lightsteelblue; /* Light tooltip background */
+            background: lightsteelblue;
+            /* Light tooltip background */
             border: 0;
             border-radius: 8px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.2s;
         }
+
         body.bg-dark .tooltip {
-            background: #444; /* Dark tooltip background */
-            color: #E0E0E0; /* Light text color for tooltip */
+            background: #444;
+            /* Dark tooltip background */
+            color: #E0E0E0;
+            /* Light text color for tooltip */
         }
+
         .node {
-            stroke: #fff; /* Node stroke color */
+            stroke: #fff;
+            /* Node stroke color */
             stroke-width: 1.5px;
-            transition: transform 0.2s; /* Smooth transition for node movement */
+            transition: transform 0.2s;
+            /* Smooth transition for node movement */
         }
+
         body.bg-dark .node {
-            stroke: #444; /* Darker stroke for nodes in dark theme */
+            stroke: #444;
+            /* Darker stroke for nodes in dark theme */
         }
+
         .link {
-            stroke: #999; /* Link color */
+            stroke: #999;
+            /* Link color */
             stroke-opacity: 0.6;
-            transition: stroke-opacity 0.2s; /* Smooth transition for link opacity */
+            transition: stroke-opacity 0.2s;
+            /* Smooth transition for link opacity */
         }
+
         body.bg-dark .link {
-            stroke: #666; /* Darker link color for dark theme */
+            stroke: #666;
+            /* Darker link color for dark theme */
         }
+
         .label {
             font-size: 12px;
             pointer-events: none;
-            color: #000; /* Label color */
+            color: #000;
+            /* Label color */
         }
+
         body.bg-dark .label {
-            color: #E0E0E0; /* Light label color for dark theme */
+            color: #E0E0E0;
+            /* Light label color for dark theme */
         }
+
         .info-box {
             position: absolute;
             width: 300px;
-            background: #fff; /* Light info box background */
+            background: #fff;
+            /* Light info box background */
             border: 1px solid #ccc;
             border-radius: 5px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -86,30 +121,40 @@
             opacity: 0;
             transition: opacity 0.3s;
         }
+
         body.bg-dark .info-box {
-            background: #2C2C2C; /* Dark info box background */
-            border-color: #444; /* Darker border for info box */
-            color: #E0E0E0; /* Light text color for info box */
+            background: #2C2C2C;
+            /* Dark info box background */
+            border-color: #444;
+            /* Darker border for info box */
+            color: #E0E0E0;
+            /* Light text color for info box */
         }
+
         .info-box h5 {
             margin-top: 0;
         }
+
         .controls {
             text-align: center;
             margin-bottom: 10px;
         }
+
         .controls button {
             margin: 5px;
         }
+
         .header {
             text-align: center;
             margin-bottom: 20px;
         }
+
         .custom-switch {
             margin-top: 20px;
         }
     </style>
 </head>
+
 <body>
     <div class="container mt-5">
         <div class="header">
@@ -120,8 +165,11 @@
             <button class="btn btn-primary" id="fetchData"><i class="fas fa-download"></i> Fetch Data</button>
             <button class="btn btn-secondary" id="loadMoreData"><i class="fas fa-plus"></i> Load More Data</button>
             <button class="btn btn-danger" id="resetView"><i class="fas fa-redo"></i> Reset View</button>
-            <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control d-inline" style="width: 200px;">
+            <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control d-inline"
+                style="width: 200px;">
             <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i> Search</button>
+            <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel Search</button>
+            <!-- Cancel button -->
             <div class="custom-control custom-switch">
                 <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
                 <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
@@ -132,89 +180,138 @@
     </div>
 
     <script>
-        let simulation; // Declare simulation in a broader scope
-        let currentPage = 1; // Track the current page
-        let allNodes = []; // Store all nodes
-        let allLinks = []; // Store all links
+        let simulation;
+        let currentPage = 1;
+        let allNodes = [];
+        let allLinks = [];
+        let abortController = null;
 
-        document.getElementById('fetchData').addEventListener('click', function() {
-            fetchData(currentPage); // Fetch data for the current page
+        document.getElementById('fetchData').addEventListener('click', function () {
+            fetchData(currentPage);
         });
 
-        document.getElementById('loadMoreData').addEventListener('click', function() {
-            currentPage++; // Increment the page number
-            fetchData(currentPage); // Fetch data for the next page
+        document.getElementById('loadMoreData').addEventListener('click', function () {
+            currentPage++;
+            fetchData(currentPage);
         });
 
-        document.getElementById('resetView').addEventListener('click', function() {
-            d3.select("#chart").selectAll("*").remove(); // Clear all elements from the chart
-            allNodes = []; // Clear saved nodes
-            allLinks = []; // Clear saved links
-            currentPage = 1; // Reset the current page to 1
+        document.getElementById('resetView').addEventListener('click', function () {
+            d3.select("#chart").selectAll("*").remove();
+            allNodes = [];
+            allLinks = [];
+            currentPage = 1;
         });
 
-        document.getElementById('searchByActor').addEventListener('click', function() {
-            clearVisualization(); // Clear previous visualization before new search
-            const actor = document.getElementById('actorSearch').value; // Get the actor name from input
-            fetchDataByActor(actor); // Fetch data for the specified actor
+        document.getElementById('searchByActor').addEventListener('click', function () {
+            cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
+            const actor = document.getElementById('actorSearch').value;
+            fetchDataByActor(actor);
         });
 
-        document.getElementById('actorSearch').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') { // Check if the Enter key is pressed
-                clearVisualization(); // Clear previous visualization before new search
-                const actor = document.getElementById('actorSearch').value; // Get the actor name from input
-                fetchDataByActor(actor); // Fetch data for the specified actor
+        document.getElementById('cancelSearch').addEventListener('click', function () {
+            cancelCurrentRequest(); // Cancel any ongoing request
+        });
+
+        document.getElementById('actorSearch').addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
+                const actor = document.getElementById('actorSearch').value;
+                fetchDataByActor(actor);
             }
         });
 
-        function clearVisualization() {
-            d3.select("#chart").selectAll("*").remove(); // Clear all elements from the chart
-            allNodes = []; // Clear saved nodes
-            allLinks = []; // Clear saved links
-            currentPage = 1; // Reset the current page to 1
+        function cancelCurrentRequest() {
+            if (abortController) {
+                abortController.abort();
+                abortController = null;
+            }
         }
 
         function fetchData(page) {
-            fetch(`/kev?page=${page}&per_page=25`) // Adjust the endpoint as necessary
+            cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
+            abortController = new AbortController();
+            const signal = abortController.signal;
+
+            fetch(`/kev?page=${page}&per_page=25`, { signal })
                 .then(response => response.json())
                 .then(data => {
+                    if (abortController.signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
-                    allNodes = allNodes.concat(formattedData.nodes); // Keep past nodes
-                    allLinks = allLinks.concat(formattedData.links); // Keep past links
-                    visualizeData({ nodes: allNodes, links: allLinks }); // Visualize all data
+                    allNodes = allNodes.concat(formattedData.nodes);
+                    allLinks = allLinks.concat(formattedData.links);
+                    visualizeData({ nodes: allNodes, links: allLinks });
                 })
-                .catch(error => console.error('Error fetching data:', error));
+                .catch(error => {
+                    if (error.name === 'AbortError') {
+                        console.log('Fetch request canceled');
+                    } else {
+                        console.error('Error fetching data:', error);
+                    }
+                });
         }
 
         function fetchDataByActor(actor) {
-            fetch(`/kev?actor=${actor}&page=${currentPage}&per_page=25`) // Adjust the endpoint as necessary
+            cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
+            abortController = new AbortController();
+            const signal = abortController.signal;
+
+            fetch(`/kev?actor=${actor}&page=${currentPage}&per_page=25`, { signal })
                 .then(response => response.json())
                 .then(data => {
+                    if (abortController.signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
-                    allNodes = allNodes.concat(formattedData.nodes); // Keep past nodes
-                    allLinks = allLinks.concat(formattedData.links); // Keep past links
-                    visualizeData({ nodes: allNodes, links: allLinks }); // Visualize all data
+                    allNodes = allNodes.concat(formattedData.nodes);
+                    allLinks = allLinks.concat(formattedData.links);
+                    visualizeData({ nodes: allNodes, links: allLinks });
+
+                    // Show cancel button
+                    document.getElementById('cancelSearch').style.display = 'inline-block';
 
                     // Automatically load subsequent pages if total_pages > 1
                     if (data.total_pages > 1) {
-                        for (let page = 2; page <= data.total_pages; page++) {
-                            loadMoreDataByActor(actor, page);
-                        }
+                        loadMoreDataByActor(actor, data.total_pages);
                     }
                 })
-                .catch(error => console.error('Error fetching data:', error));
+                .catch(error => {
+                    if (error.name === 'AbortError') {
+                        console.log('Fetch request canceled');
+                    } else {
+                        console.error('Error fetching data:', error);
+                    }
+                });
         }
 
-        function loadMoreDataByActor(actor, page) {
-            fetch(`/kev?actor=${actor}&page=${page}&per_page=25`) // Adjust the endpoint as necessary
-                .then(response => response.json())
-                .then(data => {
-                    const formattedData = formatData(data.vulnerabilities);
-                    allNodes = allNodes.concat(formattedData.nodes); // Keep past nodes
-                    allLinks = allLinks.concat(formattedData.links); // Keep past links
-                    visualizeData({ nodes: allNodes, links: allLinks }); // Visualize all data
-                })
-                .catch(error => console.error('Error fetching data:', error));
+        function loadMoreDataByActor(actor, totalPages) {
+            let page = 2;
+
+            const fetchPage = () => {
+                if (page > totalPages) return; // End recursion
+
+                cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
+                abortController = new AbortController();
+                const signal = abortController.signal;
+
+                fetch(`/kev?actor=${actor}&page=${page}&per_page=25`, { signal })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (abortController.signal.aborted) return; // Check if the request was aborted
+                        const formattedData = formatData(data.vulnerabilities);
+                        allNodes = allNodes.concat(formattedData.nodes);
+                        allLinks = allLinks.concat(formattedData.links);
+                        visualizeData({ nodes: allNodes, links: allLinks });
+                        page++;
+                        setTimeout(fetchPage, 2000); // Wait 1.5 seconds before fetching next page
+                    })
+                    .catch(error => {
+                        if (error.name === 'AbortError') {
+                            console.log('Fetch request canceled');
+                        } else {
+                            console.error('Error fetching data:', error);
+                        }
+                    });
+            };
+
+            fetchPage(); // Start fetching pages
         }
 
         function formatData(vulnerabilities) {
@@ -226,9 +323,8 @@
                 const threatData = vuln.openThreatData[0];
                 const adversaries = threatData.adversaries || [];
                 const communityAdversaries = threatData.communityAdversaries || [];
-                const uniqueAdversaries = new Set([...adversaries, ...communityAdversaries]); // Remove duplicates
+                const uniqueAdversaries = new Set([...adversaries, ...communityAdversaries]);
 
-                // Only include vulnerabilities with associated actors
                 if (uniqueAdversaries.size > 0) {
                     const cveNode = { id: vuln.cveID, name: vuln.cveID, type: 'cve', details: vuln };
                     nodes.push(cveNode);
@@ -248,10 +344,8 @@
         }
 
         function visualizeData(data) {
-            // Clear previous chart
             d3.select("#chart").selectAll("*").remove();
 
-            // Set up the SVG canvas dimensions
             const width = document.getElementById('chart').clientWidth;
             const height = document.getElementById('chart').clientHeight;
 
@@ -263,23 +357,20 @@
                     svg.attr("transform", event.transform);
                 }))
                 .append("g")
-                .attr("transform", "scale(0.8)"); // Set initial zoom level to 80%
+                .attr("transform", "scale(0.8)");
 
-            // Add a tooltip
             const tooltip = d3.select("#chart")
                 .append("div")
                 .attr("class", "tooltip");
 
             const infoBox = d3.select("#infoBox");
 
-            // Create a simulation for the nodes
             simulation = d3.forceSimulation(data.nodes)
-                .force("link", d3.forceLink().id(d => d.id).distance(100).strength(0.5)) // Adjust link distance and strength
-                .force("charge", d3.forceManyBody().strength(-50)) // Decrease charge strength to make nodes less sticky
+                .force("link", d3.forceLink().id(d => d.id).distance(100).strength(0.5))
+                .force("charge", d3.forceManyBody().strength(-50))
                 .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collision", d3.forceCollide().radius(20).strength(0)); // Disable collision force
+                .force("collision", d3.forceCollide().radius(20).strength(0));
 
-            // Create links
             const link = svg.append("g")
                 .attr("class", "links")
                 .selectAll("line")
@@ -290,14 +381,13 @@
                 .attr("stroke", "#999")
                 .attr("stroke-opacity", 0.6);
 
-            // Create nodes
             const node = svg.append("g")
                 .attr("class", "nodes")
                 .selectAll("circle")
                 .data(data.nodes)
                 .enter().append("circle")
                 .attr("class", "node")
-                .attr("r", 8) // Decrease node radius
+                .attr("r", 8)
                 .attr("fill", d => d.type === 'actor' ? '#ff5733' : '#007bff')
                 .call(d3.drag()
                     .on("start", dragstarted)
@@ -305,30 +395,29 @@
                     .on("end", dragended))
                 .on("mouseover", mouseover)
                 .on("mouseout", mouseout)
-                .on("click", function(event, d) {
+                .on("click", function (event, d) {
                     if (d.type === 'cve') {
-                        infoBox.html(`
-                            <h5>${d.details.vulnerabilityName}</h5>
-                            <p><strong>CVE ID:</strong> ${d.details.cveID}</p>
-                            <p><strong>Severity:</strong> ${d.details.nvdData[0]?.baseSeverity || 'Unknown'}</p>
-                            <p><strong>Published Date:</strong> ${d.details.dateAdded}</p>
-                            <div>
-                                <strong>GitHub PoCs:</strong>
-                                <div class="github-pocs">
-                                    ${d.details.githubPocs && d.details.githubPocs.length > 0 ? 'GitHub PoCs available' : 'No GitHub PoCs'}
-                                </div>
+                        infoBox.style("display", "block")
+                            .html(`
+                        <h5>${d.details.vulnerabilityName}</h5>
+                        <p><strong>CVE ID:</strong> ${d.details.cveID}</p>
+                        <p><strong>Severity:</strong> ${d.details.nvdData[0]?.baseSeverity || 'Unknown'}</p>
+                        <p><strong>Published Date:</strong> ${d.details.dateAdded}</p>
+                        <div>
+                            <strong>GitHub PoCs:</strong>
+                            <div class="github-pocs">
+                                ${d.details.githubPocs && d.details.githubPocs.length > 0 ? 'GitHub PoCs available' : 'No GitHub PoCs'}
                             </div>
-                        `);
-                        infoBox.style("left", (event.pageX + 10) + "px")
+                        </div>
+                    `)
+                            .style("left", (event.pageX + 10) + "px")
                             .style("top", (event.pageY - 28) + "px")
                             .transition().duration(200)
                             .style("opacity", .9);
-                        // Stop event propagation to prevent body click handler from immediately hiding the info box
                         event.stopPropagation();
                     }
                 });
 
-            // Add labels
             const label = svg.append("g")
                 .attr("class", "labels")
                 .selectAll("text")
@@ -338,9 +427,8 @@
                 .attr("dx", 12)
                 .attr("dy", ".35em")
                 .text(d => d.name)
-                .style("fill", d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000'); // Set text color based on theme
+                .style("fill", d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000');
 
-            // Update simulation on tick
             simulation
                 .nodes(data.nodes)
                 .on("tick", () => {
@@ -362,8 +450,7 @@
             simulation.force("link")
                 .links(data.links);
 
-            // Hide tooltip and info box on click outside
-            d3.select("body").on("click", function(event) {
+            d3.select("body").on("click", function (event) {
                 const isOutside = !event.target.closest("#chart") && !event.target.closest(".tooltip") && !event.target.closest(".info-box");
                 if (isOutside) {
                     tooltip.transition()
@@ -373,7 +460,6 @@
                         .duration(500)
                         .style("opacity", 0);
                 } else if (!event.target.closest(".github-pocs a")) {
-                    // If clicking on a node, hide the info box
                     infoBox.transition()
                         .duration(500)
                         .style("opacity", 0);
@@ -395,37 +481,27 @@
                     .style("opacity", 0);
             }
 
-            function updateVisualization(type) {
-                const filteredNodes = data.nodes.filter(d => d.type === type);
-                const filteredLinks = data.links.filter(link => filteredNodes.find(node => node.id === link.source.id || node.id === link.target.id));
-
-                visualizeData({ nodes: filteredNodes, links: filteredLinks });
-            }
-
-            // Fix node positions when dragging
             function dragstarted(event, d) {
                 if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x; // Fix x position
-                d.fy = d.y; // Fix y position
+                d.fx = d.x;
+                d.fy = d.y;
             }
 
             function dragged(event, d) {
-                d.fx = event.x; // Update fixed x position
-                d.fy = event.y; // Update fixed y position
+                d.fx = event.x;
+                d.fy = event.y;
             }
 
             function dragended(event, d) {
                 if (!event.active) simulation.alphaTarget(0);
-                d.fx = null; // Release fixed x position
-                d.fy = null; // Release fixed y position
+                d.fx = null;
+                d.fy = null;
             }
         }
 
-        // Theme Toggle
         const darkThemeToggle = document.getElementById('darkThemeToggle');
         const body = document.body;
 
-        // Load the user's theme preference from Local Storage
         const userThemePreference = localStorage.getItem('darkTheme');
         if (userThemePreference === 'true') {
             body.classList.add('bg-dark');
@@ -437,13 +513,15 @@
             if (darkThemeToggle.checked) {
                 body.classList.add('bg-dark');
                 body.classList.add('text-light');
-                localStorage.setItem('darkTheme', 'true'); // Store the preference
+                localStorage.setItem('darkTheme', 'true');
             } else {
                 body.classList.remove('bg-dark');
                 body.classList.remove('text-light');
-                localStorage.setItem('darkTheme', 'false'); // Store the preference
+                localStorage.setItem('darkTheme', 'false');
             }
         });
+
     </script>
 </body>
+
 </html>
