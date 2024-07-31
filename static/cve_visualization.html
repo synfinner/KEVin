@@ -13,110 +13,96 @@
         body {
             font-family: 'Roboto', sans-serif;
             background: linear-gradient(to right, #f8f9fa, #e9ecef);
-            /* Light theme */
             transition: background-color 0.3s, color 0.3s;
+            color: #333;
         }
 
         body.bg-dark {
             background: linear-gradient(to right, #1a1a1a, #333);
-            /* Dark theme */
             color: #E0E0E0;
-            /* Light text color for dark theme */
         }
 
         #chart {
             width: 100%;
             height: 800px;
-            /* Increased height from 600px to 800px */
             margin: 20px auto;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
+            border: none;
+            border-radius: 15px;
             background-color: #fff;
-            /* Light background for chart */
             position: relative;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            /* Added shadow for depth */
-            max-width: 1200px;
-            /* Set a maximum width for the chart */
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            max-width: 1600px;
+            overflow: hidden;
         }
 
         body.bg-dark #chart {
             background-color: #2C2C2C;
-            /* Dark background for chart */
             border-color: #444;
-            /* Darker border for dark theme */
         }
 
         .tooltip {
             position: absolute;
             text-align: center;
             width: auto;
-            padding: 8px;
-            font: 12px sans-serif;
-            background: lightsteelblue;
-            /* Light tooltip background */
-            border: 0;
+            padding: 10px;
+            font: 14px sans-serif;
+            background: rgba(255, 255, 255, 0.95);
+            border: none;
             border-radius: 8px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
         body.bg-dark .tooltip {
-            background: #444;
-            /* Dark tooltip background */
+            background: rgba(68, 68, 68, 0.95);
             color: #E0E0E0;
-            /* Light text color for tooltip */
         }
 
         .node {
             stroke: #fff;
-            /* Node stroke color */
             stroke-width: 1.5px;
             transition: transform 0.2s;
-            /* Smooth transition for node movement */
         }
 
         body.bg-dark .node {
             stroke: #444;
-            /* Darker stroke for nodes in dark theme */
         }
 
         .link {
             stroke: #999;
-            /* Link color */
             stroke-opacity: 0.6;
             transition: stroke-opacity 0.2s;
-            /* Smooth transition for link opacity */
         }
 
         body.bg-dark .link {
             stroke: #666;
-            /* Darker link color for dark theme */
         }
 
         .label {
-            font-size: 12px;
+            font-size: 14px;
             pointer-events: none;
             color: #000;
-            /* Label color */
+            background: rgba(255, 255, 255, 0.9);
+            padding: 3px 6px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
 
         body.bg-dark .label {
             color: #E0E0E0;
-            /* Light label color for dark theme */
         }
 
         .info-box {
             position: absolute;
-            width: 300px;
+            width: 350px;
             background: #fff;
-            /* Light info box background */
             border: 1px solid #ccc;
-            border-radius: 5px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            padding: 10px;
-            font-size: 12px;
+            border-radius: 15px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            font-size: 14px;
             pointer-events: none;
             opacity: 0;
             transition: opacity 0.3s;
@@ -124,11 +110,8 @@
 
         body.bg-dark .info-box {
             background: #2C2C2C;
-            /* Dark info box background */
             border-color: #444;
-            /* Darker border for info box */
             color: #E0E0E0;
-            /* Light text color for info box */
         }
 
         .info-box h5 {
@@ -137,20 +120,90 @@
 
         .controls {
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 20px;
         }
 
         .controls button {
             margin: 5px;
+            font-size: 16px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 30px;
+            transition: background-color 0.3s, box-shadow 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls button:focus,
+        .controls button:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .controls input {
+            font-size: 16px;
+            padding: 10px;
+            border-radius: 30px;
+            border: 1px solid #ccc;
+            transition: box-shadow 0.3s;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls input:focus {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
         .header {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        body.bg-dark .header h1 {
+            color: #E0E0E0;
+        }
+
+        body.bg-dark .header p {
+            color: #AAA;
         }
 
         .custom-switch {
             margin-top: 20px;
+        }
+
+        .loading-spinner {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+
+        .legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #fff;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        body.bg-dark .legend {
+            background: #2C2C2C;
+            border-color: #444;
+            color: #E0E0E0;
         }
     </style>
 </head>
@@ -169,14 +222,29 @@
                 style="width: 200px;">
             <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i> Search</button>
             <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel Search</button>
-            <!-- Cancel button -->
-            <div class="custom-control custom-switch">
+        </div>
+        <div class="controls" style="text-align: center; margin-top: 10px;">
+            <div class="custom-control custom-switch" style="display: inline-block; margin-right: 10px;">
                 <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
                 <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
+            </div>
+            <div class="custom-control custom-switch" style="display: inline-block;">
+                <input type="checkbox" class="custom-control-input" id="filterActorsToggle">
+                <label class="custom-control-label" for="filterActorsToggle">Filter Actors</label>
             </div>
         </div>
         <div id="chart"></div>
         <div class="info-box" id="infoBox"></div>
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+        </div>
+        <div class="legend" id="legend">
+            <h5>Legend</h5>
+            <p><span style="color: #007bff;">●</span> CVE</p>
+            <p><span style="color: #ff5733;">●</span> Actor</p>
+        </div>
     </div>
 
     <script>
@@ -185,8 +253,11 @@
         let allNodes = [];
         let allLinks = [];
         let abortController = null;
+        let searchedActor = ''; // Variable to store the searched actor
+        let filterActors = false; // Variable to track the filter state
 
         document.getElementById('fetchData').addEventListener('click', function () {
+            searchedActor = ''; // Clear searched actor when fetching general data
             fetchData(currentPage);
         });
 
@@ -200,12 +271,13 @@
             allNodes = [];
             allLinks = [];
             currentPage = 1;
+            searchedActor = ''; // Clear searched actor on reset
         });
 
         document.getElementById('searchByActor').addEventListener('click', function () {
             cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-            const actor = document.getElementById('actorSearch').value;
-            fetchDataByActor(actor);
+            searchedActor = document.getElementById('actorSearch').value.toLowerCase(); // Store the searched actor in lowercase
+            fetchDataByActor(searchedActor);
         });
 
         document.getElementById('cancelSearch').addEventListener('click', function () {
@@ -215,9 +287,14 @@
         document.getElementById('actorSearch').addEventListener('keypress', function (event) {
             if (event.key === 'Enter') {
                 cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-                const actor = document.getElementById('actorSearch').value;
-                fetchDataByActor(actor);
+                searchedActor = document.getElementById('actorSearch').value.toLowerCase(); // Store the searched actor in lowercase
+                fetchDataByActor(searchedActor);
             }
+        });
+
+        document.getElementById('filterActorsToggle').addEventListener('change', function () {
+            filterActors = this.checked;
+            visualizeData({ nodes: allNodes, links: allLinks });
         });
 
         function cancelCurrentRequest() {
@@ -228,6 +305,7 @@
         }
 
         function fetchData(page) {
+            showLoadingSpinner();
             cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
             abortController = new AbortController();
             const signal = abortController.signal;
@@ -235,6 +313,7 @@
             fetch(`/kev?page=${page}&per_page=25`, { signal })
                 .then(response => response.json())
                 .then(data => {
+                    hideLoadingSpinner();
                     if (abortController.signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
                     allNodes = allNodes.concat(formattedData.nodes);
@@ -242,6 +321,7 @@
                     visualizeData({ nodes: allNodes, links: allLinks });
                 })
                 .catch(error => {
+                    hideLoadingSpinner();
                     if (error.name === 'AbortError') {
                         console.log('Fetch request canceled');
                     } else {
@@ -251,6 +331,7 @@
         }
 
         function fetchDataByActor(actor) {
+            showLoadingSpinner();
             cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
             abortController = new AbortController();
             const signal = abortController.signal;
@@ -258,6 +339,7 @@
             fetch(`/kev?actor=${actor}&page=${currentPage}&per_page=25`, { signal })
                 .then(response => response.json())
                 .then(data => {
+                    hideLoadingSpinner();
                     if (abortController.signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
                     allNodes = allNodes.concat(formattedData.nodes);
@@ -273,6 +355,7 @@
                     }
                 })
                 .catch(error => {
+                    hideLoadingSpinner();
                     if (error.name === 'AbortError') {
                         console.log('Fetch request canceled');
                     } else {
@@ -343,8 +426,36 @@
             return { nodes, links };
         }
 
+        // Update the visualizeData function to filter nodes based on the searched actor
         function visualizeData(data) {
             d3.select("#chart").selectAll("*").remove();
+
+            let filteredNodes = data.nodes;
+            let filteredLinks = data.links;
+
+            // Filter nodes and links if the filter toggle is active
+            if (filterActors && searchedActor) {
+                // Find all actor nodes that match the search term
+                const matchingActors = filteredNodes.filter(node =>
+                    node.type === 'actor' && node.name.toLowerCase().includes(searchedActor)
+                );
+
+                // Collect IDs of the matching actors
+                const matchingActorIds = new Set(matchingActors.map(actor => actor.id));
+
+                // Filter the nodes to include only CVEs and the matching actors
+                filteredNodes = filteredNodes.filter(node =>
+                    node.type === 'cve' || matchingActorIds.has(node.id)
+                );
+
+                // Create a set of matching node IDs
+                const matchingNodeIds = new Set(filteredNodes.map(node => node.id));
+
+                // Filter links to include only those that connect to the matching nodes
+                filteredLinks = filteredLinks.filter(link =>
+                    matchingNodeIds.has(link.source.id) && matchingNodeIds.has(link.target.id)
+                );
+            }
 
             const width = document.getElementById('chart').clientWidth;
             const height = document.getElementById('chart').clientHeight;
@@ -365,16 +476,22 @@
 
             const infoBox = d3.select("#infoBox");
 
-            simulation = d3.forceSimulation(data.nodes)
-                .force("link", d3.forceLink().id(d => d.id).distance(100).strength(0.5))
-                .force("charge", d3.forceManyBody().strength(-50))
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collision", d3.forceCollide().radius(20).strength(0));
+            // Randomly position nodes initially
+            filteredNodes.forEach(node => {
+                node.x = Math.random() * width;
+                node.y = Math.random() * height;
+            });
+
+            simulation = d3.forceSimulation(filteredNodes)
+                .force("link", d3.forceLink(filteredLinks).id(d => d.id).distance(120).strength(0.5)) // Adjusted link distance
+                .force("charge", d3.forceManyBody().strength(-80)) // Adjusted charge strength
+                .force("center", d3.forceCenter(width / 2, height / 2)) // Center force
+                .force("collision", d3.forceCollide().radius(25).strength(1)); // Adjusted collision radius
 
             const link = svg.append("g")
                 .attr("class", "links")
                 .selectAll("line")
-                .data(data.links)
+                .data(filteredLinks)
                 .enter().append("line")
                 .attr("class", "link")
                 .attr("stroke-width", 2)
@@ -384,17 +501,15 @@
             const node = svg.append("g")
                 .attr("class", "nodes")
                 .selectAll("circle")
-                .data(data.nodes)
+                .data(filteredNodes)
                 .enter().append("circle")
                 .attr("class", "node")
-                .attr("r", 8)
+                .attr("r", 10) // Node radius
                 .attr("fill", d => d.type === 'actor' ? '#ff5733' : '#007bff')
                 .call(d3.drag()
                     .on("start", dragstarted)
                     .on("drag", dragged)
                     .on("end", dragended))
-                .on("mouseover", mouseover)
-                .on("mouseout", mouseout)
                 .on("click", function (event, d) {
                     if (d.type === 'cve') {
                         infoBox.style("display", "block")
@@ -403,10 +518,11 @@
                         <p><strong>CVE ID:</strong> ${d.details.cveID}</p>
                         <p><strong>Severity:</strong> ${d.details.nvdData[0]?.baseSeverity || 'Unknown'}</p>
                         <p><strong>Published Date:</strong> ${d.details.dateAdded}</p>
+                        <p><strong>Description:</strong> ${d.details.shortDescription || 'No description available'}</p>
                         <div>
                             <strong>GitHub PoCs:</strong>
                             <div class="github-pocs">
-                                ${d.details.githubPocs && d.details.githubPocs.length > 0 ? 'GitHub PoCs available' : 'No GitHub PoCs'}
+                                ${d.details.githubPocs && d.details.githubPocs.length > 0 ? d.details.githubPocs.map(poc => `<a href="${poc}" target="_blank">${poc}</a>`).join(', ') : 'No GitHub PoCs'}
                             </div>
                         </div>
                     `)
@@ -421,16 +537,18 @@
             const label = svg.append("g")
                 .attr("class", "labels")
                 .selectAll("text")
-                .data(data.nodes)
+                .data(filteredNodes)
                 .enter().append("text")
                 .attr("class", "label")
                 .attr("dx", 12)
                 .attr("dy", ".35em")
                 .text(d => d.name)
-                .style("fill", d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000');
+                .style("fill", d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000')
+                .style("font-weight", d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? 'bold' : 'normal') // Bold matching actor case-insensitively
+                .style("font-size", d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? '20px' : '14px'); // Increase font size for matching actor
 
             simulation
-                .nodes(data.nodes)
+                .nodes(filteredNodes)
                 .on("tick", () => {
                     link
                         .attr("x1", d => d.source.x)
@@ -448,10 +566,10 @@
                 });
 
             simulation.force("link")
-                .links(data.links);
+                .links(filteredLinks);
 
             d3.select("body").on("click", function (event) {
-                const isOutside = !event.target.closest("#chart") && !event.target.closest(".tooltip") && !event.target.closest(".info-box");
+                const isOutside = !event.target.closest("#chart") && !event.target.closest(".info-box");
                 if (isOutside) {
                     tooltip.transition()
                         .duration(500)
@@ -520,6 +638,14 @@
                 localStorage.setItem('darkTheme', 'false');
             }
         });
+
+        function showLoadingSpinner() {
+            document.getElementById('loadingSpinner').style.display = 'block';
+        }
+
+        function hideLoadingSpinner() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+        }
 
     </script>
 </body>
