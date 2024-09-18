@@ -30,7 +30,7 @@ requests==2.32.3
 six==1.16.0
 terminaltables==3.1.10
 urllib3==2.2.2
-Werkzeug==3.0.3
+Werkzeug==3.0.4
 zope.event==5.0
 zope.interface==6.3
 zstandard==0.23.0
