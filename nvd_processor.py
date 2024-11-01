@@ -141,7 +141,8 @@ def check_vuln_status():
                 status_check = nvd_data[0]["vulnStatus"]
             except KeyError:
                 continue
-            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and nvd_data[0]["vulnStatus"] == "Awaiting Analysis" or nvd_data[0]["vulnStatus"] == "Undergoing Analysis":
+            # Added "Received" to that vuln status check - Synfinner (11/01/2024)
+            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and nvd_data[0]["vulnStatus"] == "Awaiting Analysis" or nvd_data[0]["vulnStatus"] == "Undergoing Analysis" or nvd_data[0]["vulnStatus"] == "Received":
                 print("[+] Vulnerability " + vulnerability["cveID"] + " is awaiting analysis")
                 # Perform additional actions here if needed
                 # For example, you could call a function to process this specific status
@@ -156,7 +157,8 @@ def check_vuln_status():
                         continue
                     nvd_data_array = []  # Initialize an empty array
                     # quick check if the vuln is in analysis phase
-                    if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis":
+                    # Added "Received" to that vuln status check - Synfinner (11/01/2024)
+                    if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis" or vuln_data["vulnStatus"] == "Received":
                         print("[+] Vulnerability " + vulnerability["cveID"] + " is still awaiting analysis")
                         nvd_data_array.append({
                             "nvdReferences": vuln_data["references"],
