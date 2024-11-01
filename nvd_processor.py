@@ -64,7 +64,8 @@ def nvd_processor():
                     continue
                 nvd_data_array = []  # Initialize an empty array
                 # quick check if the vuln is in analysis phase
-                if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis":
+                # Added "Received" to that vuln status check - Synfinner (11/01/2024)
+                if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis" or vuln_data["vulnStatus"] == "Received":
                     nvd_data_array.append({
                         "nvdReferences": vuln_data["references"],
                         "vulnStatus": vuln_data["vulnStatus"]
