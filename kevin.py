@@ -190,6 +190,16 @@ def user_agreement():
 @app.route('/get_metrics')
 @cache.cached(timeout=1800) # 30 minute cache for the metrics route.
 def get_metrics():
+    """
+    Retrieve metrics for the KEV and CVE databases.
+
+    This function counts the number of KEVs and CVEs in their respective
+    collections using Gevent for concurrent execution. It returns the
+    counts as a JSON response.
+
+    Returns:
+        Response: A JSON object containing the counts of CVEs and KEVs.
+    """
     # Use Gevent to spawn greenlets for counting documents
     def count_kevs():
         return collection.count_documents({})
@@ -267,6 +277,22 @@ def cve_exist():
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
 @cache.cached() # Use the default 10 minute cache for the report route.
 def vulnerability_report(cve_id):
+    """
+    Generate a report for a specific vulnerability identified by its CVE ID.
+
+    This function sanitizes the input CVE ID to prevent SQL injection attacks,
+    retrieves the corresponding vulnerability from the database, and generates
+    a report using the reportgen library. If the vulnerability is found, it
+    renders the vulnerability report template with the generated report. If
+    the vulnerability is not found, it returns a 404 error message.
+
+    Parameters:
+    - cve_id (str): The CVE ID of the vulnerability for which the report is generated.
+
+    Returns:
+    Response: Renders the vulnerability report template if the vulnerability is found,
+              or returns a 404 error message if the vulnerability is not found.
+    """
     # Sanitize the input CVE ID to prevent SQL injection attacks
     sanitized_cve_id = sanitize_query(cve_id)
     # Use the sanitized CVE ID to fetch the corresponding vulnerability from the database
@@ -373,26 +399,33 @@ def openai_vuln():
     else:
         return {"message": "Vulnerability not found"}, 404
 
-# Define resource routes
+# Define the resource routes for the KEVin API.
+# Each tuple contains a resource class and its corresponding URL endpoint.
 resources = [
-    (VulnerabilityResource, "/kev/<string:cve_id>"),
-    (AllKevVulnerabilitiesResource, "/kev"),
-    (RecentKevVulnerabilitiesResource, "/kev/recent"),
-    (cveLandResource, "/vuln/<string:cve_id>"),
-    (cveNVDResource, "/vuln/<string:cve_id>/nvd"),
-    (cveMitreResource, "/vuln/<string:cve_id>/mitre"),
-    (RecentVulnerabilitiesByDaysResource, "/vuln/published", {"query_type": "published"}),
-    (RecentVulnerabilitiesByDaysResource, "/vuln/modified", {"query_type": "modified"}),
+    (VulnerabilityResource, "/kev/<string:cve_id>"),  # Route for accessing a specific vulnerability by CVE ID
+    (AllKevVulnerabilitiesResource, "/kev"),  # Route for accessing all vulnerabilities
+    (RecentKevVulnerabilitiesResource, "/kev/recent"),  # Route for accessing recently added vulnerabilities
+    (cveLandResource, "/vuln/<string:cve_id>"),  # Route for accessing CVE data from cve.land by CVE ID
+    (cveNVDResource, "/vuln/<string:cve_id>/nvd"),  # Route for accessing CVE data from NVD by CVE ID
+    (cveMitreResource, "/vuln/<string:cve_id>/mitre"),  # Route for accessing CVE data from MITRE by CVE ID
+    (RecentVulnerabilitiesByDaysResource, "/vuln/published", {"query_type": "published"}),  # Route for accessing recently published vulnerabilities
+    (RecentVulnerabilitiesByDaysResource, "/vuln/modified", {"query_type": "modified"}),  # Route for accessing recently modified vulnerabilities
 ]
 
+# Iterate over the defined resources to add them to the API
 for resource in resources:
+    # Check if the resource tuple contains only the resource class and URL endpoint
     if len(resource) == 2:
+        # Add the resource to the API without any additional parameters
         api.add_resource(resource[0], resource[1], strict_slashes=False)
     else:
-        # Use resource_class_kwargs to pass query_type
+        # Add the resource to the API with additional parameters (query_type)
+        # Use resource_class_kwargs to pass query_type for this resource
         api.add_resource(resource[0], resource[1], strict_slashes=False, resource_class_kwargs=resource[2], endpoint=f"{resource[0].__name__}_{resource[1].replace('/', '_')}")
 
+# Check if the script is being run directly
 if __name__ == "__main__":
-    # Start the Flask app with Gevent WSGI server
+    # Start the Flask application using the Gevent WSGI server
     http_server = WSGIServer(('0.0.0.0', 5000), app)
+    # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()
