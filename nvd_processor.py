@@ -64,8 +64,7 @@ def nvd_processor():
                     continue
                 nvd_data_array = []  # Initialize an empty array
                 # quick check if the vuln is in analysis phase
-                # Added "Received" to that vuln status check - Synfinner (11/01/2024)
-                if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis" or vuln_data["vulnStatus"] == "Received":
+                if vuln_data["vulnStatus"] == "Awaiting Analysis" or vuln_data["vulnStatus"] == "Undergoing Analysis":
                     nvd_data_array.append({
                         "nvdReferences": vuln_data["references"],
                         "vulnStatus": vuln_data["vulnStatus"]
@@ -143,7 +142,7 @@ def check_vuln_status():
             except KeyError:
                 continue
             # Added "Received" to that vuln status check - Synfinner (11/01/2024)
-            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and nvd_data[0]["vulnStatus"] == "Awaiting Analysis" or nvd_data[0]["vulnStatus"] == "Undergoing Analysis" or nvd_data[0]["vulnStatus"] == "Received":
+            if len(nvd_data) > 0 and "vulnStatus" in nvd_data[0] and (nvd_data[0]["vulnStatus"] == "Awaiting Analysis" or nvd_data[0]["vulnStatus"] == "Undergoing Analysis" or nvd_data[0]["vulnStatus"] == "Received"):
                 print("[+] Vulnerability " + vulnerability["cveID"] + " is awaiting analysis")
                 # Perform additional actions here if needed
                 # For example, you could call a function to process this specific status
