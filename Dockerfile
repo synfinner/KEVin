@@ -1,5 +1,5 @@
 # Use the official Python image as the base image
-FROM python:3.8
+FROM python:3.12
 
 # Set the working directory in the container
 WORKDIR /app
@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 8444
 
 # Command to run Gunicorn with your Flask app
-CMD ["gunicorn", "--bind", "0.0.0.0:8444", "--workers", "4", "kevin:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8444", "--workers", "4", "--worker-class", "gevent", "--timeout", "30", "--max-requests", "1000", "--max-requests-jitter", "50", "kevin:app"]
