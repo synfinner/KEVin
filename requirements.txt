@@ -5,6 +5,8 @@ cachelib==0.9.0
 certifi==2024.8.30
 charset-normalizer==3.3.2
 click==8.1.7
+cramjam==2.9.0
+defusedxml==0.7.1
 dnspython==2.7.0
 Flask==3.0.3
 Flask-Caching==2.3.0
@@ -22,11 +24,13 @@ packaging==24.1
 pluggy==1.5.0
 pymongo==4.10.1
 pytest==8.3.3
+python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 python-snappy==0.7.3
 pytz==2024.1
 redis==5.0.8
 requests==2.32.3
+setuptools==75.3.0
 six==1.16.0
 terminaltables==3.1.10
 urllib3==2.2.3
