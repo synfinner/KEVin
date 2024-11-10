@@ -189,25 +189,23 @@ def user_agreement():
     return response
 
 @app.route("/rss")
-# cache with rss cache key
 @cache.cached(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
 def rss_feed():
     # Fetch recent KEV Entries from the MongoDB collection
-    recent_entries = collection.find().sort("dateAdded", -1).limit(12)  # Adjust the query as needed
+    recent_entries = collection.find().sort("dateAdded", -1).limit(12)
 
     # Create the root element for the RSS feed
     rss = Element("rss", version="2.0")
     channel = SubElement(rss, "channel")
     SubElement(channel, "title").text = "Recent KEV Entries"
-    SubElement(channel, "link").text = "https://kevin.gtfkd.com/rss"  # Ensure this is a full URL
+    SubElement(channel, "link").text = "https://kevin.gtfkd.com/rss"
     SubElement(channel, "description").text = "Latest entries from the KEVin API for Known Exploited Vulnerabilities."
-    
+
     # Add Atom link for self-reference
     atom_link = SubElement(channel, "{http://www.w3.org/2005/Atom}link")
     atom_link.set("rel", "self")
-    atom_link.set("href", "https://kevin.gtfkd.com/rss")  # Ensure this matches the actual URL for your RSS feed
+    atom_link.set("href", "https://kevin.gtfkd.com/rss")
 
-    # Add each entry to the RSS feed
     for entry in recent_entries:
         item = SubElement(channel, "item")
         SubElement(item, "title").text = entry.get("vulnerabilityName", "No Title")
@@ -215,59 +213,48 @@ def rss_feed():
         # Handle dateAdded correctly
         date_added = entry.get("dateAdded")
         if isinstance(date_added, str):
-            from dateutil import parser  # Make sure to install python-dateutil if not already installed
+            from dateutil import parser
             date_added = parser.parse(date_added)
         
-        # Format the date to RFC-822 format
         SubElement(item, "pubDate").text = date_added.strftime("%a, %d %b %Y %H:%M:%S +0000") if date_added else "No Date"
-
-        # Add a GUID element as a full URL
         guid = SubElement(item, "guid")
-        guid.text = f"https://kevin.gtfkd.com/kev/{entry.get('cveID', 'No CVE ID')}"  # Use a full URL for the GUID
-        guid.set("isPermaLink", "true")  # Set isPermaLink to true
+        guid.text = f"https://nvd.nist.gov/vuln/detail/{entry.get('cveID', 'No CVE ID')}"
+        guid.set("isPermaLink", "true")
 
         # Add description with additional information
-        description_parts = []
-        description_parts.append(entry.get("shortDescription", "No Description"))
+        description_parts = [
+            f"<strong>Description</strong>: {entry.get('shortDescription', 'No Description')}",
+            f"<strong>Known Ransomware Usage</strong>: {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}",
+        ]
         
-        # Add known ransomware usage
-        known_ransomware_usage = entry.get("knownRansomwareCampaignUse", "No Known Ransomware Usage")
-        description_parts.append(f"Known Ransomware Usage: {known_ransomware_usage}")
-        
-        # Handle lists for githubPocs
         github_pocs = entry.get("githubPocs", "No GitHub POCs")
         if isinstance(github_pocs, list):
-            github_pocs = ", ".join(github_pocs)  # Convert list to a comma-separated string
-        description_parts.append(f"GitHub POCs: {github_pocs}")
+            github_pocs = ", ".join(github_pocs)
+        description_parts.append(f"<strong>GitHub POCs</strong>: {github_pocs}")
         
-        # Handle openThreatData which may be a list of dictionaries
         open_threat_data = entry.get("openThreatData", [])
         if isinstance(open_threat_data, list) and open_threat_data:
-            # Extract relevant information from each dictionary
             adversaries = []
             affected_industries = []
             for data in open_threat_data:
-                adversaries.extend(data.get("adversaries", []))  # Add adversaries to the list
-                affected_industries.extend(data.get("affectedIndustries", []))  # Add affected industries to the list
+                adversaries.extend(data.get("adversaries", []))
+                affected_industries.extend(data.get("affectedIndustries", []))
             
-            # Create strings from the lists
             adversaries_str = ", ".join(set(adversaries)) if adversaries else "No Adversaries"
             affected_industries_str = ", ".join(set(affected_industries)) if affected_industries else "No Affected Industries"
-            
-            # Combine the strings for openThreatData
-            open_threat_data_str = f"Adversaries: {adversaries_str}; Affected Industries: {affected_industries_str}"
+            open_threat_data_str = f"<strong>Adversaries</strong>: {adversaries_str}; <strong>Affected Industries</strong>: {affected_industries_str}"
         else:
             open_threat_data_str = "No Open Threat Data"
 
         description_parts.append(open_threat_data_str)
 
         # Set the description for the item
-        SubElement(item, "description").text = " | ".join(description_parts)
+        SubElement(item, "description").text = "<br/>".join(description_parts)
 
-    # Convert the XML tree to a string
+        # Add category
+        SubElement(item, "category").text = "Vulnerability"
+
     rss_feed = ElementTree.tostring(rss, encoding='utf-8', method='xml')
-
-    # Return the RSS feed with the correct content type
     return Response(rss_feed, mimetype='application/rss+xml')
 
 
