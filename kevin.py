@@ -7,11 +7,12 @@ from urllib.parse import unquote
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, send_from_directory, make_response
+from flask import Flask, jsonify, render_template, request, send_from_directory, make_response, Response
 from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
 from gevent import spawn, joinall
+import xml.etree.ElementTree as ET
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
@@ -185,6 +186,90 @@ def user_agreement():
     response = make_response(file_content)
     response.headers['Content-Type'] = 'text/html'
     return response
+
+# Route for providing RSS feed for recently added vulnerabilities
+@app.route("/rss")
+# cache with rss cache key
+@cache.cached(timeout=1800, key_prefix='rss_feed') # 30 minute cache for the RSS feed.
+def rss_feed():
+    # Fetch recent KEV Entries from the MongoDB collection
+    recent_entries = collection.find().sort("dateAdded", -1).limit(12)  # Adjust the query as needed
+
+    # Create the root element for the RSS feed
+    rss = ET.Element("rss", version="2.0")
+    channel = ET.SubElement(rss, "channel")
+    ET.SubElement(channel, "title").text = "Recent KEV Entries"
+    ET.SubElement(channel, "link").text = "https://kevin.gtfkd.com/rss"  # Ensure this is a full URL
+    ET.SubElement(channel, "description").text = "Latest entries from the KEVin API for Known Exploited Vulnerabilities."
+    
+    # Add Atom link for self-reference
+    atom_link = ET.SubElement(channel, "{http://www.w3.org/2005/Atom}link")
+    atom_link.set("rel", "self")
+    atom_link.set("href", "https://kevin.gtfkd.com/rss")  # Ensure this matches the actual URL for your RSS feed
+
+    # Add each entry to the RSS feed
+    for entry in recent_entries:
+        item = ET.SubElement(channel, "item")
+        ET.SubElement(item, "title").text = entry.get("vulnerabilityName", "No Title")
+        
+        # Handle dateAdded correctly
+        date_added = entry.get("dateAdded")
+        if isinstance(date_added, str):
+            from dateutil import parser  # Make sure to install python-dateutil if not already installed
+            date_added = parser.parse(date_added)
+        
+        # Format the date to RFC-822 format
+        ET.SubElement(item, "pubDate").text = date_added.strftime("%a, %d %b %Y %H:%M:%S +0000") if date_added else "No Date"
+
+        # Add a GUID element as a full URL
+        guid = ET.SubElement(item, "guid")
+        guid.text = f"https://kevin.gtfkd.com/kev/{entry.get('cveID', 'No CVE ID')}"  # Use a full URL for the GUID
+        guid.set("isPermaLink", "true")  # Set isPermaLink to true
+
+        # Add description with additional information
+        description_parts = []
+        description_parts.append(entry.get("shortDescription", "No Description"))
+        
+        # Add known ransomware usage
+        known_ransomware_usage = entry.get("knownRansomwareCampaignUse", "No Known Ransomware Usage")
+        description_parts.append(f"Known Ransomware Usage: {known_ransomware_usage}")
+        
+        # Handle lists for githubPocs
+        github_pocs = entry.get("githubPocs", "No GitHub POCs")
+        if isinstance(github_pocs, list):
+            github_pocs = ", ".join(github_pocs)  # Convert list to a comma-separated string
+        description_parts.append(f"GitHub POCs: {github_pocs}")
+        
+        # Handle openThreatData which may be a list of dictionaries
+        open_threat_data = entry.get("openThreatData", [])
+        if isinstance(open_threat_data, list) and open_threat_data:
+            # Extract relevant information from each dictionary
+            adversaries = []
+            affected_industries = []
+            for data in open_threat_data:
+                adversaries.extend(data.get("adversaries", []))  # Add adversaries to the list
+                affected_industries.extend(data.get("affectedIndustries", []))  # Add affected industries to the list
+            
+            # Create strings from the lists
+            adversaries_str = ", ".join(set(adversaries)) if adversaries else "No Adversaries"
+            affected_industries_str = ", ".join(set(affected_industries)) if affected_industries else "No Affected Industries"
+            
+            # Combine the strings for openThreatData
+            open_threat_data_str = f"Adversaries: {adversaries_str}; Affected Industries: {affected_industries_str}"
+        else:
+            open_threat_data_str = "No Open Threat Data"
+
+        description_parts.append(open_threat_data_str)
+
+        # Set the description for the item
+        ET.SubElement(item, "description").text = " | ".join(description_parts)
+
+    # Convert the XML tree to a string
+    rss_feed = ET.tostring(rss, encoding='utf-8', method='xml')
+
+    # Return the RSS feed with the correct content type
+    return Response(rss_feed, mimetype='application/rss+xml')
+
 
 # Route for the metrics page ("/get_metrics")
 @app.route('/get_metrics')
@@ -426,6 +511,6 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    http_server = WSGIServer(('0.0.0.0', 5001), app)
     # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()
