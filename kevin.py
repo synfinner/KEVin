@@ -12,7 +12,8 @@ from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
 from gevent import spawn, joinall
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree
+from xml.etree.ElementTree import Element, SubElement
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
@@ -187,30 +188,29 @@ def user_agreement():
     response.headers['Content-Type'] = 'text/html'
     return response
 
-# Route for providing RSS feed for recently added vulnerabilities
 @app.route("/rss")
 # cache with rss cache key
-@cache.cached(timeout=1800, key_prefix='rss_feed') # 30 minute cache for the RSS feed.
+@cache.cached(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
 def rss_feed():
     # Fetch recent KEV Entries from the MongoDB collection
     recent_entries = collection.find().sort("dateAdded", -1).limit(12)  # Adjust the query as needed
 
     # Create the root element for the RSS feed
-    rss = ET.Element("rss", version="2.0")
-    channel = ET.SubElement(rss, "channel")
-    ET.SubElement(channel, "title").text = "Recent KEV Entries"
-    ET.SubElement(channel, "link").text = "https://kevin.gtfkd.com/rss"  # Ensure this is a full URL
-    ET.SubElement(channel, "description").text = "Latest entries from the KEVin API for Known Exploited Vulnerabilities."
+    rss = Element("rss", version="2.0")
+    channel = SubElement(rss, "channel")
+    SubElement(channel, "title").text = "Recent KEV Entries"
+    SubElement(channel, "link").text = "https://kevin.gtfkd.com/rss"  # Ensure this is a full URL
+    SubElement(channel, "description").text = "Latest entries from the KEVin API for Known Exploited Vulnerabilities."
     
     # Add Atom link for self-reference
-    atom_link = ET.SubElement(channel, "{http://www.w3.org/2005/Atom}link")
+    atom_link = SubElement(channel, "{http://www.w3.org/2005/Atom}link")
     atom_link.set("rel", "self")
     atom_link.set("href", "https://kevin.gtfkd.com/rss")  # Ensure this matches the actual URL for your RSS feed
 
     # Add each entry to the RSS feed
     for entry in recent_entries:
-        item = ET.SubElement(channel, "item")
-        ET.SubElement(item, "title").text = entry.get("vulnerabilityName", "No Title")
+        item = SubElement(channel, "item")
+        SubElement(item, "title").text = entry.get("vulnerabilityName", "No Title")
         
         # Handle dateAdded correctly
         date_added = entry.get("dateAdded")
@@ -219,10 +219,10 @@ def rss_feed():
             date_added = parser.parse(date_added)
         
         # Format the date to RFC-822 format
-        ET.SubElement(item, "pubDate").text = date_added.strftime("%a, %d %b %Y %H:%M:%S +0000") if date_added else "No Date"
+        SubElement(item, "pubDate").text = date_added.strftime("%a, %d %b %Y %H:%M:%S +0000") if date_added else "No Date"
 
         # Add a GUID element as a full URL
-        guid = ET.SubElement(item, "guid")
+        guid = SubElement(item, "guid")
         guid.text = f"https://kevin.gtfkd.com/kev/{entry.get('cveID', 'No CVE ID')}"  # Use a full URL for the GUID
         guid.set("isPermaLink", "true")  # Set isPermaLink to true
 
@@ -262,10 +262,10 @@ def rss_feed():
         description_parts.append(open_threat_data_str)
 
         # Set the description for the item
-        ET.SubElement(item, "description").text = " | ".join(description_parts)
+        SubElement(item, "description").text = " | ".join(description_parts)
 
     # Convert the XML tree to a string
-    rss_feed = ET.tostring(rss, encoding='utf-8', method='xml')
+    rss_feed = ElementTree.tostring(rss, encoding='utf-8', method='xml')
 
     # Return the RSS feed with the correct content type
     return Response(rss_feed, mimetype='application/rss+xml')
