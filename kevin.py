@@ -4,6 +4,7 @@
 import os
 import re
 from urllib.parse import unquote
+import html
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
@@ -228,7 +229,7 @@ def rss_feed():
 
         # Add description with additional information
         description_html = f"""
-        <p><strong>Description:</strong> {entry.get('shortDescription', 'No Description')}</p>
+        <p><strong>Description:</strong> {html.escape(entry.get('shortDescription', 'No Description'))}</p>
         <ul>
             <li><strong>Known Ransomware Usage:</strong> {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}</li>
             <li><strong>GitHub POCs:</strong>
@@ -515,6 +516,6 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    http_server = WSGIServer(('0.0.0.0', 5001), app)
     # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()
