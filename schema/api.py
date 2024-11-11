@@ -455,7 +455,10 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Get the query parameters
         days = request.args.get("days")
         page = request.args.get("page", default=1, type=int)  # Default to page 1 if not provided
-        per_page = request.args.get("per_page", default=25, type=int)  # Default to 25 if not provided
+        per_page = request.args.get("per_page", default=25, type=int)
+        if per_page > 100:
+            return self.handle_error("The 'per_page' parameter cannot exceed 100.", 400)
+        per_page = max(1, per_page)  # Ensure per_page is at least 1
         # Check if 'days' parameter is provided
         if days is None:
             return self.handle_error("You must provide 'days' parameter", 400)
@@ -469,7 +472,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Prepare the cache key with parameters
         cache_key = f"recent_days_{days}_{page}_{per_page}"
         # Use the cache key for caching the response
-        @cache.cached(timeout=3600, key_prefix=cache_key)
+        @cache.cached(timeout=1800, key_prefix=cache_key)
         def fetch_vulnerabilities():
             cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
             field = (
