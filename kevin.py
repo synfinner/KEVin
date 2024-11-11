@@ -516,6 +516,6 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5001), app)
+    http_server = WSGIServer(('0.0.0.0', 5000), app)
     # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()
