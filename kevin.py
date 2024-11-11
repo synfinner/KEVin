@@ -209,7 +209,7 @@ def rss_feed():
 
     for entry in recent_entries:
         item = SubElement(channel, "item")
-        SubElement(item, "title").text = entry.get("vulnerabilityName", "No Title")
+        SubElement(item, "title").text = f"{entry.get('cveID', 'No CVE ID')} - {entry.get('vulnerabilityName', 'No Title')}"
         
         # Handle dateAdded correctly
         date_added = entry.get("dateAdded")
@@ -229,6 +229,7 @@ def rss_feed():
 
         # Add description with additional information
         description_html = f"""
+        <p><strong>CVE:</strong> {html.escape(entry.get('cveID', 'No CVE ID'))}</p>
         <p><strong>Description:</strong> {html.escape(entry.get('shortDescription', 'No Description'))}</p>
         <ul>
             <li><strong>Known Ransomware Usage:</strong> {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}</li>
@@ -516,6 +517,6 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    http_server = WSGIServer(('0.0.0.0', 5001), app)
     # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()
