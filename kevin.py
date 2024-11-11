@@ -217,21 +217,34 @@ def rss_feed():
             date_added = parser.parse(date_added)
         
         SubElement(item, "pubDate").text = date_added.strftime("%a, %d %b %Y %H:%M:%S +0000") if date_added else "No Date"
+        
+        # Add a link element for the NVD URL
+        nvd_url = f"https://nvd.nist.gov/vuln/detail/{entry.get('cveID', 'No CVE ID')}"
+        SubElement(item, "link").text = nvd_url
+        
         guid = SubElement(item, "guid")
-        guid.text = f"https://nvd.nist.gov/vuln/detail/{entry.get('cveID', 'No CVE ID')}"
+        guid.text = nvd_url
         guid.set("isPermaLink", "true")
 
         # Add description with additional information
-        description_parts = [
-            f"<strong>Description</strong>: {entry.get('shortDescription', 'No Description')}",
-            f"<strong>Known Ransomware Usage</strong>: {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}",
-        ]
-        
-        github_pocs = entry.get("githubPocs", "No GitHub POCs")
-        if isinstance(github_pocs, list):
-            github_pocs = ", ".join(github_pocs)
-        description_parts.append(f"<strong>GitHub POCs</strong>: {github_pocs}")
-        
+        description_html = f"""
+        <p><strong>Description:</strong> {entry.get('shortDescription', 'No Description')}</p>
+        <ul>
+            <li><strong>Known Ransomware Usage:</strong> {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}</li>
+            <li><strong>GitHub POCs:</strong>
+                <ul>
+        """
+
+        # Handle lists for GitHub POCs
+        github_pocs = entry.get("githubPocs", [])
+        if isinstance(github_pocs, list) and github_pocs:
+            for poc in github_pocs:
+                description_html += f"<li>{poc}</li>"
+        else:
+            description_html += "<li>No GitHub POCs</li>"
+
+        description_html += "</ul></li></ul>"
+
         open_threat_data = entry.get("openThreatData", [])
         if isinstance(open_threat_data, list) and open_threat_data:
             adversaries = []
@@ -242,14 +255,18 @@ def rss_feed():
             
             adversaries_str = ", ".join(set(adversaries)) if adversaries else "No Adversaries"
             affected_industries_str = ", ".join(set(affected_industries)) if affected_industries else "No Affected Industries"
-            open_threat_data_str = f"<strong>Adversaries</strong>: {adversaries_str}; <strong>Affected Industries</strong>: {affected_industries_str}"
+            open_threat_data_html = f"""
+            <ul>
+                <li><strong>Adversaries:</strong> {adversaries_str}</li>
+                <li><strong>Affected Industries:</strong> {affected_industries_str}</li>
+            </ul>
+            """
         else:
-            open_threat_data_str = "No Open Threat Data"
+            open_threat_data_html = "<p>No Open Threat Data</p>"
 
-        description_parts.append(open_threat_data_str)
-
-        # Set the description for the item
-        SubElement(item, "description").text = "<br/>".join(description_parts)
+        # Combine all parts into the description
+        full_description = description_html + open_threat_data_html
+        SubElement(item, "description").text = full_description
 
         # Add category
         SubElement(item, "category").text = "Vulnerability"
@@ -498,6 +515,6 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    http_server = WSGIServer(('0.0.0.0', 5001), app)
     # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()
