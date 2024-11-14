@@ -3,11 +3,6 @@ from jinja2 import Template
 def get_nvd_data(vulnerability):
     return vulnerability['namespaces'].get('nvd_nist_gov', {})
 
-def get_vulnerable_versions(vulnerability):
-    versions_text = ""
-    cve_org_data = vulnerability['namespaces'].get('nvd_nist_gov', {}).get('cve', {})
-    return versions_text
-
 def get_vuln_references(nvd_data):
     vuln_references = [] 
     for reference_url in nvd_data.get('cve', {}).get('references', []):
@@ -56,7 +51,6 @@ def get_cvss_metrics(nvd_data):
 
 def report_gen(vulnerability):
     nvd_data = get_nvd_data(vulnerability)
-    versions_text = get_vulnerable_versions(vulnerability)
     vuln_references = get_vuln_references(nvd_data)
     vuln_description = get_vuln_description(nvd_data)
     cvss_metrics = get_cvss_metrics(nvd_data)
@@ -66,8 +60,6 @@ def report_gen(vulnerability):
 ## Description
 
 {{ vuln_description }}
-
-{{ versions_text }}
 
 ## CVSS Metrics
 
@@ -88,7 +80,6 @@ def report_gen(vulnerability):
 
     report = report_template.render(
         vuln_description=vuln_description,
-        versions_text=versions_text,
         references_bullet_points='\n'.join([f"- {ref}" for ref in vuln_references]),
         cvss_metrics=cvss_metrics
     )
