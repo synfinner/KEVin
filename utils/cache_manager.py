@@ -66,7 +66,7 @@ class CacheManager:
                     headers=value["headers"],
                 )
             return value
-        except:
+        except Exception:
             return None
 
     def set(self, key, value, timeout=120):
@@ -92,7 +92,7 @@ class CacheManager:
             self.redis_client.setex(
                 key, timeout, json.dumps({"value": value, "checksum": checksum}, cls=jencoder)
             )
-        except:
+        except Exception:
             # continue without caching if an error occurs
             pass
 
