@@ -51,7 +51,13 @@ compress = Compress(app)
 # Initialize the Flask-Caching extension
 init_cache(app)
 
-# Function for sanitizing input to prevent SQL injection attacks and such
+# Pre-compile regex patterns for sanitizing input to improve performance
+ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
+EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
+CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
+SQL_INJECTION_RE = re.compile(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|EXEC|;|--)\b)", re.IGNORECASE)
+
+# Function for sanitizing input
 def sanitize_query(query):
     """
     Sanitize the input query to prevent malicious input.
@@ -73,7 +79,7 @@ def sanitize_query(query):
     # Check if the query is None
     if query is None:
         return None
-    
+
     query = str(query).strip()
     # Length check
     if len(query) > 50:
@@ -86,19 +92,19 @@ def sanitize_query(query):
             break
         query = decoded_query
     
-    # Whitelist allowed characters (alphanumeric, spaces, hyphens, underscores)
-    query = re.sub(r"[^\w\s-]", "", query)
-    
-    # Normalize "cve" to "CVE"
-    query = re.sub(r'\bcve\b', 'CVE', query, flags=re.IGNORECASE)
-    
+    # allowed characters (alphanumeric, spaces, hyphens)
+    query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub('', query)
+
+    # Normalize occurrences of "cve" to "CVE"
+    query = CVE_RE.sub('CVE', query)
+
     # Replace multiple spaces with a single space
-    query = re.sub(r"\s+", " ", query).strip()
-    
-    # Check for potential SQL injection patterns (without logging)
-    if re.search(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|;|--)\b)", query, re.IGNORECASE):
-        return None  # Return None for suspicious queries
-    
+    query = EXTRA_WHITESPACE_RE.sub(' ', query).strip()
+
+    # Check for potential SQL injection patterns
+    if SQL_INJECTION_RE.search(query):
+        return None
+
     return query
 
 # Route for the root endpoint ("/")
