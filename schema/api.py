@@ -29,6 +29,7 @@ class BaseResource(Resource):
 ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
 EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
 CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
+SQL_INJECTION_RE = re.compile(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|EXEC|;|--)\b)", re.IGNORECASE)
 
 # Function for sanitizing input
 def sanitize_query(query):
@@ -65,19 +66,19 @@ def sanitize_query(query):
             break
         query = decoded_query
     
-    # Whitelist allowed characters (alphanumeric, spaces, hyphens, underscores)
-    query = re.sub(r"[^\w\s-]", "", query)
-    
-    # Normalize "cve" to "CVE"
-    query = re.sub(r'\bcve\b', 'CVE', query, flags=re.IGNORECASE)
-    
+    # allowed characters (alphanumeric, spaces, hyphens)
+    query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub('', query)
+
+    # Normalize occurrences of "cve" to "CVE"
+    query = CVE_RE.sub('CVE', query)
+
     # Replace multiple spaces with a single space
-    query = re.sub(r"\s+", " ", query).strip()
-    
-    # Check for potential SQL injection patterns (without logging)
-    if re.search(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|;|--)\b)", query, re.IGNORECASE):
-        return None  # Return None for suspicious queries
-    
+    query = EXTRA_WHITESPACE_RE.sub(' ', query).strip()
+
+    # Check for potential SQL injection patterns
+    if SQL_INJECTION_RE.search(query):
+        return None
+
     return query
 
 # Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection
