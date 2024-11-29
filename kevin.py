@@ -18,7 +18,7 @@ from xml.etree.ElementTree import Element, SubElement
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
-from utils.cache_manager import cache, init_cache
+from utils.cache_manager import kev_cache as cache 
 from modules.reportgen import report_gen
 from schema.api import (
     cveLandResource,
@@ -47,9 +47,6 @@ api = Api(app)
 
 # Enable GZIP compression for all routes
 compress = Compress(app)
-
-# Initialize the Flask-Caching extension
-init_cache(app)
 
 # Pre-compile regex patterns for sanitizing input to improve performance
 ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
@@ -109,13 +106,13 @@ def sanitize_query(query):
 
 # Route for the root endpoint ("/")
 @app.route("/")
-@cache.cached(timeout=1800) # 30 minute cache for the main route.
+@cache(timeout=1800) # 30 minute cache for the main route.
 def index():
     return render_template("index.html")
 
 @app.route('/robots.txt')
 # 1 hour cache.
-@cache.cached(timeout=3600)
+@cache(timeout=3600)
 def serve_robots_txt():
     file_path = os.path.join(app.static_folder, 'robots.txt')
     with open(file_path, 'r') as file:
@@ -145,7 +142,7 @@ def serve_viz_html():
 
 @app.route('/privacy-policy')
 # 1 hour cache.
-@cache.cached(timeout=3600)
+@cache(timeout=3600)
 def serve_privacy_policy():
     file_path = os.path.join(app.static_folder, 'privacy.html')
     with open(file_path, 'r') as file:
@@ -156,7 +153,7 @@ def serve_privacy_policy():
 
 @app.route('/about')
 # 1 hour cache.
-@cache.cached(timeout=3600)
+@cache(timeout=3600)
 def serve_about_page():
     file_path = os.path.join(app.static_folder, 'about.html')
     with open(file_path, 'r') as file:
@@ -167,7 +164,7 @@ def serve_about_page():
 
 @app.route('/donate')
 # 1 hour cache.
-@cache.cached(timeout=3600)
+@cache(timeout=3600)
 def serve_donate():
     file_path = os.path.join(app.static_folder, 'donate.html')
     with open(file_path, 'r') as file:
@@ -178,12 +175,12 @@ def serve_donate():
 
 # Route for example page ("/example")
 @app.route("/examples")
-@cache.cached(timeout=3600) # 1 hour cache for the example page.
+@cache(timeout=3600) # 1 hour cache for the example page.
 def example():
     return render_template("example.html")
 
 @app.route("/agreement")
-@cache.cached(timeout=3600)  # 1 hour cache for the agreement page.
+@cache(timeout=3600)  # 1 hour cache for the agreement page.
 def user_agreement():
     # Read the file content into memory
     file_path = os.path.join(app.static_folder, 'agreement.html')
@@ -196,7 +193,7 @@ def user_agreement():
     return response
 
 @app.route("/rss")
-@cache.cached(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
+@cache(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
 def rss_feed():
     # Fetch recent KEV Entries from the MongoDB collection
     recent_entries = collection.find().sort("dateAdded", -1).limit(12)
@@ -285,7 +282,7 @@ def rss_feed():
 
 # Route for the metrics page ("/get_metrics")
 @app.route('/get_metrics')
-@cache.cached(timeout=1800) # 30 minute cache for the metrics route.
+@cache(timeout=1800) # 30 minute cache for the metrics route.
 def get_metrics():
     """
     Retrieve metrics for the KEV and CVE databases.
@@ -326,7 +323,7 @@ def get_metrics():
 # Route to check if a specific CVE ID exists in the KEV database collection
 # Example usage: /kev/exists?cve=CVE-2021-1234
 @app.route("/kev/exists", methods=["GET"])
-@cache.cached(timeout=15, key_prefix='cve_exist', query_string=True) # 15 second cache for the cve_exist route.
+@cache(timeout=15, key_prefix='cve_exist', query_string=True) # 15 second cache for the cve_exist route.
 def cve_exist():
     """
     Check if a specific CVE ID exists in the KEV database.
@@ -372,7 +369,7 @@ def cve_exist():
 
 # Route for generating a report for a specific vulnerability
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
-@cache.cached() # Use the default 10 minute cache for the report route.
+@cache() # Use the default 10 minute cache for the report route.
 def vulnerability_report(cve_id):
     """
     Generate a report for a specific vulnerability identified by its CVE ID.
@@ -416,7 +413,7 @@ def not_found(e):
 
 # OpenAI route for a specific vulnerability with cve parameter
 @app.route("/openai/kev")
-@cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
+@cache(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
 def openai_kev():
     """
     Retrieve KEV vulnerability data for a specific CVE ID from the database.
@@ -457,7 +454,7 @@ def openai_kev():
     
 # OpenAI route for all vulnerabilities with cve parameter
 @app.route("/openai/vuln")
-@cache.cached(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
+@cache(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
 def openai_vuln():
     """
     Retrieve vulnerability data for a specific CVE ID from the database.
@@ -523,6 +520,6 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    http_server = WSGIServer(('0.0.0.0', 5001), app)
     # Keep the server running indefinitely to handle incoming requests
     http_server.serve_forever()

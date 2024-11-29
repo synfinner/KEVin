@@ -9,7 +9,6 @@ cramjam==2.9.0
 defusedxml==0.7.1
 dnspython==2.7.0
 Flask==3.0.3
-Flask-Caching==2.3.0
 Flask-Compress==1.17
 Flask-RESTful==0.3.10
 gevent==24.10.3

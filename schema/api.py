@@ -1,7 +1,7 @@
 # schema/api.py
 
 from utils.database import all_vulns_collection, collection
-from utils.cache_manager import cache
+from utils.cache_manager import cache_manager, kev_cache as cache
 from functools import partial
 from flask_restful import Resource
 from flask import request, Response, json, jsonify, make_response
@@ -125,12 +125,12 @@ class cveLandResource(BaseResource):
             return self.handle_error("Vulnerability not found")
 
         data = serialize_all_vulnerability(vulnerability)
-        cache.set(cache_key_func(), data,timeout=180)  # Manually caching the data
+        cache_manager.set(cache_key_func(), data,timeout=180)  # Manually caching the data
         return self.make_json_response(data)
 
     def get_cached_data(self, cache_key_func):
         """Fetch cached data."""
-        return cache.get(cache_key_func())
+        return cache_manager.get(cache_key_func())
 
     def query_vulnerability(self, sanitized_cve_id):
         """Query the database for the vulnerability."""
@@ -142,7 +142,7 @@ class cveLandResource(BaseResource):
 
 # Resource for NVD data from the cveland via CVE-ID, which is the _id field in the cveland collection
 class cveNVDResource(BaseResource):
-    @cache.cached()
+    @cache()
     def get(self, cve_id):
         """
         Retrieve NVD data for a specific CVE ID.
@@ -171,7 +171,7 @@ class cveNVDResource(BaseResource):
         
 # This class defines a resource for fetching Mitre data for a specific CVE-ID from the 'cveland' collection
 class cveMitreResource(BaseResource):
-    @cache.cached()  # Use caching to improve performance
+    @cache()  # Use caching to improve performance
     def get(self, cve_id):
         """
         Retrieve Mitre data for a specific CVE ID.
@@ -255,14 +255,14 @@ class VulnerabilityResource(BaseResource):
             elif not vulnerability:
                 return self.handle_error("Vulnerability not found")
             else:
-                cache.set(sanitized_cve_id, vulnerability)
+                cache_manager.set(sanitized_cve_id, vulnerability)
                 data = serialize_vulnerability(vulnerability)
 
         return self.make_json_response(data)
 
     def get_cached_data(self, sanitized_cve_id):
         """Fetch cached data."""
-        return cache.get(sanitized_cve_id)
+        return cache_manager.get(sanitized_cve_id)
 
     def query_vulnerability(self, sanitized_cve_id):
         """Query the database for the vulnerability."""
@@ -334,7 +334,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
                     # Use caching when actor is not specified
                     cache_key = f"all_listing_page_{page}_per_page_{per_page}_sort_{sort_param}_order_{order_param}_search_{search_query}_filter_{filter_ransomware}"
                     
-                    @cache.cached(timeout=600, key_prefix=cache_key)
+                    @cache(timeout=120, key_prefix=cache_key)
                     def cached_fetch():
                         total_vulns = self.count_documents(query)
                         vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
@@ -373,7 +373,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
-    @cache.cached(timeout=60, key_prefix='recent_kevs_', query_string=True)
+    @cache(timeout=60, key_prefix='recent_kevs_', query_string=True)
     def get(self):
         """
         Retrieve recent KEV vulnerabilities added within a specified number of days.
@@ -473,7 +473,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Prepare the cache key with parameters
         cache_key = f"recent_days_{days}_{page}_{per_page}"
         # Use the cache key for caching the response
-        @cache.cached(timeout=1800, key_prefix=cache_key)
+        @cache(timeout=1800, key_prefix=cache_key)
         def fetch_vulnerabilities():
             cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
             field = (
