@@ -2,9 +2,6 @@
 
 # Standard Library Imports
 import os
-import re
-from urllib.parse import unquote
-import html
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
@@ -13,12 +10,12 @@ from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
 from gevent import spawn, joinall
-from defusedxml import ElementTree
-from xml.etree.ElementTree import Element, SubElement
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
 from utils.cache_manager import kev_cache as cache 
+from utils.sanitizer import sanitize_query
+from utils.rss_feed import create_rss_feed
 from modules.reportgen import report_gen
 from schema.api import (
     cveLandResource,
@@ -47,62 +44,6 @@ api = Api(app)
 
 # Enable GZIP compression for all routes
 compress = Compress(app)
-
-# Pre-compile regex patterns for sanitizing input to improve performance
-ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
-EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
-CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
-SQL_INJECTION_RE = re.compile(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|EXEC|;|--)\b)", re.IGNORECASE)
-
-# Function for sanitizing input
-def sanitize_query(query):
-    """
-    Sanitize the input query to prevent malicious input.
-
-    This function checks and sanitizes the provided query string by:
-    - Returning None if the query is None or exceeds a specified length.
-    - Iteratively URL decoding the query to handle encoded characters.
-    - Whitelisting allowed characters (alphanumeric, spaces, hyphens, underscores).
-    - Normalizing occurrences of "cve" to "CVE".
-    - Replacing multiple spaces with a single space.
-    - Checking for potential SQL injection patterns and returning None for suspicious queries.
-
-    Parameters:
-    query (str): The input query string to sanitize.
-
-    Returns:
-    str or None: The sanitized query string if valid, or None if the input is invalid or suspicious.
-    """
-    # Check if the query is None
-    if query is None:
-        return None
-
-    query = str(query).strip()
-    # Length check
-    if len(query) > 50:
-        return None
-    
-    # URL decode iteratively
-    while '%' in query:
-        decoded_query = unquote(query)
-        if decoded_query == query:
-            break
-        query = decoded_query
-    
-    # allowed characters (alphanumeric, spaces, hyphens)
-    query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub('', query)
-
-    # Normalize occurrences of "cve" to "CVE"
-    query = CVE_RE.sub('CVE', query)
-
-    # Replace multiple spaces with a single space
-    query = EXTRA_WHITESPACE_RE.sub(' ', query).strip()
-
-    # Check for potential SQL injection patterns
-    if SQL_INJECTION_RE.search(query):
-        return None
-
-    return query
 
 # Route for the root endpoint ("/")
 @app.route("/")
@@ -197,86 +138,8 @@ def user_agreement():
 def rss_feed():
     # Fetch recent KEV Entries from the MongoDB collection
     recent_entries = collection.find().sort("dateAdded", -1).limit(12)
-
-    # Create the root element for the RSS feed
-    rss = Element("rss", version="2.0")
-    channel = SubElement(rss, "channel")
-    SubElement(channel, "title").text = "Recent KEV Entries"
-    SubElement(channel, "link").text = "https://kevin.gtfkd.com/rss"
-    SubElement(channel, "description").text = "Latest entries from the KEVin API for Known Exploited Vulnerabilities."
-
-    # Add Atom link for self-reference
-    atom_link = SubElement(channel, "{http://www.w3.org/2005/Atom}link")
-    atom_link.set("rel", "self")
-    atom_link.set("href", "https://kevin.gtfkd.com/rss")
-
-    for entry in recent_entries:
-        item = SubElement(channel, "item")
-        SubElement(item, "title").text = f"{entry.get('cveID', 'No CVE ID')} - {entry.get('vulnerabilityName', 'No Title')}"
-        
-        # Handle dateAdded correctly
-        date_added = entry.get("dateAdded")
-        if isinstance(date_added, str):
-            from dateutil import parser
-            date_added = parser.parse(date_added)
-        
-        SubElement(item, "pubDate").text = date_added.strftime("%a, %d %b %Y %H:%M:%S +0000") if date_added else "No Date"
-        
-        # Add a link element for the NVD URL
-        nvd_url = f"https://nvd.nist.gov/vuln/detail/{entry.get('cveID', 'No CVE ID')}"
-        SubElement(item, "link").text = nvd_url
-        
-        guid = SubElement(item, "guid")
-        guid.text = nvd_url
-        guid.set("isPermaLink", "true")
-
-        # Add description with additional information
-        description_html = f"""
-        <p><strong>CVE:</strong> {html.escape(entry.get('cveID', 'No CVE ID'))}</p>
-        <p><strong>Description:</strong> {html.escape(entry.get('shortDescription', 'No Description'))}</p>
-        <ul>
-            <li><strong>Known Ransomware Usage:</strong> {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}</li>
-            <li><strong>GitHub POCs:</strong>
-                <ul>
-        """
-
-        # Handle lists for GitHub POCs
-        github_pocs = entry.get("githubPocs", [])
-        if isinstance(github_pocs, list) and github_pocs:
-            for poc in github_pocs:
-                description_html += f"<li>{poc}</li>"
-        else:
-            description_html += "<li>No GitHub POCs</li>"
-
-        description_html += "</ul></li></ul>"
-
-        open_threat_data = entry.get("openThreatData", [])
-        if isinstance(open_threat_data, list) and open_threat_data:
-            adversaries = []
-            affected_industries = []
-            for data in open_threat_data:
-                adversaries.extend(data.get("adversaries", []))
-                affected_industries.extend(data.get("affectedIndustries", []))
-            
-            adversaries_str = ", ".join(set(adversaries)) if adversaries else "No Adversaries"
-            affected_industries_str = ", ".join(set(affected_industries)) if affected_industries else "No Affected Industries"
-            open_threat_data_html = f"""
-            <ul>
-                <li><strong>Adversaries:</strong> {adversaries_str}</li>
-                <li><strong>Affected Industries:</strong> {affected_industries_str}</li>
-            </ul>
-            """
-        else:
-            open_threat_data_html = "<p>No Open Threat Data</p>"
-
-        # Combine all parts into the description
-        full_description = description_html + open_threat_data_html
-        SubElement(item, "description").text = full_description
-
-        # Add category
-        SubElement(item, "category").text = "Vulnerability"
-
-    rss_feed = ElementTree.tostring(rss, encoding='utf-8', method='xml')
+    # Create an RSS feed from the recent KEV Entries
+    rss_feed = create_rss_feed(recent_entries)
     return Response(rss_feed, mimetype='application/rss+xml')
 
 
