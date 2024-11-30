@@ -41,10 +41,12 @@ def sanitize_query(query):
     str or None: The sanitized query string if valid, or None if the input is invalid or suspicious.
     """
     # Check if the query is None and length check
-    if query is None or len(query) > 50:
+    if query is None:
         return None
 
     query = str(query).strip()
+    if len(query) > 50:
+         return None
     
     # URL decode iteratively
     for _ in range(5):  # Limit the number of iterations to prevent infinite loops
