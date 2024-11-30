@@ -2,13 +2,12 @@
 
 from utils.database import all_vulns_collection, collection
 from utils.cache_manager import cache_manager, kev_cache as cache
+from utils.sanitizer import sanitize_query
 from functools import partial
 from flask_restful import Resource
 from flask import request, Response, json, jsonify, make_response
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta
-import re
-from urllib.parse import unquote
 import math
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
 from gevent import spawn, joinall
@@ -25,63 +24,8 @@ class BaseResource(Resource):
     def make_json_response(self, data, status=200):
         return make_response(jsonify(data), status)
 
-# Pre-compile regex patterns for sanitizing input to improve performance
-ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
-EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
-CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
-SQL_INJECTION_RE = re.compile(r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|EXEC|;|--)\b)", re.IGNORECASE)
-
-# Function for sanitizing input
-def sanitize_query(query):
-    """
-    Sanitize the input query to prevent malicious input.
-
-    This function checks and sanitizes the provided query string by:
-    - Returning None if the query is None or exceeds a specified length.
-    - Iteratively URL decoding the query to handle encoded characters.
-    - Whitelisting allowed characters (alphanumeric, spaces, hyphens, underscores).
-    - Normalizing occurrences of "cve" to "CVE".
-    - Replacing multiple spaces with a single space.
-    - Checking for potential SQL injection patterns and returning None for suspicious queries.
-
-    Parameters:
-    query (str): The input query string to sanitize.
-
-    Returns:
-    str or None: The sanitized query string if valid, or None if the input is invalid or suspicious.
-    """
-    # Check if the query is None
-    if query is None:
-        return None
-
-    query = str(query).strip()
-    # Length check
-    if len(query) > 50:
-        return None
-    
-    # URL decode iteratively
-    while '%' in query:
-        decoded_query = unquote(query)
-        if decoded_query == query:
-            break
-        query = decoded_query
-    
-    # allowed characters (alphanumeric, spaces, hyphens)
-    query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub('', query)
-
-    # Normalize occurrences of "cve" to "CVE"
-    query = CVE_RE.sub('CVE', query)
-
-    # Replace multiple spaces with a single space
-    query = EXTRA_WHITESPACE_RE.sub(' ', query).strip()
-
-    # Check for potential SQL injection patterns
-    if SQL_INJECTION_RE.search(query):
-        return None
-
-    return query
-
-# Resource for fectching mitre and nvd data from the cveland via CVE-ID, which is the _id field in the cveland collection
+# Resource for fectching mitre and nvd data from the cveland via CVE-ID,
+# which is the _id field in the cveland collection
 class cveLandResource(BaseResource):
     def get(self, cve_id):
         """
