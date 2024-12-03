@@ -359,27 +359,30 @@ def openai_vuln():
 # Define the resource routes for the KEVin API.
 # Each tuple contains a resource class and its corresponding URL endpoint.
 resources = [
-    (VulnerabilityResource, "/kev/<string:cve_id>"),  # Route for accessing a specific vulnerability by CVE ID
-    (AllKevVulnerabilitiesResource, "/kev"),  # Route for accessing all vulnerabilities
-    (RecentKevVulnerabilitiesResource, "/kev/recent"),  # Route for accessing recently added vulnerabilities
-    (cveLandResource, "/vuln/<string:cve_id>"),  # Route for accessing CVE data from cve.land by CVE ID
-    (cveNVDResource, "/vuln/<string:cve_id>/nvd"),  # Route for accessing CVE data from NVD by CVE ID
-    (cveMitreResource, "/vuln/<string:cve_id>/mitre"),  # Route for accessing CVE data from MITRE by CVE ID
-    (RecentVulnerabilitiesByDaysResource, "/vuln/published", {"query_type": "published"}),  # Route for accessing recently published vulnerabilities
-    (RecentVulnerabilitiesByDaysResource, "/vuln/modified", {"query_type": "modified"}),  # Route for accessing recently modified vulnerabilities
+    (VulnerabilityResource, "/kev/<string:cve_id>", "kev_vulnerability_resource"),  # Unique endpoint for /kev
+    (VulnerabilityResource, "/api/kev/<string:cve_id>", "api_kev_vulnerability_resource"),  # Unique endpoint for /api/kev
+    (AllKevVulnerabilitiesResource, "/kev", "all_kevs_resource"),  # Unique endpoint for /kev
+    (AllKevVulnerabilitiesResource, "/api/kev", "api_all_kevs_resource"),  # Unique endpoint for /api/kev
+    (RecentKevVulnerabilitiesResource, "/kev/recent", "recent_kevs_resource"),  # Unique endpoint for /kev/recent
+    (RecentKevVulnerabilitiesResource, "/api/kev/recent", "api_recent_kevs_resource"),  # Unique endpoint for /api/kev/recent
+    (cveLandResource, "/vuln/<string:cve_id>", "cve_land_resource"),  # Unique endpoint for /vuln
+    (cveLandResource, "/api/vuln/<string:cve_id>", "api_cve_land_resource"),  # Unique endpoint for /api/vuln
+    (cveNVDResource, "/vuln/<string:cve_id>/nvd", "cve_nvd_resource"),  # Unique endpoint for /vuln/nvd
+    (cveNVDResource, "/api/vuln/<string:cve_id>/nvd", "api_cve_nvd_resource"),  # Unique endpoint for /api/vuln/nvd
+    (cveMitreResource, "/vuln/<string:cve_id>/mitre", "cve_mitre_resource"),  # Unique endpoint for /vuln/mitre
+    (cveMitreResource, "/api/vuln/<string:cve_id>/mitre", "api_cve_mitre_resource"),  # Unique endpoint for /api/vuln/mitre
+    (RecentVulnerabilitiesByDaysResource, "/vuln/published", {"query_type": "published"}, "recent_published_vulns_resource"),  # Unique endpoint for /vuln/published
+    (RecentVulnerabilitiesByDaysResource, "/api/vuln/published", {"query_type": "published"}, "api_recent_published_vulns_resource"),  # Unique endpoint for /api/vuln/published
+    (RecentVulnerabilitiesByDaysResource, "/vuln/modified", {"query_type": "modified"}, "recent_modified_vulns_resource"),  # Unique endpoint for /vuln/modified
+    (RecentVulnerabilitiesByDaysResource, "/api/vuln/modified", {"query_type": "modified"}, "api_recent_modified_vulns_resource"),  # Unique endpoint for /api/vuln/modified
 ]
 
-# Iterate over the defined resources to add them to the API
+# Add resources to the API with unique endpoints
 for resource in resources:
-    # Check if the resource tuple contains only the resource class and URL endpoint
-    if len(resource) == 2:
-        # Add the resource to the API without any additional parameters
-        api.add_resource(resource[0], resource[1], strict_slashes=False)
-    else:
-        # Add the resource to the API with additional parameters (query_type)
-        # Use resource_class_kwargs to pass query_type for this resource
-        api.add_resource(resource[0], resource[1], strict_slashes=False, resource_class_kwargs=resource[2], endpoint=f"{resource[0].__name__}_{resource[1].replace('/', '_')}")
-
+    if len(resource) == 3:  # Case for resources with just the resource class, URL, and endpoint
+        api.add_resource(resource[0], resource[1], strict_slashes=False, endpoint=resource[2])
+    elif len(resource) == 4:  # Case for resources with additional kwargs (e.g., query_type)
+        api.add_resource(resource[0], resource[1], strict_slashes=False, resource_class_kwargs=resource[2], endpoint=resource[3])
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
