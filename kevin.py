@@ -2,6 +2,7 @@
 
 # Standard Library Imports
 import os
+import logging
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
@@ -28,6 +29,8 @@ from schema.api import (
 )
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability
 
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 # Create a cache key for openai routes based on the query parameters
 def cve_cache_key(*args, **kwargs):
@@ -379,10 +382,13 @@ resources = [
 
 # Add resources to the API with unique endpoints
 for resource in resources:
-    if len(resource) == 3:  # Case for resources with just the resource class, URL, and endpoint
-        api.add_resource(resource[0], resource[1], strict_slashes=False, endpoint=resource[2])
-    elif len(resource) == 4:  # Case for resources with additional kwargs (e.g., query_type)
-        api.add_resource(resource[0], resource[1], strict_slashes=False, resource_class_kwargs=resource[2], endpoint=resource[3])
+    try:
+        if len(resource) == 3:  # Case for resources with just the resource class, URL, and endpoint
+            api.add_resource(resource[0], resource[1], strict_slashes=False, endpoint=resource[2])
+        elif len(resource) == 4:  # Case for resources with additional kwargs (e.g., query_type)
+            api.add_resource(resource[0], resource[1], strict_slashes=False, resource_class_kwargs=resource[2], endpoint=resource[3])
+    except ValueError:
+        logger.error(f"Error adding resource: {resource}")
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
