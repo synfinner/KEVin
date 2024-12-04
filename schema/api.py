@@ -417,7 +417,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Prepare the cache key with parameters
         cache_key = f"recent_days_{days}_{page}_{per_page}"
         # Use the cache key for caching the response
-        @cache(timeout=1800, key_prefix=cache_key)
+        @cache(timeout=600, key_prefix=cache_key) # Cache for 10 minutes, 4/12/2024 - Synfinner.
         def fetch_vulnerabilities():
             cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
             field = (
