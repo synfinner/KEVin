@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from urllib.parse import unquote
 
 # Pre-compile regex patterns for sanitizing input to improve performance
@@ -57,6 +58,9 @@ def sanitize_query(query):
             query = decoded_query
         except Exception:  # Catch any exceptions that may occur during URL decoding
             return None  # Return None if decoding fails
+    
+    # Normalize Unicode to prevent homoglyph attacks
+    query = unicodedata.normalize('NFKC', query)
     
     # allowed characters (alphanumeric, spaces, hyphens)
     query = ALNUM_SPACE_HYPHEN_UNDERSCORE_RE.sub('', query)
