@@ -120,7 +120,7 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
                 from flask import request
                 query_params = str(sorted(request.args.items()))
                 # Use a hash to avoid adding unsafe chars directly
-                query_hash = hashlib.md5(query_params.encode('utf-8')).hexdigest()
+                query_hash = hashlib.sha256(query_params.encode('utf-8')).hexdigest()
                 cache_key += f"_query_{query_hash}"
 
             # Sanitize the generated cache key
