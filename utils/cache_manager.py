@@ -110,11 +110,20 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             # Skip self (args[0]) if this is a method
             method_args = args[1:] if args and hasattr(args[0], '__class__') else args
 
-            cache_key = f"{key_prefix}{func.__name__}"
+            key_parts = [key_prefix, func.__name__]
             if method_args:
-                cache_key += "_" + "_".join([str(a) for a in method_args])
+                args_hash = hashlib.md5(
+                    json.dumps(method_args, sort_keys=True, cls=jencoder).encode('utf-8')
+                ).hexdigest()
+                key_parts.append(f"args_{args_hash}")
+
             if kwargs:
-                cache_key += "_" + "_".join([f"{k}_{v}" for k,v in kwargs.items()])
+                kwargs_hash = hashlib.md5(
+                    json.dumps(dict(sorted(kwargs.items())), cls=jencoder).encode('utf-8')
+                ).hexdigest()
+                key_parts.append(f"kwargs_{kwargs_hash}")
+
+            cache_key = "_".join(key_parts)
 
             if query_string:
                 from flask import request
