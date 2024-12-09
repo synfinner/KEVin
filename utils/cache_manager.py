@@ -107,14 +107,21 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            cache_key = f"{key_prefix}{func.__name__}_"
-            cache_key += "_".join([str(arg) for arg in args]) + "_"
-            cache_key += "_".join([f"{k}_{v}" for k, v in kwargs.items()])
+            # Skip self (args[0]) if this is a method
+            method_args = args[1:] if args and hasattr(args[0], '__class__') else args
+
+            cache_key = f"{key_prefix}{func.__name__}"
+            if method_args:
+                cache_key += "_" + "_".join([str(a) for a in method_args])
+            if kwargs:
+                cache_key += "_" + "_".join([f"{k}_{v}" for k,v in kwargs.items()])
 
             if query_string:
                 from flask import request
                 query_params = str(sorted(request.args.items()))
-                cache_key += f"_query_{hash(query_params)}"
+                # Use a hash to avoid adding unsafe chars directly
+                query_hash = hashlib.md5(query_params.encode('utf-8')).hexdigest()
+                cache_key += f"_query_{query_hash}"
 
             # Sanitize the generated cache key
             cache_key = sanitize_cache_key(cache_key)
@@ -126,6 +133,5 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             result = func(*args, **kwargs)
             cache_manager.set(cache_key, result, timeout=timeout)
             return result
-
         return wrapper
     return decorator
