@@ -112,13 +112,13 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
 
             key_parts = [key_prefix, func.__name__]
             if method_args:
-                args_hash = hashlib.md5(
+                args_hash = hashlib.sha256(
                     json.dumps(method_args, sort_keys=True, cls=jencoder).encode('utf-8')
                 ).hexdigest()
                 key_parts.append(f"args_{args_hash}")
 
             if kwargs:
-                kwargs_hash = hashlib.md5(
+                kwargs_hash = hashlib.sha256(
                     json.dumps(dict(sorted(kwargs.items())), cls=jencoder).encode('utf-8')
                 ).hexdigest()
                 key_parts.append(f"kwargs_{kwargs_hash}")
