@@ -34,5 +34,5 @@ terminaltables==3.1.10
 urllib3==2.2.3
 Werkzeug==3.1.1
 zope.event==5.0
-zope.interface==7.0.3
+zope.interface==7.2
 zstandard==0.23.0
