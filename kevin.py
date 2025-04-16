@@ -52,12 +52,27 @@ compress = Compress(app)
 @app.route("/")
 @cache(timeout=1800) # 30 minute cache for the main route.
 def index():
+    """
+    Serve the main page.
+
+    This function renders the 'index.html' template and returns the
+    rendered HTML content. The response is cached for 30 minutes to
+    reduce server load.
+    """
     return render_template("index.html")
 
 @app.route('/robots.txt')
 # 1 hour cache.
 @cache(timeout=3600)
 def serve_robots_txt():
+    """
+    Serve the 'robots.txt' file for web crawlers.
+
+    This function reads the 'robots.txt' file from the static folder,
+    creates an HTTP response with the file's content, and sets the
+    appropriate 'Content-Type' header for plain text. The response
+    is cached for 1 hour to reduce server load.
+    """
     file_path = os.path.join(app.static_folder, 'robots.txt')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -67,6 +82,14 @@ def serve_robots_txt():
 
 @app.route('/graph')
 def serve_graph_html():
+    """
+    Serve the graph visualization HTML page.
+
+    This function reads the 'cve_visualization.html' file from the static folder,
+    creates an HTTP response with the file's content, and sets the appropriate
+    'Content-Type' header for plain text. The response is not cached to ensure
+    that the latest data is always served.
+    """
     file_path = os.path.join(app.static_folder, 'cve_visualization.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -76,6 +99,14 @@ def serve_graph_html():
 
 @app.route('/viz')
 def serve_viz_html():
+    """
+    Serve the visualization HTML page.
+
+    This function reads the 'viz.html' file from the static folder,
+    creates an HTTP response with the file's content, and sets the
+    appropriate 'Content-Type' header for plain text. The response is
+    not cached to ensure that the latest data is always served.
+    """
     file_path = os.path.join(app.static_folder, 'viz.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -87,6 +118,14 @@ def serve_viz_html():
 # 1 hour cache.
 @cache(timeout=3600)
 def serve_privacy_policy():
+    """
+    Serve the privacy policy HTML page.
+
+    This function reads the 'privacy.html' file from the static folder,
+    creates an HTTP response with the file's content, and sets the
+    appropriate 'Content-Type' header for plain text. The response is
+    cached for 1 hour to reduce server load.
+    """
     file_path = os.path.join(app.static_folder, 'privacy.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -98,6 +137,14 @@ def serve_privacy_policy():
 # 2 hour cache.
 @cache(timeout=7200)
 def serve_about_page():
+    """
+    Serve the about page.
+
+    This function reads the 'about.html' file from the static folder,
+    creates an HTTP response with the file's content, and sets the
+    appropriate 'Content-Type' header for plain text. The response is
+    cached for 2 hours to reduce server load.
+    """
     file_path = os.path.join(app.static_folder, 'about.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -109,6 +156,14 @@ def serve_about_page():
 # 2 hour cache.
 @cache(timeout=7200)
 def serve_donate():
+    """
+    Serve the donate page.
+
+    This function reads the 'donate.html' file from the static folder,
+    creates an HTTP response with the file's content, and sets the
+    appropriate 'Content-Type' header for plain text. The response is
+    cached for 2 hours to reduce server load.
+    """
     file_path = os.path.join(app.static_folder, 'donate.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -120,12 +175,26 @@ def serve_donate():
 @app.route("/examples")
 @cache(timeout=3600) # 1 hour cache for the example page.
 def example():
+    """
+    Serve the example page.
+
+    This function renders the 'example.html' template and returns the
+    rendered HTML content. The response is cached for 1 hour to reduce
+    server load.
+    """
     return render_template("example.html")
 
 @app.route("/agreement")
 @cache(timeout=7200)  # 2 hour cache for the agreement page.
 def user_agreement():
-    # Read the file content into memory
+    """
+    Serve the user agreement page.
+
+    This function reads the 'agreement.html' file from the static folder,
+    creates an HTTP response with the file's content, and sets the
+    appropriate 'Content-Type' header for plain text. The response is
+    cached for 2 hours to reduce server load.
+    """
     file_path = os.path.join(app.static_folder, 'agreement.html')
     with open(file_path, 'r') as file:
         file_content = file.read()
@@ -138,6 +207,14 @@ def user_agreement():
 @app.route("/rss")
 @cache(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
 def rss_feed():
+    """
+    Serve the RSS feed.
+
+    This function fetches the 12 most recent KEV entries from the MongoDB
+    collection, creates an RSS feed from the entries, and returns the RSS
+    feed as a response. The response is cached for 30 minutes to reduce
+    server load.
+    """
     # Fetch recent KEV Entries from the MongoDB collection
     recent_entries = collection.find().sort("dateAdded", -1).limit(12)
     # Create an RSS feed from the recent KEV Entries
@@ -269,11 +346,23 @@ def vulnerability_report(cve_id):
 # Define error handler for 500s
 @app.errorhandler(500)
 def internal_server_error(e):
+    """
+    Handle internal server errors.
+
+    This function returns a JSON response with an error message and a 500 status
+    code. The response is not cached.
+    """
     return jsonify({"error": "Internal server error! Synfinner probably broke something."}), 500
 
 # Define error handler for 404s
 @app.errorhandler(404)
 def not_found(e):
+    """
+    Handle 404 errors.
+
+    This function returns a JSON response with an error message and a 404 status
+    code. The response is not cached.
+    """
     return jsonify({"error": "You found nothing! Congratulations!"}), 404
 
 # OpenAI route for a specific vulnerability with cve parameter
