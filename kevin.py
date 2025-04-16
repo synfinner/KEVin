@@ -6,7 +6,7 @@ import logging
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, send_from_directory, make_response, Response
+from flask import Flask, jsonify, render_template, request, make_response, Response
 from flask_restful import Api
 from flask_compress import Compress
 from gevent.pywsgi import WSGIServer
@@ -75,7 +75,6 @@ def serve_graph_html():
     return response
 
 @app.route('/viz')
-#@cache.cached(timeout=3600)
 def serve_viz_html():
     file_path = os.path.join(app.static_folder, 'viz.html')
     with open(file_path, 'r') as file:
@@ -96,8 +95,8 @@ def serve_privacy_policy():
     return response
 
 @app.route('/about')
-# 1 hour cache.
-@cache(timeout=3600)
+# 2 hour cache.
+@cache(timeout=7200)
 def serve_about_page():
     file_path = os.path.join(app.static_folder, 'about.html')
     with open(file_path, 'r') as file:
@@ -107,8 +106,8 @@ def serve_about_page():
     return response
 
 @app.route('/donate')
-# 1 hour cache.
-@cache(timeout=3600)
+# 2 hour cache.
+@cache(timeout=7200)
 def serve_donate():
     file_path = os.path.join(app.static_folder, 'donate.html')
     with open(file_path, 'r') as file:
@@ -124,7 +123,7 @@ def example():
     return render_template("example.html")
 
 @app.route("/agreement")
-@cache(timeout=3600)  # 1 hour cache for the agreement page.
+@cache(timeout=7200)  # 2 hour cache for the agreement page.
 def user_agreement():
     # Read the file content into memory
     file_path = os.path.join(app.static_folder, 'agreement.html')
