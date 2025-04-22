@@ -10,7 +10,7 @@ dnspython==2.7.0
 Flask==3.0.3
 Flask-Compress==1.17
 Flask-RESTful==0.3.10
-gevent==24.11.1
+gevent==25.4.1
 greenlet==3.1.1
 gunicorn==23.0.0
 idna==3.7
