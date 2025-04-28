@@ -31,7 +31,7 @@ requests==2.32.3
 setuptools==75.3.0
 six==1.16.0
 terminaltables==3.1.10
-urllib3==2.2.3
+urllib3==2.4.0
 Werkzeug==3.1.1
 zope.event==5.0
 zope.interface==7.0.3
