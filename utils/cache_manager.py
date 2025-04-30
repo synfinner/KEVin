@@ -1,11 +1,12 @@
-import json
 import functools
 import hashlib
-from bson import ObjectId
 from flask import Response
 from utils.cache_config import redis_client
-from utils.jencoder import jencoder  # Import your custom encoder
 import re
+import orjson
+from bson import ObjectId
+from datetime import datetime
+
 
 # Regular expression for safe cache keys
 SAFE_KEY_RE = re.compile(r"^[\w\-:]+$")
@@ -16,21 +17,31 @@ def sanitize_cache_key(key):
         raise ValueError(f"Unsafe cache key: {key}")
     return key
 
+def make_orjson_safe(obj):
+    """
+    Recursively convert ObjectId and datetime to str/isoformat for orjson compatibility.
+    """
+    if isinstance(obj, dict):
+        return {k: make_orjson_safe(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_orjson_safe(i) for i in obj]
+    elif isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj
+
 def generate_checksum(data):
     """
-    Generate a checksum for the given data.
-    Use consistent serialization with jencoder to avoid checksum mismatches.
-    Ensure strings are encoded as bytes before hashing.
+    Generate a checksum for the given data using orjson for serialization.
+    Ensures consistent, canonical output for hashing.
     """
-    if isinstance(data, (dict, list)):
-        serialized = json.dumps(data, sort_keys=True, cls=jencoder)  # Serialize with jencoder
-        data_bytes = serialized.encode("utf-8")  # Convert serialized string to bytes
-    elif isinstance(data, str):
-        data_bytes = data.encode("utf-8")  # Convert string to bytes
+    if isinstance(data, str):
+        data_bytes = data.encode("utf-8")
     else:
-        serialized = json.dumps(data, cls=jencoder)  # Serialize other types
-        data_bytes = serialized.encode("utf-8")  # Convert serialized string to bytes
-    
+        safe_data = make_orjson_safe(data)
+        data_bytes = orjson.dumps(safe_data, option=orjson.OPT_SORT_KEYS)
     return hashlib.sha256(data_bytes).hexdigest()
 
 class CacheManager:
@@ -42,23 +53,14 @@ class CacheManager:
         cached_data = self.redis_client.get(key)
         if not cached_data:
             return None
-
         try:
-            cached_data = json.loads(cached_data)  # Deserialize cached data
+            # orjson.loads expects bytes
+            cached_data = orjson.loads(cached_data)
             value = cached_data.get("value")
             stored_checksum = cached_data.get("checksum")
-
-            # Generate checksum for validation
             generated_checksum = generate_checksum(value)
-
-            # Debugging: Print both checksums
-            #print(f"Stored checksum: {stored_checksum}")
-            #print(f"Generated checksum: {generated_checksum}")
-
             if generated_checksum != stored_checksum:
                 raise ValueError("Cache integrity check failed.")
-
-            # Reconstruct Flask.Response if applicable
             if isinstance(value, dict) and "response_data" in value:
                 return Response(
                     response=value["response_data"],
@@ -66,7 +68,9 @@ class CacheManager:
                     headers=value["headers"],
                 )
             return value
-        except Exception:
+        except Exception as e:
+            # Optionally, log the error for debugging
+            # print(f"Cache get error: {e}")
             return None
 
     def set(self, key, value, timeout=120):
@@ -78,22 +82,15 @@ class CacheManager:
                     "status": value.status_code,
                     "headers": dict(value.headers),
                 }
-
-            # Serialize value and generate checksum
-            serialized_value = json.dumps(value, cls=jencoder)  # Serialize with jencoder
-            checksum = generate_checksum(value)  # Generate checksum using the same serialized value
+            checksum = generate_checksum(value)
             key = sanitize_cache_key(key)
-
-            # Debugging: Print checksum and serialized value
-            #print(f"Generated checksum during set: {checksum}")
-            #print(f"Serialized value during set: {serialized_value}")
-
-            # Store value and checksum together
-            self.redis_client.setex(
-                key, timeout, json.dumps({"value": value, "checksum": checksum}, cls=jencoder)
-            )
-        except Exception:
-            # continue without caching if an error occurs
+            cache_payload = {"value": value, "checksum": checksum}
+            safe_payload = make_orjson_safe(cache_payload)
+            serialized_payload = orjson.dumps(safe_payload, option=orjson.OPT_SORT_KEYS)
+            self.redis_client.setex(key, timeout, serialized_payload)
+        except Exception as e:
+            # Optionally, log the error for debugging
+            # print(f"Cache set error: {e}")
             pass
 
     def delete(self, key):
@@ -113,13 +110,13 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             key_parts = [key_prefix, func.__name__]
             if method_args:
                 args_hash = hashlib.sha256(
-                    json.dumps(method_args, sort_keys=True, cls=jencoder).encode('utf-8')
+                    orjson.dumps(make_orjson_safe(method_args), option=orjson.OPT_SORT_KEYS)
                 ).hexdigest()
                 key_parts.append(f"args_{args_hash}")
 
             if kwargs:
                 kwargs_hash = hashlib.sha256(
-                    json.dumps(dict(sorted(kwargs.items())), cls=jencoder).encode('utf-8')
+                    orjson.dumps(make_orjson_safe(dict(sorted(kwargs.items()))), option=orjson.OPT_SORT_KEYS)
                 ).hexdigest()
                 key_parts.append(f"kwargs_{kwargs_hash}")
 
@@ -128,17 +125,21 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             if query_string:
                 from flask import request
                 query_params = str(sorted(request.args.items()))
-                # Use a hash to avoid adding unsafe chars directly
                 query_hash = hashlib.sha256(query_params.encode('utf-8')).hexdigest()
                 cache_key += f"_query_{query_hash}"
 
             # Sanitize the generated cache key
             cache_key = sanitize_cache_key(cache_key)
 
+            # Debug: print cache key
+            # print(f"[kev_cache] Cache key: {cache_key}")
+
             cached_data = cache_manager.get(cache_key)
             if cached_data:
+                # print(f"[kev_cache] Cache hit for key: {cache_key}")
                 return cached_data
 
+            # print(f"[kev_cache] Cache miss for key: {cache_key}")
             result = func(*args, **kwargs)
             cache_manager.set(cache_key, result, timeout=timeout)
             return result
