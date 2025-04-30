@@ -9,12 +9,20 @@ from flask import request, Response, json, jsonify, make_response
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta
 import math
+import os
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
 from gevent import spawn, joinall
+from gevent.pool import Pool
 
 # Load env using python-dotenv
 from dotenv import load_dotenv
 load_dotenv()
+
+# Configure the maximum number of concurrent greenlets
+# This helps prevent server overload from too many concurrent operations
+MAX_GREENLETS = int(os.environ.get('MAX_GREENLETS', 100))
+# Create a global pool to limit concurrent greenlets
+GREENLET_POOL = Pool(MAX_GREENLETS)
 
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
@@ -52,10 +60,10 @@ class cveLandResource(BaseResource):
         # Use partial to create a new function that includes the cve_id in the key prefix
         cache_key_func = partial(self.make_cache_key, cve_id=sanitized_cve_id)
 
-        # Spawn greenlets for concurrent execution
+        # Spawn greenlets for concurrent execution using the pool
         greenlets = []
-        greenlets.append(spawn(self.get_cached_data, cache_key_func))
-        greenlets.append(spawn(self.query_vulnerability, sanitized_cve_id))
+        greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, cache_key_func))
+        greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
 
         # Wait for all greenlets to complete
         joinall(greenlets)
@@ -183,10 +191,10 @@ class VulnerabilityResource(BaseResource):
         elif references_arg != "pocs" and references_arg is not None:
             return self.handle_error("Invalid value for references parameter", 400)
         else:
-            # Spawn greenlets for cache check and database query
+            # Spawn greenlets for cache check and database query using the pool
             greenlets = []
-            greenlets.append(spawn(self.get_cached_data, sanitized_cve_id))
-            greenlets.append(spawn(self.query_vulnerability, sanitized_cve_id))
+            greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, sanitized_cve_id))
+            greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
 
             # Wait for all greenlets to complete
             joinall(greenlets)
@@ -326,17 +334,30 @@ class RecentKevVulnerabilitiesResource(BaseResource):
 
         # Fetch all vulnerabilities from the collection
         cursor = collection.find()
-        greenlets = []
+        vulnerability_list = list(cursor)  # Convert cursor to list to prevent cursor timeout
+        
+        # To prevent overwhelming the server, process in batches if needed
+        batch_size = min(len(vulnerability_list), MAX_GREENLETS)
+        all_results = []
 
-        # Spawn greenlets for processing each vulnerability
-        for vulnerability in cursor:
-            greenlets.append(spawn(self.process_vulnerability, vulnerability, cutoff_date))
+        # Process vulnerabilities in batches if there are too many
+        for i in range(0, len(vulnerability_list), batch_size):
+            batch = vulnerability_list[i:i+batch_size]
+            greenlets = []
+                
+            # Create new batch of greenlets
+            for vulnerability in batch:
+                greenlets.append(GREENLET_POOL.spawn(self.process_vulnerability, vulnerability, cutoff_date))
+                
+            # Wait for current batch to complete
+            joinall(greenlets)
 
-        # Wait for all greenlets to complete
-        joinall(greenlets)
-
-        # Collect results from greenlets
-        recent_vulnerabilities = [g.value for g in greenlets if g.value]
+            # Collect results from greenlets and add to all_results
+            batch_results = [g.value for g in greenlets if g.value]
+            all_results.extend(batch_results)
+            
+        # Use all collected results
+        recent_vulnerabilities = all_results
 
         # Return the JSON response with the serialized data
         return self.make_json_response(recent_vulnerabilities)
@@ -403,13 +424,13 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             else "namespaces.nvd_nist_gov.cve.lastModified"
         )
 
-        # Create a list of greenlets for concurrent execution
+        # Create a list of greenlets for concurrent execution using the pool
         greenlets = []
 
         # Spawn a greenlet for counting total entries
-        greenlets.append(spawn(self.count_total_entries, field, cutoff_date))
+        greenlets.append(GREENLET_POOL.spawn(self.count_total_entries, field, cutoff_date))
         # Spawn a greenlet for querying the database with the correct parameters
-        greenlets.append(spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
+        greenlets.append(GREENLET_POOL.spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
 
         # Wait for all greenlets to complete
         joinall(greenlets)
