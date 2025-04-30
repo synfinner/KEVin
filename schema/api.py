@@ -9,12 +9,21 @@ from flask import request, Response, json, jsonify, make_response
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta
 import math
+import os
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
 from gevent import spawn, joinall
+from gevent.pool import Pool
 
 # Load env using python-dotenv
 from dotenv import load_dotenv
 load_dotenv()
+
+# Configure the maximum number of concurrent greenlets
+# This helps prevent server overload from too many concurrent operations
+# Ensure we have at least 1 greenlet to prevent crashes
+MAX_GREENLETS = max(1, int(os.environ.get('MAX_GREENLETS', 100)))
+# Create a global pool to limit concurrent greenlets
+GREENLET_POOL = Pool(MAX_GREENLETS)
 
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
@@ -52,10 +61,10 @@ class cveLandResource(BaseResource):
         # Use partial to create a new function that includes the cve_id in the key prefix
         cache_key_func = partial(self.make_cache_key, cve_id=sanitized_cve_id)
 
-        # Spawn greenlets for concurrent execution
+        # Spawn greenlets for concurrent execution using the pool
         greenlets = []
-        greenlets.append(spawn(self.get_cached_data, cache_key_func))
-        greenlets.append(spawn(self.query_vulnerability, sanitized_cve_id))
+        greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, cache_key_func))
+        greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
 
         # Wait for all greenlets to complete
         joinall(greenlets)
@@ -183,10 +192,10 @@ class VulnerabilityResource(BaseResource):
         elif references_arg != "pocs" and references_arg is not None:
             return self.handle_error("Invalid value for references parameter", 400)
         else:
-            # Spawn greenlets for cache check and database query
+            # Spawn greenlets for cache check and database query using the pool
             greenlets = []
-            greenlets.append(spawn(self.get_cached_data, sanitized_cve_id))
-            greenlets.append(spawn(self.query_vulnerability, sanitized_cve_id))
+            greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, sanitized_cve_id))
+            greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
 
             # Wait for all greenlets to complete
             joinall(greenlets)
@@ -323,20 +332,51 @@ class RecentKevVulnerabilitiesResource(BaseResource):
             return self.handle_error("Exceeded the maximum limit of 100 days", 400)
         # Calculate the cutoff date based on the 'days' parameter
         cutoff_date = datetime.utcnow() - timedelta(days=days)
-
-        # Fetch all vulnerabilities from the collection
-        cursor = collection.find()
-        greenlets = []
-
-        # Spawn greenlets for processing each vulnerability
+        cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
+        
+        # Use server-side filtering - only fetch vulnerabilities with dateAdded >= cutoff_date
+        cursor = collection.find({"dateAdded": {"$gte": cutoff_date_str}})
+        
+        # Process results in batches to avoid memory issues
+        # Ensure batch_size is at least 1 to prevent crashes
+        batch_size = max(1, MAX_GREENLETS)
+        all_results = []
+        
+        # Process the cursor in batches
+        batch = []
         for vulnerability in cursor:
-            greenlets.append(spawn(self.process_vulnerability, vulnerability, cutoff_date))
-
-        # Wait for all greenlets to complete
-        joinall(greenlets)
-
-        # Collect results from greenlets
-        recent_vulnerabilities = [g.value for g in greenlets if g.value]
+            batch.append(vulnerability)
+            
+            # Process batch when it reaches the maximum size
+            if len(batch) >= batch_size:
+                greenlets = []
+                
+                # Process each vulnerability in the batch
+                for vuln in batch:
+                    greenlets.append(GREENLET_POOL.spawn(serialize_vulnerability, vuln))
+                
+                # Wait for all greenlets to complete
+                joinall(greenlets)
+                
+                # Collect results and extend the list
+                batch_results = [g.value for g in greenlets if g.value]
+                all_results.extend(batch_results)
+                
+                # Clear batch for next iteration
+                batch = []
+        
+        # Process any remaining items in the final batch
+        if batch:
+            greenlets = []
+            for vuln in batch:
+                greenlets.append(GREENLET_POOL.spawn(serialize_vulnerability, vuln))
+            
+            joinall(greenlets)
+            batch_results = [g.value for g in greenlets if g.value]
+            all_results.extend(batch_results)
+        
+        # Use all collected results
+        recent_vulnerabilities = all_results
 
         # Return the JSON response with the serialized data
         return self.make_json_response(recent_vulnerabilities)
@@ -403,13 +443,13 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             else "namespaces.nvd_nist_gov.cve.lastModified"
         )
 
-        # Create a list of greenlets for concurrent execution
+        # Create a list of greenlets for concurrent execution using the pool
         greenlets = []
 
         # Spawn a greenlet for counting total entries
-        greenlets.append(spawn(self.count_total_entries, field, cutoff_date))
+        greenlets.append(GREENLET_POOL.spawn(self.count_total_entries, field, cutoff_date))
         # Spawn a greenlet for querying the database with the correct parameters
-        greenlets.append(spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
+        greenlets.append(GREENLET_POOL.spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
 
         # Wait for all greenlets to complete
         joinall(greenlets)
