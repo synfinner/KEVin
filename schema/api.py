@@ -214,6 +214,7 @@ class VulnerabilityResource(BaseResource):
 
 # This class defines a resource for fetching all KEV vulnerabilities
 class AllKevVulnerabilitiesResource(BaseResource):
+    @cache(timeout=120, key_prefix="all_kev_vulns", query_string=True)
     def get(self):
         """
         Retrieve all KEV vulnerabilities with optional filtering, sorting, and pagination.
@@ -263,30 +264,9 @@ class AllKevVulnerabilitiesResource(BaseResource):
             sort_order = DESCENDING if order_param == "desc" else ASCENDING
             sort_criteria = [(sort_param, sort_order)]
 
-            # Check if actor_query is present to decide on caching
-            if actor_query:
-                # No caching if actor is specified
-                total_vulns = self.count_documents(query)
-                vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
-            else:
-                # Use caching when actor is not specified
-                if actor_query:
-                    # No caching if actor is specified
-                    total_vulns = self.count_documents(query)
-                    vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
-                else:
-                    # Use caching when actor is not specified
-                    cache_key = f"all_listing_page_{page}_per_page_{per_page}_sort_{sort_param}_order_{order_param}_search_{search_query}_filter_{filter_ransomware}"
-                    
-                    @cache(timeout=120, key_prefix=cache_key)
-                    def cached_fetch():
-                        total_vulns = self.count_documents(query)
-                        vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
-                        return total_vulns, vulnerabilities
-
-                    total_vulns, vulnerabilities = cached_fetch()
-
-                total_vulns, vulnerabilities = cached_fetch()
+            # Always run the query - caching is now handled at the method level
+            total_vulns = self.count_documents(query)
+            vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
 
             total_pages = math.ceil(total_vulns / per_page)
 
@@ -378,6 +358,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
     def __init__(self, query_type=None):
         self.query_type = query_type  # Store the query_type for use in the get method
 
+    @cache(timeout=600, key_prefix="recent_days_vulnerabilities", query_string=True) # Cache for 10 minutes
     def get(self):
         """
         Retrieve recent vulnerabilities based on the specified number of days.
@@ -414,54 +395,48 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         if int(days) > 14:  # Limit the 'days' parameter to a maximum of 14
             return self.handle_error("Exceeded the maximum limit of 14 days", 400)
 
-        # Prepare the cache key with parameters
-        cache_key = f"recent_days_{days}_{page}_{per_page}"
-        # Use the cache key for caching the response
-        @cache(timeout=600, key_prefix=cache_key) # Cache for 10 minutes, 4/12/2024 - Synfinner.
-        def fetch_vulnerabilities():
-            cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
-            field = (
-                "namespaces.nvd_nist_gov.cve.published" 
-                if self.query_type == "published" 
-                else "namespaces.nvd_nist_gov.cve.lastModified"
-            )
+        # Process the request directly - caching is handled at the method level now
+        cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
+        field = (
+            "namespaces.nvd_nist_gov.cve.published" 
+            if self.query_type == "published" 
+            else "namespaces.nvd_nist_gov.cve.lastModified"
+        )
 
-            # Create a list of greenlets for concurrent execution
-            greenlets = []
+        # Create a list of greenlets for concurrent execution
+        greenlets = []
 
-            # Spawn a greenlet for counting total entries
-            greenlets.append(spawn(self.count_total_entries, field, cutoff_date))
-            # Spawn a greenlet for querying the database with the correct parameters
-            greenlets.append(spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
+        # Spawn a greenlet for counting total entries
+        greenlets.append(spawn(self.count_total_entries, field, cutoff_date))
+        # Spawn a greenlet for querying the database with the correct parameters
+        greenlets.append(spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
 
-            # Wait for all greenlets to complete
-            joinall(greenlets)
+        # Wait for all greenlets to complete
+        joinall(greenlets)
 
-            # Get the total entries and recent vulnerabilities list
-            total_entries = greenlets[0].value
-            recent_vulnerabilities_list = greenlets[1].value
+        # Get the total entries and recent vulnerabilities list
+        total_entries = greenlets[0].value
+        recent_vulnerabilities_list = greenlets[1].value
 
-            # Check if recent_vulnerabilities_list is None
-            if recent_vulnerabilities_list is None:
-                return self.handle_error("No vulnerabilities found", 404)
+        # Check if recent_vulnerabilities_list is None
+        if recent_vulnerabilities_list is None:
+            return self.handle_error("No vulnerabilities found", 404)
 
-            # Calculate total pages
-            total_pages = math.ceil(total_entries / per_page)
+        # Calculate total pages
+        total_pages = math.ceil(total_entries / per_page)
 
-            # Prepare the pagination info and response data
-            pagination_info = {
-                "currentPage": page,
-                "totalPages": total_pages,
-                "totalEntries": total_entries,
-                "resultsPerPage": per_page
-            }
-            response_data = {
-                "pagination": pagination_info,
-                "vulnerabilities": self.add_id_first(recent_vulnerabilities_list)  # Ensure _id is first
-            }
-            return self.make_json_response(response_data)
-
-        return fetch_vulnerabilities()
+        # Prepare the pagination info and response data
+        pagination_info = {
+            "currentPage": page,
+            "totalPages": total_pages,
+            "totalEntries": total_entries,
+            "resultsPerPage": per_page
+        }
+        response_data = {
+            "pagination": pagination_info,
+            "vulnerabilities": self.add_id_first(recent_vulnerabilities_list)  # Ensure _id is first
+        }
+        return self.make_json_response(response_data)
  
     def count_total_entries(self, field, cutoff_date):
         """Count the total number of vulnerabilities matching the query."""
