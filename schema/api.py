@@ -20,7 +20,8 @@ load_dotenv()
 
 # Configure the maximum number of concurrent greenlets
 # This helps prevent server overload from too many concurrent operations
-MAX_GREENLETS = int(os.environ.get('MAX_GREENLETS', 100))
+# Ensure we have at least 1 greenlet to prevent crashes
+MAX_GREENLETS = max(1, int(os.environ.get('MAX_GREENLETS', 100)))
 # Create a global pool to limit concurrent greenlets
 GREENLET_POOL = Pool(MAX_GREENLETS)
 
@@ -331,31 +332,49 @@ class RecentKevVulnerabilitiesResource(BaseResource):
             return self.handle_error("Exceeded the maximum limit of 100 days", 400)
         # Calculate the cutoff date based on the 'days' parameter
         cutoff_date = datetime.utcnow() - timedelta(days=days)
-
-        # Fetch all vulnerabilities from the collection
-        cursor = collection.find()
-        vulnerability_list = list(cursor)  # Convert cursor to list to prevent cursor timeout
+        cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
         
-        # To prevent overwhelming the server, process in batches if needed
-        batch_size = min(len(vulnerability_list), MAX_GREENLETS)
+        # Use server-side filtering - only fetch vulnerabilities with dateAdded >= cutoff_date
+        cursor = collection.find({"dateAdded": {"$gte": cutoff_date_str}})
+        
+        # Process results in batches to avoid memory issues
+        # Ensure batch_size is at least 1 to prevent crashes
+        batch_size = max(1, MAX_GREENLETS)
         all_results = []
-
-        # Process vulnerabilities in batches if there are too many
-        for i in range(0, len(vulnerability_list), batch_size):
-            batch = vulnerability_list[i:i+batch_size]
+        
+        # Process the cursor in batches
+        batch = []
+        for vulnerability in cursor:
+            batch.append(vulnerability)
+            
+            # Process batch when it reaches the maximum size
+            if len(batch) >= batch_size:
+                greenlets = []
+                
+                # Process each vulnerability in the batch
+                for vuln in batch:
+                    greenlets.append(GREENLET_POOL.spawn(serialize_vulnerability, vuln))
+                
+                # Wait for all greenlets to complete
+                joinall(greenlets)
+                
+                # Collect results and extend the list
+                batch_results = [g.value for g in greenlets if g.value]
+                all_results.extend(batch_results)
+                
+                # Clear batch for next iteration
+                batch = []
+        
+        # Process any remaining items in the final batch
+        if batch:
             greenlets = []
-                
-            # Create new batch of greenlets
-            for vulnerability in batch:
-                greenlets.append(GREENLET_POOL.spawn(self.process_vulnerability, vulnerability, cutoff_date))
-                
-            # Wait for current batch to complete
+            for vuln in batch:
+                greenlets.append(GREENLET_POOL.spawn(serialize_vulnerability, vuln))
+            
             joinall(greenlets)
-
-            # Collect results from greenlets and add to all_results
             batch_results = [g.value for g in greenlets if g.value]
             all_results.extend(batch_results)
-            
+        
         # Use all collected results
         recent_vulnerabilities = all_results
 
