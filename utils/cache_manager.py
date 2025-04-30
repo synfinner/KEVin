@@ -3,6 +3,10 @@ import hashlib
 from flask import Response
 from utils.cache_config import redis_client
 import re
+import orjson
+from bson import ObjectId
+from datetime import datetime
+
 
 # Regular expression for safe cache keys
 SAFE_KEY_RE = re.compile(r"^[\w\-:]+$")
@@ -12,10 +16,6 @@ def sanitize_cache_key(key):
     if not SAFE_KEY_RE.match(key):
         raise ValueError(f"Unsafe cache key: {key}")
     return key
-
-import orjson
-from bson import ObjectId
-from datetime import datetime
 
 def make_orjson_safe(obj):
     """
@@ -104,7 +104,6 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            import orjson
             # Skip self (args[0]) if this is a method
             method_args = args[1:] if args and hasattr(args[0], '__class__') else args
 
