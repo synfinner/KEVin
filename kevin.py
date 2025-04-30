@@ -29,6 +29,9 @@ from schema.api import (
 )
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability
 
+# Load the flask_orjson extension
+from flask_orjson import OrjsonProvider
+
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
@@ -43,6 +46,10 @@ load_dotenv()
 
 # Initialize the Flask app and the Flask-RESTful API
 app = Flask(__name__)
+# Set the JSON provider to ORJSONProvider
+app.json_provider_class = OrjsonProvider
+# set app.json to the json_provider_class. This makes the app use ORJSONProvider for JSON serialization.
+app.json = app.json_provider_class(app)
 api = Api(app)
 
 # Enable GZIP compression for all routes
