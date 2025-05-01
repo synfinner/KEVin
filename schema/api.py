@@ -259,7 +259,11 @@ class AllKevVulnerabilitiesResource(BaseResource):
             filter_ransomware = sanitize_query(request.args.get("filter", ''))
             actor_query = sanitize_query(request.args.get("actor", ''))
 
-            query = {"$text": {"$search": search_query}} if search_query else {}
+            query = {}
+            if search_query:
+                search_term = search_query.strip()
+                # Only search in the vendorProject field
+                query["vendorProject"] = {"$regex": search_term, "$options": "i"}
             if filter_ransomware.lower() == 'ransomware':
                 query["knownRansomwareCampaignUse"] = "Known"
             if actor_query and actor_query.strip():  # Ensure actor_query is not empty or just whitespace
