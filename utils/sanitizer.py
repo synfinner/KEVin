@@ -41,13 +41,12 @@ def sanitize_query(query):
     Returns:
     str or None: The sanitized query string if valid, or None if the input is invalid or suspicious.
     """
-    # Check if the query is None and length check
+    # Check if the query is None
     if query is None:
         return None
 
+    # Convert the query to string and remove leading/trailing whitespace
     query = str(query).strip()
-    if len(query) > 50:
-        return None
     
     # URL decode iteratively
     for _ in range(5):  # Limit the number of iterations to prevent infinite loops
@@ -70,6 +69,10 @@ def sanitize_query(query):
 
     # Replace multiple spaces with a single space
     query = EXTRA_WHITESPACE_RE.sub(' ', query).strip()
+
+    # If the sanitized query exceeds the length limit, return None
+    if len(query) > 50:
+        return None
 
     # Check for potential SQL injection patterns
     if SQL_INJECTION_RE.search(query):
