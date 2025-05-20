@@ -4,6 +4,9 @@ FROM python:3.12-slim
 # Set environment variables to prevent Python from writing pyc files and buffering stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+# Dockerfile
+ENV FLASK_ENV=production
+ENV FLASK_DEBUG=0
 
 # Install necessary system dependencies
 RUN apt-get update && \

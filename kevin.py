@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+from gevent import spawn, joinall, monkey
+monkey.patch_all()
+
+
 # Standard Library Imports
 import os
 import logging
@@ -9,8 +13,6 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, make_response, Response
 from flask_restful import Api
 from flask_compress import Compress
-from gevent.pywsgi import WSGIServer
-from gevent import spawn, joinall
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
@@ -248,7 +250,7 @@ def get_metrics():
         return collection.count_documents({})
 
     def count_cves():
-        return all_vulns_collection.count_documents({})
+        return all_vulns_collection.estimated_document_count()
 
     # Spawn the greenlets
     kevs_greenlet = spawn(count_kevs)
@@ -487,6 +489,7 @@ for resource in resources:
 # Check if the script is being run directly
 if __name__ == "__main__":
     # Start the Flask application using the Gevent WSGI server
-    http_server = WSGIServer(('0.0.0.0', 5000), app)
+    #http_server = WSGIServer(('0.0.0.0', 5000), app)
     # Keep the server running indefinitely to handle incoming requests
-    http_server.serve_forever()
+    #http_server.serve_forever()
+    app.run(debug=False, host='0.0.0.0', port=5000, threaded=False)
