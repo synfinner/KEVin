@@ -6,6 +6,7 @@ from urllib.parse import unquote
 ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
 EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
 CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
+# SQL Injection patterns - optimized for performance and reduced false positives
 SQL_INJECTION_RE = re.compile(
     r"(\b("
     r"SELECT|"
@@ -18,48 +19,30 @@ SQL_INJECTION_RE = re.compile(
     r"TRUNCATE|"
     r"EXEC|"
     r"UNION|"
-    r"CONCAT|"
-    r"CHAR|"
-    r"SUBSTRING|"
-    r"SLEEP|"
-    r"BENCHMARK|"
-    r"WAITFOR|"
-    r"DELAY|"
-    r"INFORMATION_SCHEMA|"
-    r"LOAD_FILE|"
-    r"CAST|"
-    r"CONVERT|"
-    r"DECLARE|"
-    r"DBMS_|"
     r")\b)|("
-    r";\s*--|"
-    r";\s*#|"
-    r"\/\*.*?\*\/|"
-    r"--.*?$|"
-    r"#.*?$|"
-    r"'\s*OR\s*'\s*'\s*=|"
-    r"'\s*OR\s*[0-9]\s*=|"
-    r"'\s*OR\s*[a-zA-Z]\s*=|"
-    r"\\x[0-9a-fA-F]+|"
-    r"\s+AND\s+[0-9]\s*=|"
-    r"\s+OR\s+[0-9]\s*=|"
-    r"\s+AND\s+[a-zA-Z]\s*=|"
-    r"\s+OR\s+[a-zA-Z]\s*=|"
-    r"\s+IS\s+NULL|"
-    r"\s+IS\s+NOT\s+NULL|"
-    r"\s+LIKE\s+['\"][%_]|"
-    r"\s+IN\s*\(\s*['\"]|"
-    r"\bSEL\s*[\W_]+\s*ECT|"
-    r"\bUNI\s*[\W_]+\s*ON|"
-    r"\bEXE\s*[\W_]+\s*C|"
-    r"\bUPD\s*[\W_]+\s*ATE"
+    # Common dangerous SQL functions with word boundaries
+    r"\b(CONCAT|SLEEP|BENCHMARK|WAITFOR)\b|"
+    # Comment markers with limited scope
+    r";\s*--|;\s*#|"
+    r"\/\*[^\*]{0,50}\*\/|"
+    r"--[^\r\n]{0,50}|"
+    r"#[^\r\n]{0,50}|"
+    # Common attack patterns with bounded scope
+    r"'\s*OR\s*'\s*=\s*'|"
+    r"'\s*OR\s*1\s*=\s*1|"
+    r"'\s*OR\s*'1'\s*=\s*'1|"
+    # Split keywords - more precise patterns
+    r"\bSEL\s*[_\s]\s*ECT\b|"
+    r"\bUNI\s*[_\s]\s*ON\b|"
+    r"\bEXE\s*[_\s]\s*C\b"
     r")",
-    re.IGNORECASE | re.DOTALL
+    re.IGNORECASE
 )
 
-# NoSQL Injection patterns
+# NoSQL Injection patterns - optimized for performance and reduced false positives
 NOSQL_INJECTION_RE = re.compile(
     r"(\b("
+    # Common MongoDB operators - most frequently used in attacks
     r"\$where|"
     r"\$regex|"
     r"\$ne|"
@@ -74,62 +57,27 @@ NOSQL_INJECTION_RE = re.compile(
     r"\$not|"
     r"\$nor|"
     r"\$exists|"
-    r"\$elemMatch|"
-    r"\$push|"
-    r"\$pull|"
-    r"\$addToSet|"
-    r"\$pop|"
-    r"\$group|"
-    r"\$match|"
-    r"\$project|"
-    r"\$lookup|"
-    r"\$unwind|"
-    r"\$sort|"
-    r"\$limit|"
-    r"\$skip|"
-    r"\$count|"
-    r"\$sum|"
-    r"\$avg|"
-    r"\$max|"
-    r"\$min|"
-    r"\$expr|"
-    r"\$cond|"
-    r"\$ifNull|"
-    r"\$switch|"
-    r"\$map|"
-    r"\$reduce|"
-    r"\$filter|"
-    r"\{\s*\$|"
-    r"\$\s*:\s*"
+    r"\$elemMatch"
     r")\b)|("
-    r"\{\s*\$\w+\s*:\s*\{|"
-    r"\{\s*\$\w+\s*:\s*\[|"
-    r"\{\s*\$\w+\s*:\s*\/|"
-    r"\{\s*\$\w+\s*:\s*function|"
-    r"function\s*\(|"
-    r"eval\s*\(|"
-    r"new\s+Function|"
-    r"setTimeout|"
-    r"setInterval|"
-    r"\{\s*\$\w+\s*:\s*true|"
-    r"\{\s*\$\w+\s*:\s*false|"
-    r"\{\s*\$\w+\s*:\s*null|"
-    r"\{\s*\$\w+\s*:\s*undefined|"
-    r"\{\s*\$\w+\s*:\s*NaN|"
-    r"\{\s*\$\w+\s*:\s*Infinity|"
-    r"\{\s*\$\w+\s*:\s*-Infinity|"
-    r"\{\s*\$\w+\s*:\s*new\s+|"
-    r"\{\s*\$\w+\s*:\s*Math\.|"
-    r"\{\s*\$\w+\s*:\s*Date\.|"
-    r"\{\s*\$\w+\s*:\s*JSON\.|"
-    r"\{\s*\$\w+\s*:\s*Object\.|"
-    r"\{\s*\$\w+\s*:\s*Array\.|"
-    r"\{\s*\$\w+\s*:\s*String\.|"
-    r"\{\s*\$\w+\s*:\s*Number\.|"
-    r"\{\s*\$\w+\s*:\s*Boolean\.|"
-    r"\{\s*\$\w+\s*:\s*RegExp\."
+    # Additional MongoDB operators with specific context
+    r"\$\w+\s*:\s*\/|"
+    r"\$\w+\s*:\s*function\s*\(|"
+    # JavaScript injection patterns
+    r"function\s*\([^)]{0,30}\)\s*\{|"
+    r"eval\s*\([^)]{0,30}\)|"
+    r"new\s+Function\s*\(|"
+    r"setTimeout\s*\(|"
+    r"setInterval\s*\(|"
+    # Object injection with context
+    r"\{\s*\$\w+\s*:\s*\{[^}]{0,50}|"
+    r"\{\s*\$\w+\s*:\s*\[[^\]]{0,50}|"
+    # JavaScript execution contexts
+    r"\$\w+\s*:\s*Math\.|"
+    r"\$\w+\s*:\s*Date\.|"
+    r"\$\w+\s*:\s*JSON\.|"
+    r"\$\w+\s*:\s*Object\."
     r")",
-    re.IGNORECASE | re.DOTALL
+    re.IGNORECASE
 )
 
 # Function for sanitizing input
