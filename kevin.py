@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request, make_response, Response
 from flask_restful import Api
 from flask_compress import Compress
+from flask_cors import CORS
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
@@ -56,6 +57,9 @@ api = Api(app)
 
 # Enable GZIP compression for all routes
 compress = Compress(app)
+
+# Enable CORS for all routes
+CORS(app)
 
 # Route for the root endpoint ("/")
 @app.route("/")

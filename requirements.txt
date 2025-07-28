@@ -9,6 +9,7 @@ defusedxml==0.7.1
 dnspython==2.7.0
 Flask==3.0.3
 Flask-Compress==1.17
+flask-cors==6.0.1
 flask-orjson==2.0.0
 Flask-RESTful==0.3.10
 gevent==25.4.1
