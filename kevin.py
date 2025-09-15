@@ -10,7 +10,7 @@ import logging
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, make_response, Response
+from flask import Flask, jsonify, render_template, request, make_response, Response, send_from_directory
 from flask_restful import Api
 from flask_compress import Compress
 from flask_cors import CORS
@@ -37,6 +37,9 @@ from flask_orjson import OrjsonProvider
 
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
+
+# Timeout (seconds) for greenlet joins to avoid request hangs
+GREENLET_TIMEOUT = int(os.environ.get("GREENLET_TIMEOUT", "10"))
 
 # Create a cache key for openai routes based on the query parameters
 def cve_cache_key(*args, **kwargs):
@@ -86,12 +89,7 @@ def serve_robots_txt():
     appropriate 'Content-Type' header for plain text. The response
     is cached for 1 hour to reduce server load.
     """
-    file_path = os.path.join(app.static_folder, 'robots.txt')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/plain'
-    return response
+    return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
 
 @app.route('/graph')
 def serve_graph_html():
@@ -103,12 +101,7 @@ def serve_graph_html():
     'Content-Type' header for plain text. The response is not cached to ensure
     that the latest data is always served.
     """
-    file_path = os.path.join(app.static_folder, 'cve_visualization.html')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/html'
-    return response
+    return send_from_directory(app.static_folder, 'cve_visualization.html', mimetype='text/html')
 
 @app.route('/viz')
 def serve_viz_html():
@@ -120,12 +113,7 @@ def serve_viz_html():
     appropriate 'Content-Type' header for plain text. The response is
     not cached to ensure that the latest data is always served.
     """
-    file_path = os.path.join(app.static_folder, 'viz.html')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/html'
-    return response
+    return send_from_directory(app.static_folder, 'viz.html', mimetype='text/html')
 
 @app.route('/privacy-policy')
 # 1 hour cache.
@@ -139,12 +127,7 @@ def serve_privacy_policy():
     appropriate 'Content-Type' header for plain text. The response is
     cached for 1 hour to reduce server load.
     """
-    file_path = os.path.join(app.static_folder, 'privacy.html')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/html'
-    return response
+    return send_from_directory(app.static_folder, 'privacy.html', mimetype='text/html')
 
 @app.route('/about')
 # 2 hour cache.
@@ -158,12 +141,7 @@ def serve_about_page():
     appropriate 'Content-Type' header for plain text. The response is
     cached for 2 hours to reduce server load.
     """
-    file_path = os.path.join(app.static_folder, 'about.html')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/html'
-    return response
+    return send_from_directory(app.static_folder, 'about.html', mimetype='text/html')
 
 @app.route('/donate')
 # 2 hour cache.
@@ -177,12 +155,7 @@ def serve_donate():
     appropriate 'Content-Type' header for plain text. The response is
     cached for 2 hours to reduce server load.
     """
-    file_path = os.path.join(app.static_folder, 'donate.html')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/html'
-    return response
+    return send_from_directory(app.static_folder, 'donate.html', mimetype='text/html')
 
 # Route for example page ("/example")
 @app.route("/examples")
@@ -208,14 +181,7 @@ def user_agreement():
     appropriate 'Content-Type' header for plain text. The response is
     cached for 2 hours to reduce server load.
     """
-    file_path = os.path.join(app.static_folder, 'agreement.html')
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    
-    # Create a response object with the file content
-    response = make_response(file_content)
-    response.headers['Content-Type'] = 'text/html'
-    return response
+    return send_from_directory(app.static_folder, 'agreement.html', mimetype='text/html')
 
 @app.route("/rss")
 @cache(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
@@ -260,8 +226,19 @@ def get_metrics():
     kevs_greenlet = spawn(count_kevs)
     cves_greenlet = spawn(count_cves)
 
-    # Wait for the greenlets to finish
-    joinall([kevs_greenlet, cves_greenlet])
+    greenlets = [kevs_greenlet, cves_greenlet]
+    # Wait for the greenlets to finish with a timeout to prevent hangs
+    joinall(greenlets, timeout=GREENLET_TIMEOUT)
+
+    # If any greenlet is not ready, kill it and return a timeout response
+    if not all(g.ready() for g in greenlets):
+        for g in greenlets:
+            if not g.ready():
+                try:
+                    g.kill(block=False)
+                except Exception:
+                    pass
+        return jsonify({"error": "Backend timeout"}), 504
 
     # Get the results from the greenlets
     kevs_count = kevs_greenlet.value
@@ -309,8 +286,16 @@ def cve_exist():
 
     # Spawn the greenlet
     greenlet = spawn(fetch_vulnerability)
-    # Wait for the greenlet to finish
-    joinall([greenlet])
+    # Wait for the greenlet to finish with a timeout
+    joinall([greenlet], timeout=GREENLET_TIMEOUT)
+
+    # Handle timeout
+    if not greenlet.ready():
+        try:
+            greenlet.kill(block=False)
+        except Exception:
+            pass
+        return jsonify({"error": "Backend timeout"}), 504
 
     # Get the result from the greenlet
     vulnerability = greenlet.value

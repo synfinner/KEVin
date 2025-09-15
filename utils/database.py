@@ -22,20 +22,31 @@ def log_output():
         if message is None:  # Exit condition
             break
         print(message, flush=True)  # Print the message
-        log_queue.queue.clear()  # Clear the queue after printing
 
 # Start a logging thread
 logging_thread = threading.Thread(target=log_output, daemon=True)
 logging_thread.start()
 
 def create_client(uri):
-    # Create a new MongoClient object with snappy compression
-    return MongoClient(uri, maxPoolSize=50, minPoolSize=10, compressors='snappy', serverSelectionTimeoutMS=3000)
+    # Create a new MongoClient object with snappy compression and bounded timeouts
+    max_pool = int(os.getenv("MONGO_MAX_POOL_SIZE", 20))
+    min_pool = int(os.getenv("MONGO_MIN_POOL_SIZE", 0))
+    connect_timeout = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", 3000))
+    socket_timeout = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", 10000))
+    return MongoClient(
+        uri,
+        maxPoolSize=max_pool,
+        minPoolSize=min_pool,
+        compressors='snappy',
+        serverSelectionTimeoutMS=3000,
+        connectTimeoutMS=connect_timeout,
+        socketTimeoutMS=socket_timeout,
+    )
 
 def ensure_connection(client, uri, max_retries=3):
     for attempt in range(max_retries):
         if check_connection(client):
-            log_queue.queue.clear()  # Clear the queue on successful connection
+            # No direct manipulation of the internal queue; rely on consumer thread
             return client
         log_queue.put(f"Connection check failed, attempt {attempt + 1}...")  # Log retry attempt
         time.sleep(5)  # Wait before retrying
