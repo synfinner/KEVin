@@ -23,6 +23,8 @@ load_dotenv()
 # This helps prevent server overload from too many concurrent operations
 # Ensure we have at least 1 greenlet to prevent crashes
 MAX_GREENLETS = max(1, int(os.environ.get('MAX_GREENLETS', 100)))
+# Timeout (seconds) for joinall to avoid request hangs
+GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', 10)))
 # Create a global pool to limit concurrent greenlets
 GREENLET_POOL = Pool(MAX_GREENLETS)
 
@@ -67,14 +69,26 @@ class cveLandResource(BaseResource):
         greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, cache_key_func))
         greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
 
-        # Wait for all greenlets to complete
-        joinall(greenlets)
+        # Wait for all greenlets to complete with a timeout
+        joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-        cached_data = greenlets[0].value
-        vulnerability = greenlets[1].value
+        cached_data = greenlets[0].value if greenlets[0].ready() else None
+        vulnerability = greenlets[1].value if greenlets[1].ready() else None
 
+        # If cache has data, return immediately even if query timed out
         if cached_data:
             return self.make_json_response(cached_data)
+
+        # If neither result is ready, treat as timeout
+        if not greenlets[0].ready() or not greenlets[1].ready():
+            for g in greenlets:
+                if not g.ready():
+                    try:
+                        g.kill(block=False)
+                    except Exception:
+                        pass
+            return self.handle_error("Upstream timeout", 504)
+
         if not vulnerability:
             return self.handle_error("Vulnerability not found")
 
@@ -198,19 +212,25 @@ class VulnerabilityResource(BaseResource):
             greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, sanitized_cve_id))
             greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
 
-            # Wait for all greenlets to complete
-            joinall(greenlets)
+            # Wait for all greenlets to complete with a timeout
+            joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-            cached_data = greenlets[0].value
-            vulnerability = greenlets[1].value
+            cached_data = greenlets[0].value if greenlets[0].ready() else None
+            vulnerability = greenlets[1].value if greenlets[1].ready() else None
 
             if cached_data:
                 data = serialize_vulnerability(cached_data)
-            elif not vulnerability:
-                return self.handle_error("Vulnerability not found")
-            else:
+            elif vulnerability:
                 cache_manager.set(sanitized_cve_id, vulnerability)
                 data = serialize_vulnerability(vulnerability)
+            else:
+                for g in greenlets:
+                    if not g.ready():
+                        try:
+                            g.kill(block=False)
+                        except Exception:
+                            pass
+                return self.handle_error("Upstream timeout", 504)
 
         return self.make_json_response(data)
 
@@ -457,10 +477,22 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         # Spawn a greenlet for querying the database with the correct parameters
         greenlets.append(GREENLET_POOL.spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
 
-        # Wait for all greenlets to complete
-        joinall(greenlets)
+        # Wait for all greenlets to complete with a timeout
+        joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-        # Get the total entries and recent vulnerabilities list
+        # Get the total entries and recent vulnerabilities list if ready
+        total_entries_ready = greenlets[0].ready()
+        list_ready = greenlets[1].ready()
+
+        if not (total_entries_ready and list_ready):
+            for g in greenlets:
+                if not g.ready():
+                    try:
+                        g.kill(block=False)
+                    except Exception:
+                        pass
+            return self.handle_error("Upstream timeout", 504)
+
         total_entries = greenlets[0].value
         recent_vulnerabilities_list = greenlets[1].value
 

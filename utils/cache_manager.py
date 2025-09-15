@@ -77,10 +77,13 @@ class CacheManager:
         """Set data in the cache with a checksum for integrity."""
         try:
             if isinstance(value, Response):
+                # Persist only essential headers to reduce cache footprint
+                content_type = value.headers.get("Content-Type")
+                minimal_headers = {"Content-Type": content_type} if content_type else {}
                 value = {
                     "response_data": value.get_data(as_text=True),
                     "status": value.status_code,
-                    "headers": dict(value.headers),
+                    "headers": minimal_headers,
                 }
             checksum = generate_checksum(value)
             key = sanitize_cache_key(key)
