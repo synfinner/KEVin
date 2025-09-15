@@ -10,6 +10,11 @@
     <!-- Font Awesome for icons -->
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
+        /* Layout */
+        .navbar-brand {
+            font-weight: 700;
+        }
+
         body {
             font-family: 'Roboto', sans-serif;
             background: linear-gradient(to right, #f8f9fa, #e9ecef);
@@ -84,14 +89,15 @@
             font-size: 14px;
             pointer-events: none;
             color: #000;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 3px 6px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            /* Improve readability with a light stroke halo */
+            paint-order: stroke fill;
+            stroke: rgba(255, 255, 255, 0.85);
+            stroke-width: 3px;
         }
 
         body.bg-dark .label {
             color: #E0E0E0;
+            stroke: rgba(0, 0, 0, 0.85);
         }
 
         .info-box {
@@ -103,9 +109,10 @@
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
             padding: 20px;
             font-size: 14px;
-            pointer-events: none;
+            pointer-events: auto;
             opacity: 0;
             transition: opacity 0.3s;
+            z-index: 1001;
         }
 
         body.bg-dark .info-box {
@@ -198,6 +205,7 @@
             border: 1px solid #ccc;
             border-radius: 15px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
         }
 
         body.bg-dark .legend {
@@ -205,33 +213,136 @@
             border-color: #444;
             color: #E0E0E0;
         }
+
+        .status-bar {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .progress {
+            height: 10px;
+        }
+        .control-group {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn-icon {
+            padding: 6px 10px;
+        }
+        .floating-right {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: flex;
+            gap: 8px;
+            z-index: 1000;
+        }
     </style>
 </head>
 
 <body>
+    <!-- Top Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="/">KEVin</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item active"><a class="nav-link" href="/graph">Graph</a></li>
+                <li class="nav-item"><a class="nav-link" href="/viz">Viz</a></li>
+                <li class="nav-item"><a class="nav-link" href="/rss">RSS</a></li>
+                <li class="nav-item"><a class="nav-link" href="/about">About</a></li>
+            </ul>
+            <div class="form-inline my-2 my-lg-0">
+                <input id="globalSearch" class="form-control mr-sm-2" type="search" placeholder="Search CVE or Actor" aria-label="Search" style="width: 240px;">
+                <button id="globalSearchBtn" class="btn btn-outline-success my-2 my-sm-0" type="button"><i class="fas fa-search"></i></button>
+            </div>
+        </div>
+    </nav>
+
     <div class="container mt-5">
         <div class="header">
             <h1 class="display-4">CISA KEV CVE Graph by Threat Actors</h1>
             <p class="lead">Explore vulnerabilities and their associated threat actors.</p>
         </div>
         <div class="controls">
-            <button class="btn btn-primary" id="fetchData"><i class="fas fa-download"></i> Fetch Data</button>
-            <button class="btn btn-secondary" id="loadMoreData"><i class="fas fa-plus"></i> Load More Data</button>
-            <button class="btn btn-danger" id="resetView"><i class="fas fa-redo"></i> Reset View</button>
-            <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control d-inline"
-                style="width: 200px;">
-            <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i> Search</button>
-            <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel Search</button>
+            <div class="control-group">
+                <button class="btn btn-primary" id="fetchData"><i class="fas fa-download"></i> Fetch</button>
+                <button class="btn btn-secondary" id="loadMoreData"><i class="fas fa-plus"></i> More</button>
+                <button class="btn btn-info" id="loadAll"><i class="fas fa-list"></i> Load All</button>
+                <button class="btn btn-info" id="layoutToggle"><i class="fas fa-project-diagram"></i> Organic</button>
+                <button class="btn btn-danger" id="resetView"><i class="fas fa-redo"></i> Reset</button>
+                <div class="input-group" style="width: 220px;">
+                    <div class="input-group-prepend"><span class="input-group-text">per_page</span></div>
+                    <input type="number" id="perPage" class="form-control" min="1" max="100" value="25">
+                </div>
+            </div>
         </div>
         <div class="controls" style="text-align: center; margin-top: 10px;">
-            <div class="custom-control custom-switch" style="display: inline-block; margin-right: 10px;">
-                <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
-                <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
+            <div class="control-group">
+                <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
+                    <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
+                </div>
+                <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="filterActorsToggle">
+                    <label class="custom-control-label" for="filterActorsToggle">Filter Actors</label>
+                </div>
+                <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="labelsToggle" checked>
+                    <label class="custom-control-label" for="labelsToggle">Labels</label>
+                </div>
+                <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="sizeByDegreeToggle" checked>
+                    <label class="custom-control-label" for="sizeByDegreeToggle">Size by Degree</label>
+                </div>
+                <div class="custom-control custom-switch">
+                    <input type="checkbox" class="custom-control-input" id="focusModeToggle">
+                    <label class="custom-control-label" for="focusModeToggle">Focus Mode</label>
+                </div>
+                <div class="input-group" style="width: 280px;">
+                    <div class="input-group-prepend"><span class="input-group-text">Severity</span></div>
+                    <select id="severityFilter" class="form-control">
+                        <option value="all" selected>All</option>
+                        <option value="CRITICAL">Critical</option>
+                        <option value="HIGH">High</option>
+                        <option value="MEDIUM">Medium</option>
+                        <option value="LOW">Low</option>
+                        <option value="UNKNOWN">Unknown</option>
+                    </select>
+                </div>
+                <div class="input-group" style="width: 300px;">
+                    <div class="input-group-prepend"><span class="input-group-text">Min CVEs</span></div>
+                    <input type="range" id="minDegree" class="form-control" min="0" max="10" step="1" value="0" oninput="document.getElementById('minDegreeValue').textContent=this.value">
+                    <div class="input-group-append"><span class="input-group-text" id="minDegreeValue">0</span></div>
+                </div>
+                <div class="input-group" style="width: 260px;">
+                    <div class="input-group-prepend"><span class="input-group-text">Actor</span></div>
+                    <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control">
+                    <div class="input-group-append">
+                        <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i></button>
+                    </div>
+                </div>
+                <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel</button>
+                <button class="btn btn-outline-dark" id="exitFocus" style="display:none;">Exit Focus</button>
             </div>
-            <div class="custom-control custom-switch" style="display: inline-block;">
-                <input type="checkbox" class="custom-control-input" id="filterActorsToggle">
-                <label class="custom-control-label" for="filterActorsToggle">Filter Actors</label>
+        </div>
+
+        <div class="status-bar">
+            <div class="text-muted" id="statusText">Idle</div>
+            <div class="flex-grow-1">
+                <div class="progress" style="display:none;" id="progressContainer">
+                    <div id="loadProgress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+                </div>
             </div>
+            <div class="text-muted" id="countsText">Nodes: 0, Links: 0</div>
         </div>
         <div id="chart"></div>
         <div class="info-box" id="infoBox"></div>
@@ -242,22 +353,48 @@
         </div>
         <div class="legend" id="legend">
             <h5>Legend</h5>
-            <p><span style="color: #007bff;">●</span> CVE</p>
+            <p><span style="color: #2ca02c;">●</span> CVE Low</p>
+            <p><span style="color: #ffbf00;">●</span> CVE Medium</p>
+            <p><span style="color: #ff7f0e;">●</span> CVE High</p>
+            <p><span style="color: #d62728;">●</span> CVE Critical</p>
+            <p><span style="color: #6baed6;">●</span> CVE Unknown</p>
             <p><span style="color: #ff5733;">●</span> Actor</p>
+        </div>
+        <div class="floating-right">
+            <button class="btn btn-light btn-icon" id="zoomIn" title="Zoom In"><i class="fas fa-search-plus"></i></button>
+            <button class="btn btn-light btn-icon" id="zoomOut" title="Zoom Out"><i class="fas fa-search-minus"></i></button>
+            <button class="btn btn-light btn-icon" id="zoomFit" title="Fit to Screen"><i class="fas fa-compress-arrows-alt"></i></button>
+            <button class="btn btn-light btn-icon" id="exportSvg" title="Export SVG"><i class="fas fa-file-download"></i></button>
         </div>
     </div>
 
     <script>
         let simulation;
         let currentPage = 1;
+        let perPage = 25;
         let allNodes = [];
         let allLinks = [];
+        let nodeMap = new Map(); // id -> node
+        let linkSet = new Set(); // 'a|b' normalized id pairs
+        let adjacency = new Map(); // id -> Set(neighborIds)
         let abortController = null;
-        let searchedActor = ''; // Variable to store the searched actor
-        let filterActors = false; // Variable to track the filter state
+        let searchedActor = '';
+        let filterActors = false;
+        let labelsOn = true;
+        let sizeByDegree = true;
+        let organicMode = false; // layout style toggle
+        let severityFilter = 'all';
+        let minDegree = 0;
+        let focusMode = false;
+        let focusedNodeId = null;
+        let rootSvg, zoomBehavior, zoomGroup; // for zoom controls
+        let gLinks, gNodes, gLabels; // groups
+        let linkSel, nodeSel, labelSel; // selections
+        let tooltip, infoBox; // overlays
 
         document.getElementById('fetchData').addEventListener('click', function () {
             searchedActor = ''; // Clear searched actor when fetching general data
+            resetProgress();
             fetchData(currentPage);
         });
 
@@ -266,12 +403,31 @@
             fetchData(currentPage);
         });
 
+        document.getElementById('loadAll').addEventListener('click', function () {
+            searchedActor = '';
+            startLoadAll();
+        });
+
         document.getElementById('resetView').addEventListener('click', function () {
             d3.select("#chart").selectAll("*").remove();
             allNodes = [];
             allLinks = [];
+            nodeMap.clear();
+            linkSet.clear();
+            adjacency.clear();
             currentPage = 1;
             searchedActor = ''; // Clear searched actor on reset
+            minDegree = 0;
+            const minSlider = document.getElementById('minDegree');
+            const minLabel = document.getElementById('minDegreeValue');
+            if (minSlider) { minSlider.value = 0; }
+            if (minLabel) { minLabel.textContent = '0'; }
+            updateCounts();
+            setStatus('Reset. Ready.');
+            rootSvg = null; zoomBehavior = null; zoomGroup = null;
+            gLinks = gNodes = gLabels = null;
+            linkSel = nodeSel = labelSel = null;
+            tooltip = infoBox = null;
         });
 
         document.getElementById('searchByActor').addEventListener('click', function () {
@@ -282,6 +438,9 @@
 
         document.getElementById('cancelSearch').addEventListener('click', function () {
             cancelCurrentRequest(); // Cancel any ongoing request
+            document.getElementById('cancelSearch').style.display = 'none';
+            hideProgress();
+            setStatus('Canceled.');
         });
 
         document.getElementById('actorSearch').addEventListener('keypress', function (event) {
@@ -294,6 +453,79 @@
 
         document.getElementById('filterActorsToggle').addEventListener('change', function () {
             filterActors = this.checked;
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        document.getElementById('labelsToggle').addEventListener('change', function () {
+            labelsOn = this.checked;
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        document.getElementById('sizeByDegreeToggle').addEventListener('change', function () {
+            sizeByDegree = this.checked;
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        document.getElementById('severityFilter').addEventListener('change', function () {
+            severityFilter = this.value;
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        document.getElementById('perPage').addEventListener('change', function () {
+            const val = parseInt(this.value, 10);
+            perPage = Math.max(1, Math.min(100, isNaN(val) ? 25 : val));
+            this.value = perPage;
+        });
+
+        document.getElementById('minDegree').addEventListener('input', function(){
+            minDegree = parseInt(this.value, 10) || 0;
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        document.getElementById('focusModeToggle').addEventListener('change', function(){
+            focusMode = this.checked;
+            if (!focusMode) {
+                focusedNodeId = null;
+                document.getElementById('exitFocus').style.display = 'none';
+            }
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        document.getElementById('exitFocus').addEventListener('click', function(){
+            focusedNodeId = null;
+            document.getElementById('exitFocus').style.display = 'none';
+            visualizeData({ nodes: allNodes, links: allLinks });
+        });
+
+        // Navbar global search (CVE or Actor)
+        document.getElementById('globalSearchBtn').addEventListener('click', () => {
+            const q = document.getElementById('globalSearch').value.trim();
+            if (!q) return;
+            if (/^CVE-\d{4}-\d{4,}$/.test(q.toUpperCase())) {
+                // zoom to CVE label if present
+                focusOnNodeById(q.toUpperCase());
+            } else {
+                // treat as actor search
+                document.getElementById('actorSearch').value = q;
+                searchedActor = q.toLowerCase();
+                fetchDataByActor(searchedActor);
+            }
+        });
+
+        // Zoom controls
+        document.getElementById('zoomIn').addEventListener('click', () => zoomBy(1.2));
+        document.getElementById('zoomOut').addEventListener('click', () => zoomBy(1/1.2));
+        document.getElementById('zoomFit').addEventListener('click', () => fitToScreen());
+        document.getElementById('exportSvg').addEventListener('click', () => exportSVG());
+
+        // Layout toggle (Organic vs Structured)
+        document.getElementById('layoutToggle').addEventListener('click', function(){
+            organicMode = !organicMode;
+            const btn = document.getElementById('layoutToggle');
+            btn.classList.toggle('btn-success', organicMode);
+            btn.classList.toggle('btn-info', !organicMode);
+            btn.innerHTML = organicMode ? '<i class="fas fa-project-diagram"></i> Organic On' : '<i class="fas fa-project-diagram"></i> Organic';
+            setStatus(organicMode ? 'Organic layout' : 'Structured layout');
             visualizeData({ nodes: allNodes, links: allLinks });
         });
 
@@ -310,15 +542,16 @@
             abortController = new AbortController();
             const signal = abortController.signal;
 
-            fetch(`/kev?page=${page}&per_page=25`, { signal })
+            fetch(`/kev?page=${page}&per_page=${perPage}`, { signal })
                 .then(response => response.json())
                 .then(data => {
                     hideLoadingSpinner();
                     if (abortController.signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
-                    allNodes = allNodes.concat(formattedData.nodes);
-                    allLinks = allLinks.concat(formattedData.links);
+                    mergeGraph(formattedData.nodes, formattedData.links);
                     visualizeData({ nodes: allNodes, links: allLinks });
+                    updateCounts();
+                    setStatus(`Page ${data.page}/${data.total_pages || '?'} loaded.`);
                 })
                 .catch(error => {
                     hideLoadingSpinner();
@@ -326,6 +559,7 @@
                         console.log('Fetch request canceled');
                     } else {
                         console.error('Error fetching data:', error);
+                        setStatus('Error fetching data');
                     }
                 });
         }
@@ -336,18 +570,20 @@
             abortController = new AbortController();
             const signal = abortController.signal;
 
-            fetch(`/kev?actor=${actor}&page=${currentPage}&per_page=25`, { signal })
+            fetch(`/kev?actor=${actor}&page=${currentPage}&per_page=${perPage}`, { signal })
                 .then(response => response.json())
                 .then(data => {
                     hideLoadingSpinner();
                     if (abortController.signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
-                    allNodes = allNodes.concat(formattedData.nodes);
-                    allLinks = allLinks.concat(formattedData.links);
+                    mergeGraph(formattedData.nodes, formattedData.links);
                     visualizeData({ nodes: allNodes, links: allLinks });
 
                     // Show cancel button
                     document.getElementById('cancelSearch').style.display = 'inline-block';
+                    setStatus(`Loaded page ${data.page}/${data.total_pages} for actor: ${actor}`);
+                    showProgress();
+                    updateProgress(data.page, data.total_pages);
 
                     // Automatically load subsequent pages if total_pages > 1
                     if (data.total_pages > 1) {
@@ -360,6 +596,7 @@
                         console.log('Fetch request canceled');
                     } else {
                         console.error('Error fetching data:', error);
+                        setStatus('Error fetching actor data');
                     }
                 });
         }
@@ -374,27 +611,218 @@
                 abortController = new AbortController();
                 const signal = abortController.signal;
 
-                fetch(`/kev?actor=${actor}&page=${page}&per_page=25`, { signal })
+                fetch(`/kev?actor=${actor}&page=${page}&per_page=${perPage}`, { signal })
                     .then(response => response.json())
                     .then(data => {
                         if (abortController.signal.aborted) return; // Check if the request was aborted
                         const formattedData = formatData(data.vulnerabilities);
-                        allNodes = allNodes.concat(formattedData.nodes);
-                        allLinks = allLinks.concat(formattedData.links);
+                        mergeGraph(formattedData.nodes, formattedData.links);
                         visualizeData({ nodes: allNodes, links: allLinks });
+                        updateCounts();
+                        showProgress();
+                        updateProgress(page, totalPages);
                         page++;
-                        setTimeout(fetchPage, 2000); // Wait 1.5 seconds before fetching next page
+                        setTimeout(fetchPage, 1500); // 1.5s pause to avoid rate limits
                     })
                     .catch(error => {
                         if (error.name === 'AbortError') {
                             console.log('Fetch request canceled');
                         } else {
                             console.error('Error fetching data:', error);
+                            setStatus('Error while loading more pages');
                         }
                     });
             };
 
             fetchPage(); // Start fetching pages
+        }
+
+        function startLoadAll() {
+            showProgress();
+            cancelCurrentRequest();
+            abortController = new AbortController();
+            const signal = abortController.signal;
+            // First call to get total pages
+            fetch(`/kev?page=1&per_page=${perPage}`, { signal })
+                .then(r => r.json())
+                .then(first => {
+                    const formatted = formatData(first.vulnerabilities);
+                    mergeGraph(formatted.nodes, formatted.links);
+                    visualizeData({ nodes: allNodes, links: allLinks });
+                    updateCounts();
+                    const totalPages = first.total_pages;
+                    updateProgress(1, totalPages);
+                    setStatus(`Loading all pages: 1/${totalPages}`);
+                    // Sequentially fetch remaining pages
+                    let p = 2;
+                    const loop = () => {
+                        if (p > totalPages) {
+                            setStatus('All pages loaded.');
+                            hideProgress();
+                            fitToScreen();
+                            return;
+                        }
+                        cancelCurrentRequest();
+                        abortController = new AbortController();
+                        const sig = abortController.signal;
+                        fetch(`/kev?page=${p}&per_page=${perPage}`, { signal: sig })
+                            .then(r => r.json())
+                            .then(data => {
+                                const f = formatData(data.vulnerabilities);
+                                mergeGraph(f.nodes, f.links);
+                                visualizeData({ nodes: allNodes, links: allLinks });
+                                updateCounts();
+                                updateProgress(p, totalPages);
+                                setStatus(`Loading all pages: ${p}/${totalPages}`);
+                                p++;
+                                setTimeout(loop, 1500); // 1.5s pause to avoid rate limits
+                            })
+                            .catch(err => {
+                                if (err.name !== 'AbortError') {
+                                    console.error(err);
+                                    setStatus('Error during Load All');
+                                }
+                            });
+                    };
+                    loop();
+                })
+                .catch(err => {
+                    if (err.name !== 'AbortError') {
+                        console.error(err);
+                        setStatus('Error starting Load All');
+                    }
+                });
+        }
+
+        // Helpers to parse and normalize actor names that may be comma-separated
+        function normalizeActorName(name) {
+            if (!name && name !== 0) return null;
+            let s = ('' + name).trim();
+            // strip quotes and collapse spaces
+            s = s.replace(/^['"\s]+|['"\s]+$/g, '').replace(/\s+/g, ' ');
+            return s.length ? s : null;
+        }
+
+        // Actor exclusions: easily extendable lists
+        const ACTOR_EXACT_EXCLUDE = [
+            'vulnerability advisory',
+            'n/a',
+            'unknown',
+            'malware advisory',
+            'Threat',
+            'Informational',
+            'Threat Analysis',
+            'a few critical',
+            'Kaseya VSA',
+            'Informational',
+
+        ];
+        const ACTOR_CONTAINS_EXCLUDE = [
+            'brian sabey',
+            'threat intel report',
+            'IOC-'
+        ];
+
+        function shouldExcludeActor(name) {
+            if (name == null) return true;
+            const val = ('' + name).trim().toLowerCase();
+            if (!val) return true;
+            if (ACTOR_EXACT_EXCLUDE.includes(val)) return true;
+            for (const sub of ACTOR_CONTAINS_EXCLUDE) {
+                if (val.includes(sub)) return true;
+            }
+            return false;
+        }
+
+        // Canonical mapping for vendor-specific actor names (lowercase keys)
+        // Extend this as needed to unify naming across data sources
+        const ACTOR_CANONICAL_MAP = {
+            'lazarus': 'Lazarus',
+            'lazarus group': 'Lazarus',
+            'clop': 'cl0p',
+            'XE':'XE Group',
+            'wannacry':'WannaCry'
+        };
+
+        function canonicalizeActorName(name) {
+            if (!name) return name;
+            const key = ('' + name).trim().toLowerCase();
+            return ACTOR_CANONICAL_MAP[key] || name;
+        }
+
+        function splitActorField(value) {
+            if (value == null) return [];
+            const raw = '' + value;
+            if (raw.includes(',')) {
+                return raw
+                    .split(',')
+                    .map(normalizeActorName)
+                    .filter(Boolean)
+                    .filter(n => !shouldExcludeActor(n))
+                    .map(canonicalizeActorName);
+            }
+            const single = normalizeActorName(raw);
+            return single && !shouldExcludeActor(single) ? [canonicalizeActorName(single)] : [];
+        }
+
+        function extractActors(threatData) {
+            const srcA = Array.isArray(threatData?.adversaries) ? threatData.adversaries : [];
+            const srcC = Array.isArray(threatData?.communityAdversaries) ? threatData.communityAdversaries : [];
+            const collected = [];
+            for (const entry of [...srcA, ...srcC]) {
+                if (Array.isArray(entry)) {
+                    for (const sub of entry) collected.push(...splitActorField(sub));
+                } else {
+                    collected.push(...splitActorField(entry));
+                }
+            }
+            // de-duplicate case-insensitively, preserve first casing
+            const seen = new Set();
+            const out = [];
+            for (const n of collected) {
+                const key = n.toLowerCase();
+                if (!seen.has(key)) { seen.add(key); out.push(n); }
+            }
+            return out;
+        }
+
+        const MAX_DESCRIPTION_LENGTH = 500;
+        const MAX_GITHUB_POC_LINKS = 10;
+
+        function compactCveDetails(vuln) {
+            if (!vuln) {
+                return {
+                    cveID: 'Unknown',
+                    vulnerabilityName: 'Unknown',
+                    severity: 'UNKNOWN',
+                    dateAdded: 'Unknown',
+                    shortDescription: '',
+                    githubPocs: []
+                };
+            }
+            const severity = (vuln.nvdData?.[0]?.baseSeverity || 'UNKNOWN').toUpperCase();
+            const pocSet = new Set();
+            const pocList = [];
+            if (Array.isArray(vuln.githubPocs)) {
+                for (const poc of vuln.githubPocs) {
+                    if (typeof poc !== 'string') continue;
+                    const trimmed = poc.trim();
+                    if (!trimmed || pocSet.has(trimmed)) continue;
+                    pocSet.add(trimmed);
+                    pocList.push(trimmed);
+                    if (pocList.length >= MAX_GITHUB_POC_LINKS) break;
+                }
+            }
+            const desc = vuln.shortDescription || '';
+            const truncatedDesc = desc.length > MAX_DESCRIPTION_LENGTH ? desc.slice(0, MAX_DESCRIPTION_LENGTH) + '...' : desc;
+            return {
+                cveID: vuln.cveID,
+                vulnerabilityName: vuln.vulnerabilityName || vuln.cveID || 'Unknown',
+                severity,
+                dateAdded: vuln.dateAdded || 'Unknown',
+                shortDescription: truncatedDesc,
+                githubPocs: pocList
+            };
         }
 
         function formatData(vulnerabilities) {
@@ -403,22 +831,22 @@
             const actorMap = new Map();
 
             vulnerabilities.forEach(vuln => {
-                const threatData = vuln.openThreatData[0];
-                const adversaries = threatData.adversaries || [];
-                const communityAdversaries = threatData.communityAdversaries || [];
-                const uniqueAdversaries = new Set([...adversaries, ...communityAdversaries]);
+                const threatData = vuln.openThreatData?.[0] || {};
+                const actors = extractActors(threatData);
 
-                if (uniqueAdversaries.size > 0) {
-                    const cveNode = { id: vuln.cveID, name: vuln.cveID, type: 'cve', details: vuln };
+                if (actors.length > 0) {
+                    const cveNode = { id: vuln.cveID, name: vuln.cveID, type: 'cve', details: compactCveDetails(vuln) };
                     nodes.push(cveNode);
 
-                    uniqueAdversaries.forEach(actor => {
+                    actors.forEach(actorName => {
+                        const actor = actorName; // already normalized
                         const actorNode = { id: actor, name: actor, type: 'actor' };
                         if (!actorMap.has(actor)) {
                             actorMap.set(actor, actorNode);
                             nodes.push(actorNode);
                         }
-                        links.push({ source: cveNode.id, target: actor });
+                        // Direction should show actor influencing CVE, so orient edges actor -> CVE
+                        links.push({ source: actor, target: cveNode.id });
                     });
                 }
             });
@@ -428,159 +856,170 @@
 
         // Update the visualizeData function to filter nodes based on the searched actor
         function visualizeData(data) {
-            d3.select("#chart").selectAll("*").remove();
-
+            // 1) Filter data
             let filteredNodes = data.nodes;
             let filteredLinks = data.links;
 
             // Filter nodes and links if the filter toggle is active
             if (filterActors && searchedActor) {
                 // Find all actor nodes that match the search term
-                const matchingActors = filteredNodes.filter(node =>
-                    node.type === 'actor' && node.name.toLowerCase().includes(searchedActor)
-                );
+                const matchingActors = filteredNodes.filter(node => node.type === 'actor' && node.name.toLowerCase().includes(searchedActor));
 
                 // Collect IDs of the matching actors
                 const matchingActorIds = new Set(matchingActors.map(actor => actor.id));
 
                 // Filter the nodes to include only CVEs and the matching actors
-                filteredNodes = filteredNodes.filter(node =>
-                    node.type === 'cve' || matchingActorIds.has(node.id)
-                );
+                filteredNodes = filteredNodes.filter(node => node.type === 'cve' || matchingActorIds.has(node.id));
 
                 // Create a set of matching node IDs
                 const matchingNodeIds = new Set(filteredNodes.map(node => node.id));
 
                 // Filter links to include only those that connect to the matching nodes
-                filteredLinks = filteredLinks.filter(link =>
-                    matchingNodeIds.has(link.source.id) && matchingNodeIds.has(link.target.id)
-                );
+                filteredLinks = filteredLinks.filter(link => {
+                    const s = getLinkEndId(link.source);
+                    const t = getLinkEndId(link.target);
+                    return matchingNodeIds.has(s) && matchingNodeIds.has(t);
+                });
+            }
+
+            // Filter by severity (for CVE nodes only)
+            if (severityFilter !== 'all') {
+                const keep = new Set(filteredNodes.filter(n => {
+                    if (n.type !== 'cve') return true;
+                    const sev = n.details?.severity || 'UNKNOWN';
+                    return sev === severityFilter;
+                }).map(n => n.id));
+                filteredNodes = filteredNodes.filter(n => keep.has(n.id));
+                filteredLinks = filteredLinks.filter(l => keep.has(getLinkEndId(l.source)) && keep.has(getLinkEndId(l.target)));
+            }
+
+            // Actor min-CVEs filter (actors only). Compute actor->num CVEs and filter.
+            const actorCveCounts = computeActorCveCounts(filteredNodes, filteredLinks);
+            // Dynamically adapt slider max to current dataset
+            updateMinCveSlider(actorCveCounts);
+            if (minDegree > 0) {
+                const actorsToKeep = new Set(filteredNodes
+                    .filter(n => n.type !== 'actor' || (actorCveCounts.get(n.id) || 0) >= minDegree)
+                    .map(n => n.id));
+                filteredNodes = filteredNodes.filter(n => actorsToKeep.has(n.id));
+                filteredLinks = filteredLinks.filter(l => actorsToKeep.has(getLinkEndId(l.source)) && actorsToKeep.has(getLinkEndId(l.target)));
+                // Drop isolated CVEs
+                const idsInLinks = new Set();
+                for (const l of filteredLinks) { idsInLinks.add(getLinkEndId(l.source)); idsInLinks.add(getLinkEndId(l.target)); }
+                filteredNodes = filteredNodes.filter(n => idsInLinks.has(n.id));
+            }
+
+            // Focus mode: keep only focused node + its neighbors
+            if (focusMode && focusedNodeId) {
+                const adjLocal = makeAdjacency(filteredNodes, filteredLinks);
+                const allowed = new Set([focusedNodeId]);
+                (adjLocal.get(focusedNodeId) || new Set()).forEach(id => allowed.add(id));
+                filteredNodes = filteredNodes.filter(n => allowed.has(n.id));
+                filteredLinks = filteredLinks.filter(l => allowed.has(getLinkEndId(l.source)) && allowed.has(getLinkEndId(l.target)));
             }
 
             const width = document.getElementById('chart').clientWidth;
             const height = document.getElementById('chart').clientHeight;
 
-            const svg = d3.select("#chart")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height)
-                .call(d3.zoom().on("zoom", (event) => {
-                    svg.attr("transform", event.transform);
-                }))
-                .append("g")
-                .attr("transform", "scale(0.8)");
+            ensureScene(width, height);
 
-            const tooltip = d3.select("#chart")
-                .append("div")
-                .attr("class", "tooltip");
-
-            const infoBox = d3.select("#infoBox");
-
-            // Randomly position nodes initially
+            // Seed positions for nodes that don't have positions yet
             filteredNodes.forEach(node => {
-                node.x = Math.random() * width;
-                node.y = Math.random() * height;
+                if (typeof node.x !== 'number' || typeof node.y !== 'number') {
+                    node.x = Math.random() * width;
+                    node.y = Math.random() * height;
+                }
             });
 
-            simulation = d3.forceSimulation(filteredNodes)
-                .force("link", d3.forceLink(filteredLinks).id(d => d.id).distance(120).strength(0.5)) // Adjusted link distance
-                .force("charge", d3.forceManyBody().strength(-80)) // Adjusted charge strength
-                .force("center", d3.forceCenter(width / 2, height / 2)) // Center force
-                .force("collision", d3.forceCollide().radius(25).strength(1)); // Adjusted collision radius
+            computeAdjacency(filteredNodes, filteredLinks);
+            const degreeMap = computeDegreeMap(filteredNodes, filteredLinks);
+            // 2) Data join (links)
+            const linkKey = d => {
+                const s = getLinkEndId(d.source);
+                const t = getLinkEndId(d.target);
+                return s < t ? `${s}|${t}` : `${t}|${s}`;
+            };
+            linkSel = gLinks.selectAll('line').data(filteredLinks, linkKey);
+            linkSel.exit().remove();
+            const linkEnter = linkSel.enter().append('line')
+                .attr('class', 'link')
+                .attr('stroke-width', 1.5)
+                .attr('stroke', '#999')
+                .attr('stroke-opacity', 0.6)
+                .attr('marker-end', 'url(#arrowhead)');
+            linkSel = linkEnter.merge(linkSel).attr('marker-end', 'url(#arrowhead)');
 
-            const link = svg.append("g")
-                .attr("class", "links")
-                .selectAll("line")
-                .data(filteredLinks)
-                .enter().append("line")
-                .attr("class", "link")
-                .attr("stroke-width", 2)
-                .attr("stroke", "#999")
-                .attr("stroke-opacity", 0.6);
-
-            const node = svg.append("g")
-                .attr("class", "nodes")
-                .selectAll("circle")
-                .data(filteredNodes)
-                .enter().append("circle")
-                .attr("class", "node")
-                .attr("r", 10) // Node radius
-                .attr("fill", d => d.type === 'actor' ? '#ff5733' : '#007bff')
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended))
-                .on("click", function (event, d) {
-                    if (d.type === 'cve') {
-                        infoBox.style("display", "block")
-                            .html(`
-                        <h5>${d.details.vulnerabilityName}</h5>
-                        <p><strong>CVE ID:</strong> ${d.details.cveID}</p>
-                        <p><strong>Severity:</strong> ${d.details.nvdData[0]?.baseSeverity || 'Unknown'}</p>
-                        <p><strong>Published Date:</strong> ${d.details.dateAdded}</p>
-                        <p><strong>Description:</strong> ${d.details.shortDescription || 'No description available'}</p>
-                        <div>
-                            <strong>GitHub PoCs:</strong>
-                            <div class="github-pocs">
-                                ${d.details.githubPocs && d.details.githubPocs.length > 0 ? d.details.githubPocs.map(poc => `<a href="${poc}" target="_blank">${poc}</a>`).join(', ') : 'No GitHub PoCs'}
-                            </div>
-                        </div>
-                    `)
-                            .style("left", (event.pageX + 10) + "px")
-                            .style("top", (event.pageY - 28) + "px")
-                            .transition().duration(200)
-                            .style("opacity", .9);
-                        event.stopPropagation();
+            // 3) Data join (nodes)
+            nodeSel = gNodes.selectAll('circle').data(filteredNodes, d => d.id);
+            nodeSel.exit().remove();
+            const nodeEnter = nodeSel.enter().append('circle')
+                .attr('class', 'node')
+                .attr('r', d => getRadius(d, degreeMap))
+                .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d))
+                .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended))
+                .on('mouseover', function(event, d){ mouseover(event, d); highlightNode(d, true); })
+                .on('mouseout', function(event, d){ mouseout(event, d); highlightNode(d, false); })
+                .on('click', function(event, d){
+                    if (focusMode) {
+                        focusedNodeId = d.id;
+                        document.getElementById('exitFocus').style.display = 'inline-block';
+                        setStatus(`Focused on ${d.name}`);
+                        visualizeData({ nodes: allNodes, links: allLinks });
+                        return;
                     }
+                    if (d.type === 'cve') showInfoBox(event, d);
                 });
+            nodeSel = nodeEnter.merge(nodeSel)
+                .attr('r', d => getRadius(d, degreeMap))
+                .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d));
 
-            const label = svg.append("g")
-                .attr("class", "labels")
-                .selectAll("text")
-                .data(filteredNodes)
-                .enter().append("text")
-                .attr("class", "label")
-                .attr("dx", 12)
-                .attr("dy", ".35em")
-                .text(d => d.name)
-                .style("fill", d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000')
-                .style("font-weight", d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? 'bold' : 'normal') // Bold matching actor case-insensitively
-                .style("font-size", d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? '20px' : '14px'); // Increase font size for matching actor
+            // 4) Data join (labels)
+            labelSel = gLabels.selectAll('text').data(filteredNodes, d => d.id);
+            labelSel.exit().remove();
+            const labelEnter = labelSel.enter().append('text')
+                .attr('class', 'label')
+                .attr('dx', 12)
+                .attr('dy', '.35em')
+                .text(d => d.name);
+            labelSel = labelEnter.merge(labelSel)
+                .style('fill', d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000')
+                .style('font-weight', d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? 'bold' : 'normal')
+                .style('font-size', d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? '20px' : '12px')
+                .style('display', labelsOn || focusMode ? null : 'none');
 
-            simulation
-                .nodes(filteredNodes)
-                .on("tick", () => {
-                    link
-                        .attr("x1", d => d.source.x)
-                        .attr("y1", d => d.source.y)
-                        .attr("x2", d => d.target.x)
-                        .attr("y2", d => d.target.y);
+            // 5) Init or update simulation
+            if (!simulation) {
+                simulation = d3.forceSimulation(filteredNodes)
+                    .force('link', d3.forceLink(filteredLinks).id(d => d.id).distance(d => getLinkDistance(d)).strength(0.6))
+                    .force('charge', d3.forceManyBody().strength(-120))
+                    .force('center', d3.forceCenter(width / 2, height / 2))
+                    .force('collision', d3.forceCollide().radius(d => getRadius(d, degreeMap) + 6).strength(1));
+            }
 
-                    node
-                        .attr("cx", d => d.x)
-                        .attr("cy", d => d.y);
+            simulation.nodes(filteredNodes).on('tick', () => {
+                linkSel
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
 
-                    label
-                        .attr("x", d => d.x)
-                        .attr("y", d => d.y);
-                });
+                nodeSel
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
 
-            simulation.force("link")
-                .links(filteredLinks);
+                labelSel
+                    .attr('x', d => d.x)
+                    .attr('y', d => d.y);
+            });
+            simulation.force('link').links(filteredLinks);
+            // apply layout-specific forces
+            applyForces(degreeMap, width, height);
 
             d3.select("body").on("click", function (event) {
                 const isOutside = !event.target.closest("#chart") && !event.target.closest(".info-box");
                 if (isOutside) {
-                    tooltip.transition()
-                        .duration(500)
-                        .style("opacity", 0);
-                    infoBox.transition()
-                        .duration(500)
-                        .style("opacity", 0);
-                } else if (!event.target.closest(".github-pocs a")) {
-                    infoBox.transition()
-                        .duration(500)
-                        .style("opacity", 0);
+                    tooltip.transition().duration(300).style("opacity", 0);
+                    infoBox.transition().duration(300).style("opacity", 0);
                 }
             });
 
@@ -615,6 +1054,82 @@
                 d.fx = null;
                 d.fy = null;
             }
+
+            // Helper: neighbor highlight
+            function highlightNode(d, on) {
+                const neighbors = adjacency.get(d.id) || new Set();
+                const opacityNode = on ? 1 : 0.9;
+                const opacityFaded = on ? 0.08 : 0.9;
+                nodeSel && nodeSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? opacityNode : opacityFaded);
+                labelSel && labelSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : (on ? 0.08 : 1));
+                linkSel && linkSel
+                    .style('opacity', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id || (neighbors.has(getLinkEndId(l.source)) && neighbors.has(getLinkEndId(l.target)))) ? 0.8 : (on ? 0.05 : 0.6))
+                    .style('stroke', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? '#555' : '#999')
+                    .style('stroke-width', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? 2.5 : 1.5);
+            }
+
+            function showInfoBox(event, d) {
+                const detail = d.details || {};
+                const severityText = detail.severity || 'UNKNOWN';
+                const description = detail.shortDescription ? detail.shortDescription : 'No description available';
+                const githubPocs = Array.isArray(detail.githubPocs) ? detail.githubPocs : [];
+                const cveId = detail.cveID || d.name;
+                infoBox.style('display', 'block')
+                .html(`
+                    <h5>${detail.vulnerabilityName || d.name}</h5>
+                    <p><strong>CVE ID:</strong> ${cveId}</p>
+                    <p><strong>Severity:</strong> ${severityText}</p>
+                    <p><strong>Published Date:</strong> ${detail.dateAdded || 'Unknown'}</p>
+                    <p><strong>Description:</strong> ${description}</p>
+                    <div>
+                        <strong>GitHub PoCs:</strong>
+                        <div class="github-pocs">
+                            ${githubPocs.length > 0 ? githubPocs.map(poc => `<a href="${poc}" target="_blank">${poc}</a>`).join(', ') : 'No GitHub PoCs'}
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;">
+                        <a class="btn btn-sm btn-outline-primary" target="_blank" href="/vuln/${cveId}/report"><i class="fas fa-file-alt"></i> Report</a>
+                        <a class="btn btn-sm btn-outline-secondary" target="_blank" href="/vuln/${cveId}"><i class="fas fa-external-link-alt"></i> Details</a>
+                    </div>
+                `)
+                .style('left', (event.pageX + 10) + 'px')
+                .style('top', (event.pageY - 28) + 'px')
+                .transition().duration(200)
+                .style('opacity', .9);
+                event.stopPropagation();
+            }
+        }
+
+        function ensureScene(width, height) {
+            if (!rootSvg) {
+                rootSvg = d3.select('#chart').append('svg').attr('width', width).attr('height', height);
+                // Define arrow marker for link direction
+                const defs = rootSvg.append('defs');
+                defs.append('marker')
+                    .attr('id', 'arrowhead')
+                    .attr('viewBox', '0 -5 10 10')
+                    .attr('refX', 12)
+                    .attr('refY', 0)
+                    .attr('markerWidth', 6)
+                    .attr('markerHeight', 6)
+                    .attr('orient', 'auto')
+                    .append('path')
+                    .attr('d', 'M0,-5L10,0L0,5')
+                    .attr('fill', '#999')
+                    .attr('opacity', 0.7);
+                zoomGroup = rootSvg.append('g');
+                gLinks = zoomGroup.append('g').attr('class', 'links');
+                gNodes = zoomGroup.append('g').attr('class', 'nodes');
+                gLabels = zoomGroup.append('g').attr('class', 'labels');
+                zoomBehavior = d3.zoom().scaleExtent([0.2, 5]).on('zoom', (event) => {
+                    zoomGroup.attr('transform', event.transform);
+                });
+                rootSvg.call(zoomBehavior);
+                tooltip = d3.select('#chart').append('div').attr('class', 'tooltip');
+                infoBox = d3.select('#infoBox');
+            } else {
+                rootSvg.attr('width', width).attr('height', height);
+            }
         }
 
         const darkThemeToggle = document.getElementById('darkThemeToggle');
@@ -647,7 +1162,236 @@
             document.getElementById('loadingSpinner').style.display = 'none';
         }
 
+        // Graph merge + helpers
+        function mergeGraph(newNodes, newLinks) {
+            // Precompute neighbors present in current graph for seeding positions
+            const existingIds = new Set(allNodes.map(n => n.id));
+            const neighborMap = new Map(); // id -> Set(neighborIds)
+            for (const l of newLinks) {
+                const s = typeof l.source === 'string' ? l.source : l.source.id;
+                const t = typeof l.target === 'string' ? l.target : l.target.id;
+                if (!neighborMap.has(s)) neighborMap.set(s, new Set());
+                if (!neighborMap.has(t)) neighborMap.set(t, new Set());
+                neighborMap.get(s).add(t);
+                neighborMap.get(t).add(s);
+            }
+
+            for (const n of newNodes) {
+                if (!nodeMap.has(n.id)) {
+                    // Seed new node position near an existing neighbor if possible
+                    const neighSet = neighborMap.get(n.id) || new Set();
+                    let seeded = false;
+                    for (const nid of neighSet) {
+                        if (existingIds.has(nid)) {
+                            const neighbor = nodeMap.get(nid) || allNodes.find(x => x.id === nid);
+                            if (neighbor && typeof neighbor.x === 'number' && typeof neighbor.y === 'number') {
+                                const jitter = () => (Math.random() - 0.5) * 40;
+                                n.x = neighbor.x + jitter();
+                                n.y = neighbor.y + jitter();
+                                seeded = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!seeded) {
+                        // Leave x/y undefined; visualizeData will randomize safely if missing
+                    }
+                    nodeMap.set(n.id, n);
+                    allNodes.push(n);
+                }
+            }
+
+            for (const l of newLinks) {
+                const a = l.source;
+                const b = l.target;
+                const s = typeof a === 'string' ? a : a.id;
+                const t = typeof b === 'string' ? b : b.id;
+                const key = s < t ? `${s}|${t}` : `${t}|${s}`;
+                if (!linkSet.has(key)) {
+                    linkSet.add(key);
+                    allLinks.push({ source: s, target: t });
+                }
+            }
+        }
+
+        function getLinkEndId(end) { return typeof end === 'string' ? end : end.id; }
+
+        function computeAdjacency(nodes, links) {
+            adjacency.clear();
+            for (const n of nodes) adjacency.set(n.id, new Set());
+            for (const l of links) {
+                const s = getLinkEndId(l.source);
+                const t = getLinkEndId(l.target);
+                if (!adjacency.has(s)) adjacency.set(s, new Set());
+                if (!adjacency.has(t)) adjacency.set(t, new Set());
+                adjacency.get(s).add(t);
+                adjacency.get(t).add(s);
+            }
+        }
+
+        function computeDegreeMap(nodes, links) {
+            const m = new Map();
+            for (const n of nodes) m.set(n.id, 0);
+            for (const l of links) {
+                m.set(getLinkEndId(l.source), (m.get(getLinkEndId(l.source)) || 0) + 1);
+                m.set(getLinkEndId(l.target), (m.get(getLinkEndId(l.target)) || 0) + 1);
+            }
+            return m;
+        }
+
+        // Counts, for each actor, how many CVEs it is associated with in the current dataset
+        function computeActorCveCounts(nodes, links) {
+            const types = new Map(nodes.map(n => [n.id, n.type]));
+            const counts = new Map();
+            for (const l of links) {
+                const s = getLinkEndId(l.source);
+                const t = getLinkEndId(l.target);
+                const ts = types.get(s);
+                const tt = types.get(t);
+                if (ts === 'actor' && tt === 'cve') counts.set(s, (counts.get(s) || 0) + 1);
+                if (tt === 'actor' && ts === 'cve') counts.set(t, (counts.get(t) || 0) + 1);
+            }
+            return counts;
+        }
+
+        function updateMinCveSlider(countMap) {
+            const slider = document.getElementById('minDegree');
+            const label = document.getElementById('minDegreeValue');
+            if (!slider) return;
+            let max = 0;
+            countMap.forEach(v => { if (v > max) max = v; });
+            // keep at least 10 for a reasonable range when small graphs
+            const newMax = Math.max(10, max);
+            if (parseInt(slider.max, 10) !== newMax) {
+                slider.max = String(newMax);
+            }
+            // clamp current value
+            if (minDegree > newMax) {
+                minDegree = newMax;
+                slider.value = String(minDegree);
+                if (label) label.textContent = String(minDegree);
+            }
+        }
+
+        function severityColor(d) {
+            const sev = d.details?.severity || 'UNKNOWN';
+            switch (sev) {
+                case 'LOW': return '#2ca02c';
+                case 'MEDIUM': return '#ffbf00';
+                case 'HIGH': return '#ff7f0e';
+                case 'CRITICAL': return '#d62728';
+                default: return '#6baed6';
+            }
+        }
+
+        function getRadius(d, degreeMap) {
+            if (d.type === 'actor') return 10 + Math.min(10, (degreeMap.get(d.id) || 1) * 0.8);
+            if (!sizeByDegree) return 8;
+            const deg = degreeMap.get(d.id) || 1;
+            return 6 + Math.min(12, Math.sqrt(deg) * 3);
+        }
+
+        function getLinkDistance(l) {
+            const s = getLinkEndId(l.source);
+            const t = getLinkEndId(l.target);
+            const base = organicMode ? 150 : 90;
+            return base + (s.startsWith('CVE-') || t.startsWith('CVE-') ? 30 : 0);
+        }
+
+        // Status + progress
+        function setStatus(text) { document.getElementById('statusText').textContent = text; }
+        function updateCounts() { document.getElementById('countsText').textContent = `Nodes: ${allNodes.length}, Links: ${allLinks.length}`; }
+        function showProgress() { document.getElementById('progressContainer').style.display = 'block'; }
+        function hideProgress() { document.getElementById('progressContainer').style.display = 'none'; }
+        function resetProgress() { updateProgress(0, 1); hideProgress(); }
+        function updateProgress(page, total) {
+            const pct = Math.max(0, Math.min(100, Math.round((page / total) * 100)));
+            const bar = document.getElementById('loadProgress');
+            bar.style.width = pct + '%';
+            bar.textContent = pct + '%';
+            bar.setAttribute('aria-valuenow', pct.toString());
+        }
+
+        // Zoom helpers
+        function zoomBy(k) {
+            if (!rootSvg || !zoomBehavior) return;
+            rootSvg.transition().duration(200).call(zoomBehavior.scaleBy, k);
+        }
+        function fitToScreen() {
+            if (!rootSvg || !zoomGroup || !zoomBehavior) return;
+            const bounds = zoomGroup.node().getBBox();
+            const parent = rootSvg.node().getBoundingClientRect();
+            const fullWidth = parent.width, fullHeight = parent.height;
+            const width = bounds.width, height = bounds.height;
+            const midX = bounds.x + width / 2, midY = bounds.y + height / 2;
+            if (!width || !height) return; // no content
+            const scale = 0.9 / Math.max(width / fullWidth, height / fullHeight);
+            const transform = d3.zoomIdentity.translate(fullWidth / 2, fullHeight / 2).scale(scale).translate(-midX, -midY);
+            rootSvg.transition().duration(400).call(zoomBehavior.transform, transform);
+        }
+
+        // Export SVG
+        function exportSVG() {
+            if (!rootSvg) return;
+            const serializer = new XMLSerializer();
+            const source = serializer.serializeToString(rootSvg.node());
+            const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'kev_graph.svg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function applyForces(degreeMap, width, height) {
+            if (!simulation) return;
+            const linkForce = simulation.force('link');
+            if (linkForce && linkForce.distance) linkForce.distance(d => getLinkDistance(d)).strength(organicMode ? 0.5 : 0.6);
+            const chargeForce = simulation.force('charge');
+            if (chargeForce && chargeForce.strength) chargeForce.strength(organicMode ? -220 : -120);
+            const collForce = simulation.force('collision');
+            if (collForce && collForce.radius) collForce.radius(d => getRadius(d, degreeMap) + (organicMode ? 2 : 6));
+            if (organicMode) {
+                simulation.force('x', null);
+            } else {
+                simulation.force('x', d3.forceX(d => d.type === 'actor' ? width * 0.3 : width * 0.7).strength(0.05));
+            }
+            simulation.alpha(0.7).restart();
+        }
+
+        // Focus by node id (best-effort)
+        function focusOnNodeById(id) {
+            const match = allNodes.find(n => n.id === id);
+            if (!match || !rootSvg || !zoomBehavior || !zoomGroup) return;
+            // approximate center on latest layout
+            const cx = match.x || 0, cy = match.y || 0;
+            const parent = rootSvg.node().getBoundingClientRect();
+            const transform = d3.zoomIdentity.translate(parent.width / 2, parent.height / 2).scale(1.5).translate(-cx, -cy);
+            rootSvg.transition().duration(300).call(zoomBehavior.transform, transform);
+        }
+
+        // Initialize from URL params if present
+        (function initFromQuery() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const actor = params.get('actor');
+                const p = parseInt(params.get('per_page') || '0', 10);
+                if (p) { perPage = Math.max(1, Math.min(100, p)); document.getElementById('perPage').value = perPage; }
+                if (actor) {
+                    document.getElementById('actorSearch').value = actor;
+                    searchedActor = actor.toLowerCase();
+                    fetchDataByActor(searchedActor);
+                }
+            } catch { /* ignore */ }
+        })();
+
     </script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>
+        
