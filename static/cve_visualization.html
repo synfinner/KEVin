@@ -125,37 +125,569 @@
             margin-top: 0;
         }
 
-        .controls {
-            text-align: center;
-            margin-bottom: 20px;
+        .hero-panel {
+            max-width: 1200px;
+            margin: 0 auto 32px;
+            padding: 36px 42px 30px;
+            border-radius: 40px;
+            background: linear-gradient(140deg, rgba(255, 255, 255, 0.92), rgba(235, 240, 255, 0.88));
+            box-shadow: 0 22px 60px rgba(15, 40, 80, 0.15);
+            position: relative;
         }
 
-        .controls button {
-            margin: 5px;
-            font-size: 16px;
-            padding: 10px 20px;
+        body.bg-dark .hero-panel {
+            background: linear-gradient(140deg, rgba(38, 41, 55, 0.92), rgba(24, 24, 24, 0.95));
+            box-shadow: 0 26px 70px rgba(0, 0, 0, 0.6);
+        }
+
+        .hero-panel::after {
+            content: '';
+            position: absolute;
+            inset: 12px;
+            border-radius: 32px;
+            background: linear-gradient(120deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body.bg-dark .hero-panel::after {
+            background: linear-gradient(120deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+        }
+
+        .hero-panel > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .control-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .control-row {
+            background: rgba(255, 255, 255, 0.72);
+            border-radius: 28px;
+            padding: 14px 24px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 10px 25px rgba(15, 40, 80, 0.08);
+        }
+
+        body.bg-dark .control-row {
+            background: rgba(40, 42, 50, 0.85);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 14px 28px rgba(0, 0, 0, 0.35);
+        }
+
+        .control-row.secondary {
+            padding: 18px 24px;
+        }
+
+        .control-row.secondary .custom-control {
+            margin-bottom: 0;
+        }
+
+        .control-row.secondary .custom-control-label {
+            font-size: 0.95rem;
+        }
+
+        .graph-surface {
+            display: flex;
+            gap: 24px;
+            align-items: stretch;
+        }
+
+        .graph-main {
+            position: relative;
+            flex: 1 1 auto;
+            min-height: 820px;
+        }
+
+        .graph-sidebar {
+            width: 310px;
+            background: rgba(255, 255, 255, 0.78);
+            border-radius: 28px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 14px 35px rgba(15, 40, 80, 0.08);
+            padding: 20px 22px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        body.bg-dark .graph-sidebar {
+            background: rgba(38, 40, 50, 0.9);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 16px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .sidebar-section {
+            background: rgba(255, 255, 255, 0.65);
+            border-radius: 20px;
+            padding: 16px 18px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        }
+
+        body.bg-dark .sidebar-section {
+            background: rgba(28, 30, 40, 0.72);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .sidebar-section h5 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .focus-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+
+        .focus-tabs {
+            display: inline-flex;
+            border-radius: 18px;
+            padding: 4px;
+            background: rgba(0,0,0,0.05);
+            margin-top: 10px;
+            margin-bottom: 12px;
+        }
+
+        body.bg-dark .focus-tabs {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .focus-tab {
             border: none;
-            border-radius: 30px;
-            transition: background-color 0.3s, box-shadow 0.3s;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            background: transparent;
+            font-size: 0.82rem;
+            padding: 6px 14px;
+            border-radius: 14px;
+            cursor: pointer;
+            color: #4f5d78;
         }
 
-        .controls button:focus,
-        .controls button:hover {
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        .focus-tab.active {
+            background: #0052cc;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(0, 82, 204, 0.2);
         }
 
-        .controls input {
+        body.bg-dark .focus-tab {
+            color: #cbd7ff;
+        }
+
+        body.bg-dark .focus-tab.active {
+            background: #82a7ff;
+            color: #0d1c3f;
+        }
+
+        .focus-neighbors-wrapper {
+            max-height: 220px;
+            overflow: hidden;
+        }
+
+        .focus-section-hidden {
+            display: none;
+        }
+
+        .focus-meta {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 12px;
+            font-size: 0.9rem;
+        }
+
+        .focus-meta span {
+            display: block;
+            color: #4f5d78;
+        }
+
+        .focus-meta strong {
+            display: block;
+            font-weight: 600;
+            color: #1d2f4a;
+        }
+
+        body.bg-dark .focus-meta span {
+            color: #cbd7ff;
+        }
+
+        body.bg-dark .focus-meta strong {
+            color: #fff;
+        }
+
+        .focus-neighbors {
+            margin: 12px 0 0;
+            padding-left: 18px;
+            font-size: 0.9rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .focus-neighbors li {
+            margin-bottom: 4px;
+        }
+
+        .focus-description {
+            margin-top: 12px;
+            font-size: 0.86rem;
+            line-height: 1.4;
+        }
+
+        body.bg-dark .focus-description {
+            color: #dfe6ff;
+        }
+
+        .quick-filters {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .severity-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 0.82rem;
+            padding: 6px 10px;
+            border-radius: 18px;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 4px 12px rgba(15, 40, 80, 0.05);
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .severity-chip.active {
+            border-color: #0052cc;
+            box-shadow: 0 6px 18px rgba(0, 82, 204, 0.18);
+        }
+
+        body.bg-dark .severity-chip {
+            background: rgba(34, 36, 45, 0.9);
+            border-color: rgba(255, 255, 255, 0.12);
+            color: #e1e7ff;
+        }
+
+        body.bg-dark .severity-chip.active {
+            border-color: #82a7ff;
+            box-shadow: 0 6px 18px rgba(130, 167, 255, 0.28);
+        }
+
+        .severity-chip .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+        }
+
+        .delta {
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: auto;
+            color: #6c7a99;
+        }
+
+        .delta.positive {
+            color: #1c7c33;
+        }
+
+        .delta.negative {
+            color: #b32d2d;
+        }
+
+        body.bg-dark .delta {
+            color: #c3ccf6;
+        }
+
+        .snapshot-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.88rem;
+            margin-bottom: 6px;
+            align-items: center;
+        }
+
+        .snapshot-row strong {
+            font-weight: 600;
+        }
+
+        .severity-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .snapshot-row.severity-pill {
+            justify-content: flex-start;
+            gap: 10px;
+        }
+
+        .snapshot-row.severity-pill strong {
+            min-width: 28px;
+        }
+
+        .severity-pill .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .mini-map-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #miniMap {
+            width: 100%;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+
+        body.bg-dark #miniMap {
+            background: rgba(20, 22, 30, 0.9);
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+        }
+
+        .mini-map-hint {
+            font-size: 0.8rem;
+            color: #6c7a99;
+            text-align: center;
+        }
+
+        body.bg-dark .mini-map-hint {
+            color: #c3ccf6;
+        }
+
+        @keyframes nodePulse {
+            0% { stroke-width: 6px; stroke-opacity: 0.85; }
+            100% { stroke-width: 1.5px; stroke-opacity: 0.2; }
+        }
+
+        .node.new-node {
+            stroke: rgba(0, 82, 204, 0.7);
+            animation: nodePulse 1.1s ease-out;
+        }
+
+        .node.is-focus {
+            stroke: #0052cc;
+            stroke-width: 3px;
+        }
+
+        body.bg-dark .node.is-focus {
+            stroke: #82a7ff;
+        }
+
+        .label.is-focus {
+            font-weight: 700;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 0;
+            width: 100%;
+        }
+
+        .control-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+        }
+
+        :root {
+            --control-height: 48px;
+            --control-radius: 28px;
+        }
+
+        .controls .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
             font-size: 16px;
-            padding: 10px;
-            border-radius: 30px;
-            border: 1px solid #ccc;
-            transition: box-shadow 0.3s;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 0 24px;
+            height: var(--control-height);
+            border-radius: var(--control-radius);
+            border: none;
+            transition: background-color 0.3s, box-shadow 0.3s, transform 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }
 
-        .controls input:focus {
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        .controls .btn:focus,
+        .controls .btn:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+            transform: translateY(-1px);
+        }
+
+        .controls .input-group {
+            height: var(--control-height);
+            border-radius: var(--control-radius);
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .controls .input-group .input-group-prepend .input-group-text,
+        .controls .input-group .input-group-append .input-group-text {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            border: none;
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        body.bg-dark .controls .input-group .input-group-prepend .input-group-text,
+        body.bg-dark .controls .input-group .input-group-append .input-group-text {
+            background: rgba(255, 255, 255, 0.08);
+            color: #dce4ff;
+        }
+
+        body.bg-dark .controls .input-group .input-group-prepend .input-group-text,
+        body.bg-dark .controls .input-group .input-group-append .input-group-text {
+            background: rgba(255, 255, 255, 0.08);
+            color: #dce4ff;
+        }
+
+        .controls .input-group .form-control,
+        .controls .input-group select,
+        .controls .input-group input[type="number"],
+        .controls .input-group input[type="text"] {
+            height: 100%;
+            border: none;
+            padding: 0 16px;
+            font-size: 16px;
+            box-shadow: none;
+        }
+
+        body.bg-dark .controls .input-group .form-control,
+        body.bg-dark .controls .input-group select,
+        body.bg-dark .controls .input-group input[type="number"],
+        body.bg-dark .controls .input-group input[type="text"] {
+            background: rgba(34, 36, 45, 0.95);
+            color: #f0f4ff;
+        }
+
+        body.bg-dark .controls .input-group .form-control,
+        body.bg-dark .controls .input-group select,
+        body.bg-dark .controls .input-group input[type="number"],
+        body.bg-dark .controls .input-group input[type="text"] {
+            background: rgba(34, 36, 45, 0.95);
+            color: #f0f4ff;
+        }
+
+        .controls .form-control,
+        .controls select,
+        .controls input[type="number"],
+        .controls input[type="text"] {
+            height: var(--control-height);
+            border-radius: var(--control-radius);
+            border: 1px solid #ccc;
+            font-size: 16px;
+            padding: 0 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        body.bg-dark .controls .form-control,
+        body.bg-dark .controls select,
+        body.bg-dark .controls input[type="number"],
+        body.bg-dark .controls input[type="text"] {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(34, 36, 45, 0.95);
+            color: #f0f4ff;
+        }
+
+        body.bg-dark .controls .form-control,
+        body.bg-dark .controls select,
+        body.bg-dark .controls input[type="number"],
+        body.bg-dark .controls input[type="text"] {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(34, 36, 45, 0.95);
+            color: #f0f4ff;
+        }
+
+        .controls .form-control:focus,
+        .controls select:focus,
+        .controls input[type="number"]:focus,
+        .controls input[type="text"]:focus {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        body.bg-dark .controls .form-control:focus,
+        body.bg-dark .controls select:focus,
+        body.bg-dark .controls input[type="number"]:focus,
+        body.bg-dark .controls input[type="text"]:focus {
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+        }
+
+        body.bg-dark .controls .form-control:focus,
+        body.bg-dark .controls select:focus,
+        body.bg-dark .controls input[type="number"]:focus,
+        body.bg-dark .controls input[type="text"]:focus {
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45);
+        }
+
+        .status-chip-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 12px 0 4px;
+        }
+
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(0, 82, 204, 0.08);
+            color: #1d3a6b;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            text-transform: uppercase;
+        }
+
+        .status-chip.hidden {
+            display: none;
+        }
+
+        body.bg-dark .status-chip {
+            background: rgba(132, 170, 255, 0.18);
+            color: #d6e2ff;
+        }
+
+        .status-chip[data-variant="warning"] {
+            background: rgba(255, 193, 7, 0.15);
+            color: #7a5400;
+        }
+
+        body.bg-dark .status-chip[data-variant="warning"] {
+            background: rgba(255, 193, 7, 0.25);
+            color: #ffd267;
+        }
+
+        .status-chip[data-variant="danger"] {
+            background: rgba(220, 53, 69, 0.15);
+            color: #7a1120;
+        }
+
+        body.bg-dark .status-chip[data-variant="danger"] {
+            background: rgba(220, 53, 69, 0.3);
+            color: #ff9aa8;
+        }
+
+        .status-chip .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.6;
         }
 
         .header {
@@ -184,7 +716,7 @@
         }
 
         .custom-switch {
-            margin-top: 20px;
+            margin-top: 0;
         }
 
         .loading-spinner {
@@ -196,44 +728,54 @@
             z-index: 1000;
         }
 
-        .legend {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: #fff;
-            padding: 15px;
-            border: 1px solid #ccc;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-        }
-
-        body.bg-dark .legend {
-            background: #2C2C2C;
-            border-color: #444;
-            color: #E0E0E0;
-        }
 
         .status-bar {
-            margin-top: 10px;
+            margin-top: 18px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.78);
+            padding: 14px 20px;
+            border-radius: 20px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 8px 24px rgba(15, 40, 80, 0.08);
+        }
+
+        body.bg-dark .status-bar {
+            background: rgba(40, 42, 50, 0.88);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 28px rgba(0, 0, 0, 0.4);
+        }
+
+        .status-bar .text-muted {
+            color: #2f3d55 !important;
+        }
+
+        body.bg-dark .status-bar .text-muted {
+            color: #d0d7f5 !important;
         }
 
         .progress {
             height: 10px;
+            background-color: rgba(0, 0, 0, 0.08);
+            border-radius: 6px;
         }
-        .control-group {
-            display: inline-flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
+
+        body.bg-dark .progress {
+            background-color: rgba(255, 255, 255, 0.12);
         }
         .btn-icon {
             padding: 6px 10px;
+        }
+        body.bg-dark .btn-outline-dark {
+            color: #f5f8ff;
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        body.bg-dark .btn-outline-dark:hover,
+        body.bg-dark .btn-outline-dark:focus {
+            background: rgba(255, 255, 255, 0.12);
+            color: #f5f8ff;
         }
         .floating-right {
             position: absolute;
@@ -242,6 +784,66 @@
             display: flex;
             gap: 8px;
             z-index: 1000;
+        }
+
+        @media (max-width: 992px) {
+            .hero-panel {
+                padding: 28px 30px 26px;
+                border-radius: 32px;
+            }
+            :root {
+                --control-height: 46px;
+            }
+            .control-group {
+                justify-content: center;
+            }
+            .control-row {
+                padding: 16px 18px;
+            }
+            .status-chip-row {
+                gap: 8px;
+            }
+            .graph-surface {
+                flex-direction: column;
+            }
+            .graph-sidebar {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .hero-panel {
+                padding: 24px 18px 22px;
+            }
+            :root {
+                --control-height: 44px;
+                --control-radius: 22px;
+            }
+            .controls .control-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .controls .btn,
+            .controls .input-group,
+            .controls .form-control,
+            .controls select,
+            .controls input[type="number"],
+            .controls input[type="text"] {
+                width: 100% !important;
+            }
+            .status-chip-row {
+                justify-content: flex-start;
+            }
+            .status-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .floating-right {
+                right: 6px;
+            }
+            .quick-filters {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
         }
     </style>
 </head>
@@ -268,105 +870,160 @@
     </nav>
 
     <div class="container mt-5">
-        <div class="header">
-            <h1 class="display-4">CISA KEV CVE Graph by Threat Actors</h1>
-            <p class="lead">Explore vulnerabilities and their associated threat actors.</p>
-        </div>
-        <div class="controls">
-            <div class="control-group">
-                <button class="btn btn-primary" id="fetchData"><i class="fas fa-download"></i> Fetch</button>
-                <button class="btn btn-secondary" id="loadMoreData"><i class="fas fa-plus"></i> More</button>
-                <button class="btn btn-info" id="loadAll"><i class="fas fa-list"></i> Load All</button>
-                <button class="btn btn-info" id="layoutToggle"><i class="fas fa-project-diagram"></i> Organic</button>
-                <button class="btn btn-danger" id="resetView"><i class="fas fa-redo"></i> Reset</button>
-                <div class="input-group" style="width: 220px;">
-                    <div class="input-group-prepend"><span class="input-group-text">per_page</span></div>
-                    <input type="number" id="perPage" class="form-control" min="1" max="100" value="25">
-                </div>
+        <div class="hero-panel">
+            <div class="header">
+                <h1 class="display-4">CISA KEV CVE Graph by Threat Actors</h1>
+                <p class="lead">Explore vulnerabilities and their associated threat actors.</p>
             </div>
-        </div>
-        <div class="controls" style="text-align: center; margin-top: 10px;">
-            <div class="control-group">
-                <div class="custom-control custom-switch">
-                    <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
-                    <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
-                </div>
-                <div class="custom-control custom-switch">
-                    <input type="checkbox" class="custom-control-input" id="filterActorsToggle">
-                    <label class="custom-control-label" for="filterActorsToggle">Filter Actors</label>
-                </div>
-                <div class="custom-control custom-switch">
-                    <input type="checkbox" class="custom-control-input" id="labelsToggle" checked>
-                    <label class="custom-control-label" for="labelsToggle">Labels</label>
-                </div>
-                <div class="custom-control custom-switch">
-                    <input type="checkbox" class="custom-control-input" id="sizeByDegreeToggle" checked>
-                    <label class="custom-control-label" for="sizeByDegreeToggle">Size by Degree</label>
-                </div>
-                <div class="custom-control custom-switch">
-                    <input type="checkbox" class="custom-control-input" id="focusModeToggle">
-                    <label class="custom-control-label" for="focusModeToggle">Focus Mode</label>
-                </div>
-                <div class="input-group" style="width: 280px;">
-                    <div class="input-group-prepend"><span class="input-group-text">Severity</span></div>
-                    <select id="severityFilter" class="form-control">
-                        <option value="all" selected>All</option>
-                        <option value="CRITICAL">Critical</option>
-                        <option value="HIGH">High</option>
-                        <option value="MEDIUM">Medium</option>
-                        <option value="LOW">Low</option>
-                        <option value="UNKNOWN">Unknown</option>
-                    </select>
-                </div>
-                <div class="input-group" style="width: 300px;">
-                    <div class="input-group-prepend"><span class="input-group-text">Min CVEs</span></div>
-                    <input type="range" id="minDegree" class="form-control" min="0" max="10" step="1" value="0" oninput="document.getElementById('minDegreeValue').textContent=this.value">
-                    <div class="input-group-append"><span class="input-group-text" id="minDegreeValue">0</span></div>
-                </div>
-                <div class="input-group" style="width: 260px;">
-                    <div class="input-group-prepend"><span class="input-group-text">Actor</span></div>
-                    <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control">
-                    <div class="input-group-append">
-                        <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i></button>
+
+            <div class="control-stack">
+                <div class="control-row primary">
+                    <div class="controls">
+                        <div class="control-group">
+                            <button class="btn btn-primary" id="fetchData"><i class="fas fa-download"></i> Fetch</button>
+                            <button class="btn btn-secondary" id="loadMoreData"><i class="fas fa-plus"></i> More</button>
+                            <button class="btn btn-info" id="loadAll"><i class="fas fa-list"></i> Load All</button>
+                            <button class="btn btn-info" id="layoutToggle"><i class="fas fa-project-diagram"></i> Organic</button>
+                            <button class="btn btn-danger" id="resetView"><i class="fas fa-redo"></i> Reset</button>
+                            <div class="input-group" style="width: 220px;">
+                                <div class="input-group-prepend"><span class="input-group-text">per_page</span></div>
+                                <input type="number" id="perPage" class="form-control" min="1" max="100" value="25">
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel</button>
-                <button class="btn btn-outline-dark" id="exitFocus" style="display:none;">Exit Focus</button>
+                <div class="control-row secondary">
+                    <div class="controls">
+                        <div class="control-group">
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
+                                <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
+                            </div>
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="filterActorsToggle">
+                                <label class="custom-control-label" for="filterActorsToggle">Filter Actors</label>
+                            </div>
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="labelsToggle" checked>
+                                <label class="custom-control-label" for="labelsToggle">Labels</label>
+                            </div>
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="sizeByDegreeToggle" checked>
+                                <label class="custom-control-label" for="sizeByDegreeToggle">Size by Degree</label>
+                            </div>
+                            <div class="custom-control custom-switch">
+                                <input type="checkbox" class="custom-control-input" id="focusModeToggle">
+                                <label class="custom-control-label" for="focusModeToggle">Focus Mode</label>
+                            </div>
+                            <div class="input-group" style="width: 260px;">
+                                <div class="input-group-prepend"><span class="input-group-text">Actor</span></div>
+                                <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control">
+                                <div class="input-group-append">
+                                    <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i></button>
+                                </div>
+                            </div>
+                            <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel</button>
+                            <div class="input-group" style="width: 280px;">
+                                <div class="input-group-prepend"><span class="input-group-text">Severity</span></div>
+                                <select id="severityFilter" class="form-control">
+                                    <option value="all" selected>All</option>
+                                    <option value="CRITICAL">Critical</option>
+                                    <option value="HIGH">High</option>
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="LOW">Low</option>
+                                    <option value="UNKNOWN">Unknown</option>
+                                </select>
+                            </div>
+                            <div class="input-group" style="width: 300px;">
+                                <div class="input-group-prepend"><span class="input-group-text">Min CVEs</span></div>
+                                <input type="range" id="minDegree" class="form-control" min="0" max="10" step="1" value="0" oninput="document.getElementById('minDegreeValue').textContent=this.value">
+                                <div class="input-group-append"><span class="input-group-text" id="minDegreeValue">0</span></div>
+                            </div>
+                            <button class="btn btn-outline-dark" id="exitFocus" style="display:none;">Exit Focus</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-chip-row" id="statusChipRow">
+                <span class="status-chip" id="chipPage"><span class="dot"></span><span class="label-text">Page 0/?</span></span>
+                <span class="status-chip" id="chipLayout"><span class="dot"></span><span class="label-text">Layout: Structured</span></span>
+                <span class="status-chip" id="chipSeverity"><span class="dot"></span><span class="label-text">Severity: All</span></span>
+                <span class="status-chip" id="chipMinDegree"><span class="dot"></span><span class="label-text">Min CVEs: 0</span></span>
+                <span class="status-chip" id="chipActor"><span class="dot"></span><span class="label-text">Actor: All</span></span>
+                <span class="status-chip" id="chipLabels"><span class="dot"></span><span class="label-text">Labels: On</span></span>
+                <span class="status-chip" id="chipFocus"><span class="dot"></span><span class="label-text">Focus Off</span></span>
+            </div>
+
+            <div class="status-bar">
+                <div class="text-muted" id="statusText">Idle</div>
+                <div class="flex-grow-1">
+                    <div class="progress" style="display:none;" id="progressContainer">
+                        <div id="loadProgress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+                    </div>
+                </div>
+                <div class="text-muted" id="countsText">Nodes: 0, Links: 0</div>
             </div>
         </div>
 
-        <div class="status-bar">
-            <div class="text-muted" id="statusText">Idle</div>
-            <div class="flex-grow-1">
-                <div class="progress" style="display:none;" id="progressContainer">
-                    <div id="loadProgress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+        <div class="graph-surface">
+            <div class="graph-main">
+                <div id="chart"></div>
+                <div class="info-box" id="infoBox"></div>
+                <div class="loading-spinner" id="loadingSpinner">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                </div>
+                <div class="floating-right">
+                    <button class="btn btn-light btn-icon" id="zoomIn" title="Zoom In"><i class="fas fa-search-plus"></i></button>
+                    <button class="btn btn-light btn-icon" id="zoomOut" title="Zoom Out"><i class="fas fa-search-minus"></i></button>
+                    <button class="btn btn-light btn-icon" id="zoomFit" title="Fit to Screen"><i class="fas fa-compress-arrows-alt"></i></button>
+                    <button class="btn btn-light btn-icon" id="exportSvg" title="Export SVG"><i class="fas fa-file-download"></i></button>
                 </div>
             </div>
-            <div class="text-muted" id="countsText">Nodes: 0, Links: 0</div>
+            <aside class="graph-sidebar" id="insightPanel">
+                <div class="sidebar-section">
+                    <h5>Active Focus</h5>
+                    <div class="focus-title" id="focusTitle">No selection yet</div>
+                    <div class="focus-tabs" id="focusTabs">
+                        <button class="focus-tab active" data-tab="overview">Overview</button>
+                        <button class="focus-tab" data-tab="neighbors">Neighbors</button>
+                    </div>
+                    <div id="focusOverview">
+                        <div class="focus-meta" id="focusMeta"></div>
+                        <div class="focus-description" id="focusDescription"></div>
+                    </div>
+                    <div id="focusNeighborsSection" class="focus-neighbors-wrapper">
+                        <ul class="focus-neighbors" id="focusNeighbors"></ul>
+                    </div>
+                </div>
+                <div class="sidebar-section">
+                    <h5>Graph Snapshot</h5>
+                    <div class="snapshot-row"><span>Total Nodes: </span><strong id="statNodes">0</strong><span class="delta" id="statNodesDelta"></span></div>
+                    <div class="snapshot-row"><span>Total Links: </span><strong id="statLinks">0</strong><span class="delta" id="statLinksDelta"></span></div>
+                    <div class="snapshot-row"><span>Actors: </span><strong id="statActors">0</strong><span class="delta" id="statActorsDelta"></span></div>
+                    <div class="snapshot-row"><span>CVEs: </span><strong id="statCves">0</strong><span class="delta" id="statCvesDelta"></span></div>
+                    <div class="quick-filters" id="severityQuickFilters">
+                        <button class="severity-chip active" data-severity="all">All</button>
+                        <button class="severity-chip" data-severity="CRITICAL"><span class="dot" style="background:#d62728;"></span>Critical <span id="sevCritical">0</span></button>
+                        <button class="severity-chip" data-severity="HIGH"><span class="dot" style="background:#ff7f0e;"></span>High <span id="sevHigh">0</span></button>
+                        <button class="severity-chip" data-severity="MEDIUM"><span class="dot" style="background:#ffbf00;"></span>Medium <span id="sevMedium">0</span></button>
+                        <button class="severity-chip" data-severity="LOW"><span class="dot" style="background:#2ca02c;"></span>Low <span id="sevLow">0</span></button>
+                        <button class="severity-chip" data-severity="UNKNOWN"><span class="dot" style="background:#6baed6;"></span>Unknown <span id="sevUnknown">0</span></button>
+                    </div>
+                </div>
+                <div class="sidebar-section mini-map-card">
+                    <h5>Mini Map</h5>
+                    <canvas id="miniMap" width="200" height="140"></canvas>
+                    <div class="mini-map-hint">Overview of node positions.</div>
+                </div>
+                <div class="sidebar-section">
+                    <h5>Tips</h5>
+                    <ul class="focus-neighbors" id="interactionTips"></ul>
+                </div>
+            </aside>
         </div>
-        <div id="chart"></div>
-        <div class="info-box" id="infoBox"></div>
-        <div class="loading-spinner" id="loadingSpinner">
-            <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
-            </div>
-        </div>
-        <div class="legend" id="legend">
-            <h5>Legend</h5>
-            <p><span style="color: #2ca02c;">●</span> CVE Low</p>
-            <p><span style="color: #ffbf00;">●</span> CVE Medium</p>
-            <p><span style="color: #ff7f0e;">●</span> CVE High</p>
-            <p><span style="color: #d62728;">●</span> CVE Critical</p>
-            <p><span style="color: #6baed6;">●</span> CVE Unknown</p>
-            <p><span style="color: #ff5733;">●</span> Actor</p>
-        </div>
-        <div class="floating-right">
-            <button class="btn btn-light btn-icon" id="zoomIn" title="Zoom In"><i class="fas fa-search-plus"></i></button>
-            <button class="btn btn-light btn-icon" id="zoomOut" title="Zoom Out"><i class="fas fa-search-minus"></i></button>
-            <button class="btn btn-light btn-icon" id="zoomFit" title="Fit to Screen"><i class="fas fa-compress-arrows-alt"></i></button>
-            <button class="btn btn-light btn-icon" id="exportSvg" title="Export SVG"><i class="fas fa-file-download"></i></button>
-        </div>
-    </div>
 
     <script>
         let simulation;
@@ -391,11 +1048,39 @@
         let gLinks, gNodes, gLabels; // groups
         let linkSel, nodeSel, labelSel; // selections
         let tooltip, infoBox; // overlays
+        let actorLoadTimer = null;
+        let loadAllTimer = null;
+        let actorLoadActive = false;
+        let loadAllActive = false;
+        let actorDisplayName = '';
+        let pageInfo = { current: 0, total: null };
+        const POSITION_STORAGE_KEY = 'kev-graph-pos-v1';
+        const MAX_POSITION_STORE = 400;
+        const persistedPositions = loadPersistedPositions();
+        const SEVERITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+        let insightNode = null;
+        let miniMapCanvas = null;
+        let miniMapCtx = null;
+        let miniMapPayload = null;
+        let miniMapPending = false;
+        let miniMapTick = 0;
+        let hasInitialFit = false;
+        let currentTransform = d3.zoomIdentity;
+        let miniMapState = null;
+        let chartWidth = 0;
+        let chartHeight = 0;
+        let lastSnapshot = null;
+        let lastMiniMapNodes = [];
+        let activeFocusTab = 'overview';
 
         document.getElementById('fetchData').addEventListener('click', function () {
             searchedActor = ''; // Clear searched actor when fetching general data
+            actorDisplayName = '';
+            const actorInput = document.getElementById('actorSearch');
+            if (actorInput) actorInput.value = '';
             resetProgress();
             fetchData(currentPage);
+            updateStatusChips();
         });
 
         document.getElementById('loadMoreData').addEventListener('click', function () {
@@ -405,10 +1090,18 @@
 
         document.getElementById('loadAll').addEventListener('click', function () {
             searchedActor = '';
+            actorDisplayName = '';
+            const actorInput = document.getElementById('actorSearch');
+            if (actorInput) actorInput.value = '';
             startLoadAll();
+            updateStatusChips();
         });
 
         document.getElementById('resetView').addEventListener('click', function () {
+            stopSimulation();
+            cancelCurrentRequest();
+            cancelActorLoad();
+            cancelLoadAll();
             d3.select("#chart").selectAll("*").remove();
             allNodes = [];
             allLinks = [];
@@ -424,41 +1117,64 @@
             if (minLabel) { minLabel.textContent = '0'; }
             updateCounts();
             setStatus('Reset. Ready.');
+            hideLoadingSpinner();
+            hideProgress();
+            document.getElementById('cancelSearch').style.display = 'none';
+            actorDisplayName = '';
+            pageInfo = { current: 0, total: null };
+            hasInitialFit = false;
             rootSvg = null; zoomBehavior = null; zoomGroup = null;
             gLinks = gNodes = gLabels = null;
             linkSel = nodeSel = labelSel = null;
             tooltip = infoBox = null;
+            updateStatusChips();
+            refreshSidebarFocus();
+            updateGraphSnapshot([], []);
+            scheduleMiniMapRender([]);
         });
 
         document.getElementById('searchByActor').addEventListener('click', function () {
             cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-            searchedActor = document.getElementById('actorSearch').value.toLowerCase(); // Store the searched actor in lowercase
+            const actorInput = document.getElementById('actorSearch');
+            actorDisplayName = actorInput.value.trim();
+            searchedActor = actorDisplayName.toLowerCase(); // Store the searched actor in lowercase
             fetchDataByActor(searchedActor);
+            updateStatusChips();
+            refreshSidebarFocus();
         });
 
         document.getElementById('cancelSearch').addEventListener('click', function () {
             cancelCurrentRequest(); // Cancel any ongoing request
+            cancelActorLoad();
             document.getElementById('cancelSearch').style.display = 'none';
             hideProgress();
             setStatus('Canceled.');
+            actorDisplayName = '';
+            updateStatusChips();
+            refreshSidebarFocus();
         });
 
         document.getElementById('actorSearch').addEventListener('keypress', function (event) {
             if (event.key === 'Enter') {
                 cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-                searchedActor = document.getElementById('actorSearch').value.toLowerCase(); // Store the searched actor in lowercase
+                actorDisplayName = document.getElementById('actorSearch').value.trim();
+                searchedActor = actorDisplayName.toLowerCase(); // Store the searched actor in lowercase
                 fetchDataByActor(searchedActor);
+                updateStatusChips();
+                refreshSidebarFocus();
             }
         });
 
         document.getElementById('filterActorsToggle').addEventListener('change', function () {
             filterActors = this.checked;
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
         });
 
         document.getElementById('labelsToggle').addEventListener('change', function () {
             labelsOn = this.checked;
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
         });
 
         document.getElementById('sizeByDegreeToggle').addEventListener('change', function () {
@@ -469,6 +1185,12 @@
         document.getElementById('severityFilter').addEventListener('change', function () {
             severityFilter = this.value;
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
+            const container = document.getElementById('severityQuickFilters');
+            if (container) {
+                const btn = container.querySelector(`.severity-chip[data-severity="${severityFilter}"]`);
+                if (btn) btn.classList.add('active');
+            }
         });
 
         document.getElementById('perPage').addEventListener('change', function () {
@@ -480,6 +1202,7 @@
         document.getElementById('minDegree').addEventListener('input', function(){
             minDegree = parseInt(this.value, 10) || 0;
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
         });
 
         document.getElementById('focusModeToggle').addEventListener('change', function(){
@@ -489,12 +1212,46 @@
                 document.getElementById('exitFocus').style.display = 'none';
             }
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
+            refreshSidebarFocus();
         });
+
+        (function bindSeverityQuickFilters(){
+            const container = document.getElementById('severityQuickFilters');
+            if (!container) return;
+            container.addEventListener('click', (event) => {
+                const btn = event.target.closest('.severity-chip');
+                if (!btn) return;
+                const value = btn.getAttribute('data-severity');
+                if (!value) return;
+                severityFilter = value;
+                const select = document.getElementById('severityFilter');
+                if (select) select.value = value;
+                visualizeData({ nodes: allNodes, links: allLinks });
+                updateStatusChips();
+            });
+        })();
+
+        (function bindFocusTabs(){
+            const tabsContainer = document.getElementById('focusTabs');
+            if (!tabsContainer) return;
+            tabsContainer.addEventListener('click', (event) => {
+                const btn = event.target.closest('.focus-tab');
+                if (!btn) return;
+                const tab = btn.getAttribute('data-tab');
+                if (!tab) return;
+                activeFocusTab = tab;
+                applyFocusTabState();
+            });
+            applyFocusTabState();
+        })();
 
         document.getElementById('exitFocus').addEventListener('click', function(){
             focusedNodeId = null;
             document.getElementById('exitFocus').style.display = 'none';
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
+            refreshSidebarFocus();
         });
 
         // Navbar global search (CVE or Actor)
@@ -507,8 +1264,11 @@
             } else {
                 // treat as actor search
                 document.getElementById('actorSearch').value = q;
+                actorDisplayName = q;
                 searchedActor = q.toLowerCase();
                 fetchDataByActor(searchedActor);
+                updateStatusChips();
+                refreshSidebarFocus();
             }
         });
 
@@ -527,6 +1287,7 @@
             btn.innerHTML = organicMode ? '<i class="fas fa-project-diagram"></i> Organic On' : '<i class="fas fa-project-diagram"></i> Organic';
             setStatus(organicMode ? 'Organic layout' : 'Structured layout');
             visualizeData({ nodes: allNodes, links: allLinks });
+            updateStatusChips();
         });
 
         function cancelCurrentRequest() {
@@ -536,22 +1297,54 @@
             }
         }
 
+        function stopSimulation() {
+            if (!simulation) return;
+            simulation.stop();
+            simulation.on('tick', null); // drop tick callback to avoid updates against cleared selections
+            simulation = null;
+        }
+
+        function cancelActorLoad() {
+            actorLoadActive = false;
+            if (actorLoadTimer) {
+                clearTimeout(actorLoadTimer);
+                actorLoadTimer = null;
+            }
+        }
+
+        function cancelLoadAll() {
+            loadAllActive = false;
+            if (loadAllTimer) {
+                clearTimeout(loadAllTimer);
+                loadAllTimer = null;
+            }
+        }
+
         function fetchData(page) {
             showLoadingSpinner();
-            cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-            abortController = new AbortController();
-            const signal = abortController.signal;
+            cancelActorLoad();
+            cancelLoadAll();
+            cancelCurrentRequest();
+            const ctrl = new AbortController();
+            abortController = ctrl;
+            const signal = ctrl.signal;
 
             fetch(`/kev?page=${page}&per_page=${perPage}`, { signal })
                 .then(response => response.json())
                 .then(data => {
                     hideLoadingSpinner();
-                    if (abortController.signal.aborted) return; // Check if the request was aborted
+                    if (signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
                     mergeGraph(formattedData.nodes, formattedData.links);
                     visualizeData({ nodes: allNodes, links: allLinks });
                     updateCounts();
                     setStatus(`Page ${data.page}/${data.total_pages || '?'} loaded.`);
+                    const current = typeof data.page === 'number' ? data.page : page;
+                    pageInfo = {
+                        current,
+                        total: typeof data.total_pages === 'number' ? data.total_pages : pageInfo.total
+                    };
+                    updateStatusChips();
                 })
                 .catch(error => {
                     hideLoadingSpinner();
@@ -566,15 +1359,19 @@
 
         function fetchDataByActor(actor) {
             showLoadingSpinner();
-            cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-            abortController = new AbortController();
-            const signal = abortController.signal;
+            cancelActorLoad();
+            cancelLoadAll();
+            cancelCurrentRequest();
+            const ctrl = new AbortController();
+            abortController = ctrl;
+            const signal = ctrl.signal;
 
-            fetch(`/kev?actor=${actor}&page=${currentPage}&per_page=${perPage}`, { signal })
+            const encodedActor = encodeURIComponent(actor);
+            fetch(`/kev?actor=${encodedActor}&page=${currentPage}&per_page=${perPage}`, { signal })
                 .then(response => response.json())
                 .then(data => {
                     hideLoadingSpinner();
-                    if (abortController.signal.aborted) return; // Check if the request was aborted
+                    if (signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
                     mergeGraph(formattedData.nodes, formattedData.links);
                     visualizeData({ nodes: allNodes, links: allLinks });
@@ -584,6 +1381,11 @@
                     setStatus(`Loaded page ${data.page}/${data.total_pages} for actor: ${actor}`);
                     showProgress();
                     updateProgress(data.page, data.total_pages);
+                    pageInfo = {
+                        current: typeof data.page === 'number' ? data.page : (pageInfo.current || 1),
+                        total: typeof data.total_pages === 'number' ? data.total_pages : pageInfo.total
+                    };
+                    updateStatusChips();
 
                     // Automatically load subsequent pages if total_pages > 1
                     if (data.total_pages > 1) {
@@ -603,28 +1405,49 @@
 
         function loadMoreDataByActor(actor, totalPages) {
             let page = 2;
+            actorLoadActive = true;
+            const encodedActor = encodeURIComponent(actor);
 
             const fetchPage = () => {
-                if (page > totalPages) return; // End recursion
+                if (!actorLoadActive) return;
+                if (page > totalPages) {
+                    actorLoadActive = false;
+                    if (actorLoadTimer) {
+                        clearTimeout(actorLoadTimer);
+                        actorLoadTimer = null;
+                    }
+                    return; // End recursion
+                }
 
                 cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-                abortController = new AbortController();
-                const signal = abortController.signal;
+                const ctrl = new AbortController();
+                abortController = ctrl;
+                const signal = ctrl.signal;
 
-                fetch(`/kev?actor=${actor}&page=${page}&per_page=${perPage}`, { signal })
+                fetch(`/kev?actor=${encodedActor}&page=${page}&per_page=${perPage}`, { signal })
                     .then(response => response.json())
                     .then(data => {
-                        if (abortController.signal.aborted) return; // Check if the request was aborted
+                        if (!actorLoadActive || signal.aborted) return;
                         const formattedData = formatData(data.vulnerabilities);
                         mergeGraph(formattedData.nodes, formattedData.links);
                         visualizeData({ nodes: allNodes, links: allLinks });
                         updateCounts();
                         showProgress();
                         updateProgress(page, totalPages);
+                        pageInfo = { current: page, total: totalPages };
+                        updateStatusChips();
                         page++;
-                        setTimeout(fetchPage, 1500); // 1.5s pause to avoid rate limits
+                        actorLoadTimer = setTimeout(() => {
+                            actorLoadTimer = null;
+                            fetchPage();
+                        }, 1500); // 1.5s pause to avoid rate limits
                     })
                     .catch(error => {
+                        actorLoadActive = false;
+                        if (actorLoadTimer) {
+                            clearTimeout(actorLoadTimer);
+                            actorLoadTimer = null;
+                        }
                         if (error.name === 'AbortError') {
                             console.log('Fetch request canceled');
                         } else {
@@ -639,13 +1462,19 @@
 
         function startLoadAll() {
             showProgress();
+            cancelLoadAll();
+            cancelActorLoad();
             cancelCurrentRequest();
-            abortController = new AbortController();
-            const signal = abortController.signal;
+            const ctrl = new AbortController();
+            abortController = ctrl;
+            const signal = ctrl.signal;
+            loadAllActive = true;
+            loadAllTimer = null;
             // First call to get total pages
             fetch(`/kev?page=1&per_page=${perPage}`, { signal })
                 .then(r => r.json())
                 .then(first => {
+                    if (!loadAllActive || signal.aborted) return;
                     const formatted = formatData(first.vulnerabilities);
                     mergeGraph(formatted.nodes, formatted.links);
                     visualizeData({ nodes: allNodes, links: allLinks });
@@ -653,31 +1482,54 @@
                     const totalPages = first.total_pages;
                     updateProgress(1, totalPages);
                     setStatus(`Loading all pages: 1/${totalPages}`);
+                    pageInfo = { current: 1, total: totalPages || pageInfo.total };
+                    updateStatusChips();
                     // Sequentially fetch remaining pages
                     let p = 2;
                     const loop = () => {
+                        if (!loadAllActive) return;
                         if (p > totalPages) {
+                            loadAllActive = false;
+                            if (loadAllTimer) {
+                                clearTimeout(loadAllTimer);
+                                loadAllTimer = null;
+                            }
                             setStatus('All pages loaded.');
                             hideProgress();
+                            pageInfo = { current: totalPages, total: totalPages };
+                            updateStatusChips();
                             fitToScreen();
                             return;
                         }
                         cancelCurrentRequest();
-                        abortController = new AbortController();
-                        const sig = abortController.signal;
+                        const ctrl2 = new AbortController();
+                        abortController = ctrl2;
+                        const sig = ctrl2.signal;
                         fetch(`/kev?page=${p}&per_page=${perPage}`, { signal: sig })
-                            .then(r => r.json())
+                            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
                             .then(data => {
+                                if (sig.aborted) return;
+                                if (!loadAllActive) return;
                                 const f = formatData(data.vulnerabilities);
                                 mergeGraph(f.nodes, f.links);
                                 visualizeData({ nodes: allNodes, links: allLinks });
                                 updateCounts();
                                 updateProgress(p, totalPages);
                                 setStatus(`Loading all pages: ${p}/${totalPages}`);
+                                pageInfo = { current: p, total: totalPages };
+                                updateStatusChips();
                                 p++;
-                                setTimeout(loop, 1500); // 1.5s pause to avoid rate limits
+                                loadAllTimer = setTimeout(() => {
+                                    loadAllTimer = null;
+                                    loop();
+                                }, 1500); // 1.5s pause to avoid rate limits
                             })
                             .catch(err => {
+                                loadAllActive = false;
+                                if (loadAllTimer) {
+                                    clearTimeout(loadAllTimer);
+                                    loadAllTimer = null;
+                                }
                                 if (err.name !== 'AbortError') {
                                     console.error(err);
                                     setStatus('Error during Load All');
@@ -687,6 +1539,11 @@
                     loop();
                 })
                 .catch(err => {
+                    loadAllActive = false;
+                    if (loadAllTimer) {
+                        clearTimeout(loadAllTimer);
+                        loadAllTimer = null;
+                    }
                     if (err.name !== 'AbortError') {
                         console.error(err);
                         setStatus('Error starting Load All');
@@ -709,18 +1566,17 @@
             'n/a',
             'unknown',
             'malware advisory',
-            'Threat',
-            'Informational',
-            'Threat Analysis',
+            'threat',
+            'informational',
+            'threat analysis',
             'a few critical',
-            'Kaseya VSA',
-            'Informational',
-
+            'kaseya vsa',
+            'The State of Colorado'
         ];
         const ACTOR_CONTAINS_EXCLUDE = [
             'brian sabey',
             'threat intel report',
-            'IOC-'
+            'ioc-'
         ];
 
         function shouldExcludeActor(name) {
@@ -740,8 +1596,17 @@
             'lazarus': 'Lazarus',
             'lazarus group': 'Lazarus',
             'clop': 'cl0p',
-            'XE':'XE Group',
-            'wannacry':'WannaCry'
+            'xe': 'XE Group',
+            'xe group': 'XE Group',
+            'wannacry': 'WannaCry',
+            'turla group': 'Turla',
+            'krypton': 'Turla',
+            'venomous bear': 'Turla',
+            'uroburos': 'Turla',
+            'andariel': 'Onyx Sleet',
+            'silent chollima': 'Onyx Sleet',
+            'chollima': 'Onyx Sleet',
+            'plutonium': 'Onyx Sleet'
         };
 
         function canonicalizeActorName(name) {
@@ -859,6 +1724,7 @@
             // 1) Filter data
             let filteredNodes = data.nodes;
             let filteredLinks = data.links;
+            miniMapTick = 0;
 
             // Filter nodes and links if the filter toggle is active
             if (filterActors && searchedActor) {
@@ -911,15 +1777,18 @@
 
             // Focus mode: keep only focused node + its neighbors
             if (focusMode && focusedNodeId) {
-                const adjLocal = makeAdjacency(filteredNodes, filteredLinks);
                 const allowed = new Set([focusedNodeId]);
-                (adjLocal.get(focusedNodeId) || new Set()).forEach(id => allowed.add(id));
+                (adjacency.get(focusedNodeId) || new Set()).forEach(id => allowed.add(id));
                 filteredNodes = filteredNodes.filter(n => allowed.has(n.id));
                 filteredLinks = filteredLinks.filter(l => allowed.has(getLinkEndId(l.source)) && allowed.has(getLinkEndId(l.target)));
             }
 
+            updateGraphSnapshot(filteredNodes, filteredLinks);
+
             const width = document.getElementById('chart').clientWidth;
             const height = document.getElementById('chart').clientHeight;
+            chartWidth = width;
+            chartHeight = height;
 
             ensureScene(width, height);
 
@@ -933,6 +1802,8 @@
 
             computeAdjacency(filteredNodes, filteredLinks);
             const degreeMap = computeDegreeMap(filteredNodes, filteredLinks);
+            refreshSidebarFocus();
+            scheduleMiniMapRender(filteredNodes);
             // 2) Data join (links)
             const linkKey = d => {
                 const s = getLinkEndId(d.source);
@@ -964,11 +1835,20 @@
                         focusedNodeId = d.id;
                         document.getElementById('exitFocus').style.display = 'inline-block';
                         setStatus(`Focused on ${d.name}`);
+                        setInsightNode(d);
                         visualizeData({ nodes: allNodes, links: allLinks });
+                        updateStatusChips();
                         return;
                     }
-                    if (d.type === 'cve') showInfoBox(event, d);
+                    setInsightNode(d);
                 });
+            const newNodes = nodeEnter.filter(d => d.__fresh);
+            newNodes.classed('new-node', true).each(function(d){
+                d.__fresh = false;
+                const el = d3.select(this);
+                setTimeout(() => el.classed('new-node', false), 1300);
+            });
+
             nodeSel = nodeEnter.merge(nodeSel)
                 .attr('r', d => getRadius(d, degreeMap))
                 .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d));
@@ -993,7 +1873,8 @@
                     .force('link', d3.forceLink(filteredLinks).id(d => d.id).distance(d => getLinkDistance(d)).strength(0.6))
                     .force('charge', d3.forceManyBody().strength(-120))
                     .force('center', d3.forceCenter(width / 2, height / 2))
-                    .force('collision', d3.forceCollide().radius(d => getRadius(d, degreeMap) + 6).strength(1));
+                    .force('collision', d3.forceCollide().radius(d => getRadius(d, degreeMap) + 6).strength(1))
+                    .on('end', persistNodePositions);
             }
 
             simulation.nodes(filteredNodes).on('tick', () => {
@@ -1010,10 +1891,14 @@
                 labelSel
                     .attr('x', d => d.x)
                     .attr('y', d => d.y);
+
+                miniMapTick = (miniMapTick + 1) % 4;
+                if (miniMapTick === 0) scheduleMiniMapRender(filteredNodes);
             });
             simulation.force('link').links(filteredLinks);
             // apply layout-specific forces
             applyForces(degreeMap, width, height);
+            simulation.on('end', persistNodePositions);
 
             d3.select("body").on("click", function (event) {
                 const isOutside = !event.target.closest("#chart") && !event.target.closest(".info-box");
@@ -1027,15 +1912,17 @@
                 tooltip.transition()
                     .duration(200)
                     .style("opacity", .9);
-                tooltip.html(d.name)
+                tooltip.text(d.name)
                     .style("left", (event.pageX + 5) + "px")
                     .style("top", (event.pageY - 28) + "px");
+                setInsightNode(d, { persist: false });
             }
 
             function mouseout(event, d) {
                 tooltip.transition()
                     .duration(500)
                     .style("opacity", 0);
+                refreshSidebarFocus();
             }
 
             function dragstarted(event, d) {
@@ -1071,33 +1958,91 @@
             function showInfoBox(event, d) {
                 const detail = d.details || {};
                 const severityText = detail.severity || 'UNKNOWN';
-                const description = detail.shortDescription ? detail.shortDescription : 'No description available';
+                const description = detail.shortDescription || 'No description available';
                 const githubPocs = Array.isArray(detail.githubPocs) ? detail.githubPocs : [];
-                const cveId = detail.cveID || d.name;
+                const cveId = (detail.cveID || d.name || '').toString();
+
+                const el = infoBox.node();
+                el.innerHTML = '';
+
+                const h = document.createElement('h5');
+                h.textContent = detail.vulnerabilityName || d.name || cveId;
+                el.appendChild(h);
+
+                const mkP = (label, value) => {
+                    const p = document.createElement('p');
+                    const b = document.createElement('strong');
+                    b.textContent = label + ': ';
+                    p.appendChild(b);
+                    p.appendChild(document.createTextNode(value || 'Unknown'));
+                    return p;
+                };
+                el.appendChild(mkP('CVE ID', cveId));
+                el.appendChild(mkP('Severity', severityText));
+                el.appendChild(mkP('Published Date', detail.dateAdded || 'Unknown'));
+
+                const pd = document.createElement('p');
+                const bdesc = document.createElement('strong');
+                bdesc.textContent = 'Description: ';
+                pd.appendChild(bdesc);
+                pd.appendChild(document.createTextNode(description));
+                el.appendChild(pd);
+
+                const pocWrap = document.createElement('div');
+                const pocTitle = document.createElement('strong');
+                pocTitle.textContent = 'GitHub PoCs:';
+                pocWrap.appendChild(pocTitle);
+                const pocList = document.createElement('div');
+                pocList.className = 'github-pocs';
+                if (githubPocs.length) {
+                    const valid = githubPocs.filter(u => /^https?:\/\//i.test(u));
+                    valid.forEach((u, i) => {
+                        const a = document.createElement('a');
+                        a.href = u;
+                        a.textContent = u;
+                        a.target = '_blank';
+                        a.rel = 'noopener noreferrer nofollow ugc';
+                        pocList.appendChild(a);
+                        if (i < valid.length - 1) pocList.appendChild(document.createTextNode(', '));
+                    });
+                    if (!valid.length) pocList.textContent = 'No GitHub PoCs';
+                } else {
+                    pocList.textContent = 'No GitHub PoCs';
+                }
+                pocWrap.appendChild(pocList);
+                el.appendChild(pocWrap);
+
+                const actions = document.createElement('div');
+                actions.style.marginTop = '8px';
+                const mkBtn = (href, cls, icon, text) => {
+                    const a = document.createElement('a');
+                    a.className = `btn btn-sm ${cls}`;
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.href = href;
+                    a.innerHTML = `<i class="${icon}"></i> ${text}`;
+                    return a;
+                };
+                const safeCve = /^CVE-\d{4}-\d{4,}$/.test(cveId) ? cveId : '';
+                actions.appendChild(mkBtn(`/vuln/${safeCve}/report`, 'btn-outline-primary', 'fas fa-file-alt', 'Report'));
+                actions.appendChild(mkBtn(`/vuln/${safeCve}`, 'btn-outline-secondary', 'fas fa-external-link-alt', 'Details'));
+                el.appendChild(actions);
+
                 infoBox.style('display', 'block')
-                .html(`
-                    <h5>${detail.vulnerabilityName || d.name}</h5>
-                    <p><strong>CVE ID:</strong> ${cveId}</p>
-                    <p><strong>Severity:</strong> ${severityText}</p>
-                    <p><strong>Published Date:</strong> ${detail.dateAdded || 'Unknown'}</p>
-                    <p><strong>Description:</strong> ${description}</p>
-                    <div>
-                        <strong>GitHub PoCs:</strong>
-                        <div class="github-pocs">
-                            ${githubPocs.length > 0 ? githubPocs.map(poc => `<a href="${poc}" target="_blank">${poc}</a>`).join(', ') : 'No GitHub PoCs'}
-                        </div>
-                    </div>
-                    <div style="margin-top:8px;">
-                        <a class="btn btn-sm btn-outline-primary" target="_blank" href="/vuln/${cveId}/report"><i class="fas fa-file-alt"></i> Report</a>
-                        <a class="btn btn-sm btn-outline-secondary" target="_blank" href="/vuln/${cveId}"><i class="fas fa-external-link-alt"></i> Details</a>
-                    </div>
-                `)
-                .style('left', (event.pageX + 10) + 'px')
-                .style('top', (event.pageY - 28) + 'px')
-                .transition().duration(200)
-                .style('opacity', .9);
+                  .style('left', (event.pageX + 10) + 'px')
+                  .style('top', (event.pageY - 28) + 'px')
+                  .transition().duration(200)
+                  .style('opacity', .9);
                 event.stopPropagation();
+                setInsightNode(d);
             }
+
+            if (!hasInitialFit && filteredNodes.length) {
+                hasInitialFit = true;
+                setTimeout(() => fitToScreen(), 60);
+            }
+
+            updateStatusChips();
         }
 
         function ensureScene(width, height) {
@@ -1122,7 +2067,12 @@
                 gNodes = zoomGroup.append('g').attr('class', 'nodes');
                 gLabels = zoomGroup.append('g').attr('class', 'labels');
                 zoomBehavior = d3.zoom().scaleExtent([0.2, 5]).on('zoom', (event) => {
+                    currentTransform = event.transform;
                     zoomGroup.attr('transform', event.transform);
+                    scheduleMiniMapRender(lastMiniMapNodes);
+                }).wheelDelta(event => {
+                const base = event.deltaMode === 1 ? 0.05 : 0.0025;
+                return -event.deltaY * base;
                 });
                 rootSvg.call(zoomBehavior);
                 tooltip = d3.select('#chart').append('div').attr('class', 'tooltip');
@@ -1179,23 +2129,29 @@
             for (const n of newNodes) {
                 if (!nodeMap.has(n.id)) {
                     // Seed new node position near an existing neighbor if possible
-                    const neighSet = neighborMap.get(n.id) || new Set();
                     let seeded = false;
-                    for (const nid of neighSet) {
-                        if (existingIds.has(nid)) {
-                            const neighbor = nodeMap.get(nid) || allNodes.find(x => x.id === nid);
-                            if (neighbor && typeof neighbor.x === 'number' && typeof neighbor.y === 'number') {
-                                const jitter = () => (Math.random() - 0.5) * 40;
-                                n.x = neighbor.x + jitter();
-                                n.y = neighbor.y + jitter();
-                                seeded = true;
-                                break;
+                    const stored = persistedPositions.get(n.id);
+                    if (stored && typeof stored.x === 'number' && typeof stored.y === 'number') {
+                        n.x = stored.x;
+                        n.y = stored.y;
+                        seeded = true;
+                    }
+                    const neighSet = neighborMap.get(n.id) || new Set();
+                    if (!seeded) {
+                        for (const nid of neighSet) {
+                            if (existingIds.has(nid)) {
+                                const neighbor = nodeMap.get(nid) || allNodes.find(x => x.id === nid);
+                                if (neighbor && typeof neighbor.x === 'number' && typeof neighbor.y === 'number') {
+                                    const jitter = () => (Math.random() - 0.5) * 40;
+                                    n.x = neighbor.x + jitter();
+                                    n.y = neighbor.y + jitter();
+                                    seeded = true;
+                                    break;
+                                }
                             }
                         }
                     }
-                    if (!seeded) {
-                        // Leave x/y undefined; visualizeData will randomize safely if missing
-                    }
+                    n.__fresh = true;
                     nodeMap.set(n.id, n);
                     allNodes.push(n);
                 }
@@ -1298,6 +2254,495 @@
             return base + (s.startsWith('CVE-') || t.startsWith('CVE-') ? 30 : 0);
         }
 
+        function loadPersistedPositions() {
+            try {
+                const raw = localStorage.getItem(POSITION_STORAGE_KEY);
+                if (!raw) return new Map();
+                const parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) return new Map();
+                const map = new Map();
+                for (const entry of parsed) {
+                    if (Array.isArray(entry) && entry.length >= 3) {
+                        const [id, x, y] = entry;
+                        if (typeof id === 'string' && Number.isFinite(x) && Number.isFinite(y)) {
+                            map.set(id, { x, y });
+                        }
+                    }
+                }
+                return map;
+            } catch (err) {
+                console.warn('Failed to load persisted positions', err);
+                return new Map();
+            }
+        }
+
+        function persistNodePositions() {
+            try {
+                const entries = [];
+                for (const node of allNodes) {
+                    if (typeof node?.x === 'number' && typeof node?.y === 'number') {
+                        entries.push([node.id, Number(node.x.toFixed(1)), Number(node.y.toFixed(1))]);
+                        if (entries.length >= MAX_POSITION_STORE) break;
+                    }
+                }
+                localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(entries));
+                persistedPositions.clear();
+                for (const [id, x, y] of entries) {
+                    persistedPositions.set(id, { x, y });
+                }
+            } catch (err) {
+                console.warn('Failed to persist positions', err);
+            }
+        }
+
+        function updateGraphSnapshot(nodes, links) {
+            const nodeEl = document.getElementById('statNodes');
+            const linkEl = document.getElementById('statLinks');
+            const actorEl = document.getElementById('statActors');
+            const cveEl = document.getElementById('statCves');
+            if (nodeEl) nodeEl.textContent = nodes.length;
+            if (linkEl) linkEl.textContent = links.length;
+            let actorCount = 0;
+            let cveCount = 0;
+            const severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
+            for (const n of nodes) {
+                if (n.type === 'actor') {
+                    actorCount++;
+                } else if (n.type === 'cve') {
+                    cveCount++;
+                    const sev = (n.details?.severity || 'UNKNOWN').toUpperCase();
+                    if (severityCounts[sev] == null) severityCounts.UNKNOWN += 1;
+                    else severityCounts[sev] += 1;
+                }
+            }
+            if (actorEl) actorEl.textContent = actorCount;
+            if (cveEl) cveEl.textContent = cveCount;
+            const severityMap = {
+                CRITICAL: document.getElementById('sevCritical'),
+                HIGH: document.getElementById('sevHigh'),
+                MEDIUM: document.getElementById('sevMedium'),
+                LOW: document.getElementById('sevLow'),
+                UNKNOWN: document.getElementById('sevUnknown')
+            };
+            for (const key of Object.keys(severityMap)) {
+                const el = severityMap[key];
+                if (el) el.textContent = severityCounts[key] ?? 0;
+            }
+            if (lastSnapshot) {
+                setDelta('statNodesDelta', nodes.length - lastSnapshot.nodes);
+                setDelta('statLinksDelta', links.length - lastSnapshot.links);
+                setDelta('statActorsDelta', actorCount - lastSnapshot.actors);
+                setDelta('statCvesDelta', cveCount - lastSnapshot.cves);
+            } else {
+                setDelta('statNodesDelta', null);
+                setDelta('statLinksDelta', null);
+                setDelta('statActorsDelta', null);
+                setDelta('statCvesDelta', null);
+            }
+            lastSnapshot = {
+                nodes: nodes.length,
+                links: links.length,
+                actors: actorCount,
+                cves: cveCount,
+                severity: severityCounts
+            };
+        }
+
+        function ensureMiniMapContext() {
+            if (!miniMapCanvas) {
+                miniMapCanvas = document.getElementById('miniMap');
+                if (miniMapCanvas) {
+                    miniMapCanvas.style.cursor = 'grab';
+                    miniMapCanvas.addEventListener('pointerdown', handleMiniMapPointer);
+                }
+            }
+            if (miniMapCanvas && !miniMapCtx) {
+                miniMapCtx = miniMapCanvas.getContext('2d');
+            }
+        }
+
+        function handleMiniMapPointer(event) {
+            if (!miniMapState || !miniMapCanvas || !rootSvg || !zoomBehavior) return;
+            const rect = miniMapCanvas.getBoundingClientRect();
+            const mx = event.clientX - rect.left;
+            const my = event.clientY - rect.top;
+            const { minX, minY, scale } = miniMapState;
+            const targetX = minX + mx / scale;
+            const targetY = minY + my / scale;
+            const k = currentTransform.k;
+            const newTransform = d3.zoomIdentity.translate(chartWidth / 2, chartHeight / 2).scale(k).translate(-targetX, -targetY);
+            miniMapCanvas.setPointerCapture(event.pointerId);
+            miniMapCanvas.style.cursor = 'grabbing';
+            rootSvg.transition().duration(200).call(zoomBehavior.transform, newTransform);
+            const pointerUp = () => {
+                miniMapCanvas.style.cursor = 'grab';
+                try { miniMapCanvas.releasePointerCapture(event.pointerId); } catch (_) { }
+                miniMapCanvas.removeEventListener('pointerup', pointerUp);
+                miniMapCanvas.removeEventListener('pointerleave', pointerUp);
+            };
+            miniMapCanvas.addEventListener('pointerup', pointerUp);
+            miniMapCanvas.addEventListener('pointerleave', pointerUp);
+        }
+
+        function scheduleMiniMapRender(nodes) {
+            ensureMiniMapContext();
+            if (!miniMapCtx) return;
+            lastMiniMapNodes = Array.isArray(nodes) ? nodes.slice() : [];
+            miniMapPayload = lastMiniMapNodes;
+            if (!miniMapPending) {
+                miniMapPending = true;
+                requestAnimationFrame(() => {
+                    miniMapPending = false;
+                    drawMiniMap();
+                });
+            }
+        }
+
+        function drawMiniMap() {
+            ensureMiniMapContext();
+            if (!miniMapCtx || !miniMapCanvas) return;
+            const ctx = miniMapCtx;
+            const canvas = miniMapCanvas;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const nodes = Array.isArray(miniMapPayload) ? miniMapPayload : [];
+            if (!nodes.length) return;
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const node of nodes) {
+                if (typeof node.x === 'number' && typeof node.y === 'number') {
+                    if (node.x < minX) minX = node.x;
+                    if (node.x > maxX) maxX = node.x;
+                    if (node.y < minY) minY = node.y;
+                    if (node.y > maxY) maxY = node.y;
+                }
+            }
+            if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return;
+            const padding = 12;
+            const width = Math.max(maxX - minX, 1);
+            const height = Math.max(maxY - minY, 1);
+            const scale = Math.min((canvas.width - padding * 2) / width, (canvas.height - padding * 2) / height);
+            ctx.save();
+            ctx.translate(padding, padding);
+            for (const node of nodes) {
+                if (typeof node.x !== 'number' || typeof node.y !== 'number') continue;
+                const x = (node.x - minX) * scale;
+                const y = (node.y - minY) * scale;
+                ctx.beginPath();
+                ctx.fillStyle = node.type === 'actor' ? '#ff5733' : severityColor(node);
+                ctx.arc(x, y, node.type === 'actor' ? 3.5 : 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            const highlightId = focusMode && focusedNodeId ? focusedNodeId : (insightNode ? insightNode.id : null);
+            if (highlightId) {
+                const focusNode = nodes.find(n => n.id === highlightId);
+                if (focusNode && typeof focusNode.x === 'number' && typeof focusNode.y === 'number') {
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = focusMode ? '#0052cc' : '#3290ff';
+                    ctx.arc((focusNode.x - minX) * scale, (focusNode.y - minY) * scale, 6, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            if (chartWidth && chartHeight) {
+                const viewMinX = -currentTransform.x / currentTransform.k;
+                const viewMaxX = (chartWidth - currentTransform.x) / currentTransform.k;
+                const viewMinY = -currentTransform.y / currentTransform.k;
+                const viewMaxY = (chartHeight - currentTransform.y) / currentTransform.k;
+                const rectX = (viewMinX - minX) * scale;
+                const rectY = (viewMinY - minY) * scale;
+                const rectW = Math.max((viewMaxX - viewMinX) * scale, 8);
+                const rectH = Math.max((viewMaxY - viewMinY) * scale, 8);
+                ctx.save();
+                ctx.strokeStyle = 'rgba(0, 82, 204, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                ctx.strokeRect(rectX, rectY, rectW, rectH);
+                ctx.restore();
+            }
+            ctx.restore();
+            miniMapState = { minX, minY, scale, width: canvas.width, height: canvas.height };
+        }
+
+        function refreshSidebarFocus() {
+            let node = null;
+            if (focusMode && focusedNodeId) {
+                node = nodeMap.get(focusedNodeId);
+            } else if (insightNode) {
+                node = nodeMap.get(insightNode.id) || insightNode;
+            }
+            updateInsightPanel(node || null);
+        }
+
+        function setInsightNode(node, { persist = true } = {}) {
+            if (persist) {
+                insightNode = node ? node : null;
+            }
+            updateInsightPanel(node || (persist ? null : node));
+        }
+
+        function updateInsightPanel(node) {
+            const title = document.getElementById('focusTitle');
+            const meta = document.getElementById('focusMeta');
+            const neighborsEl = document.getElementById('focusNeighbors');
+            const descEl = document.getElementById('focusDescription');
+            const neighborsSection = document.getElementById('focusNeighborsSection');
+            if (!title || !meta || !neighborsEl || !descEl) return;
+            meta.innerHTML = '';
+            neighborsEl.innerHTML = '';
+            descEl.textContent = '';
+            refreshFocusStyles(node ? node.id : null);
+            if (!node) {
+                title.textContent = 'No selection yet';
+                const li = document.createElement('li');
+                li.textContent = 'Hover or select a node to inspect details.';
+                neighborsEl.appendChild(li);
+                if (neighborsSection) neighborsSection.classList.remove('focus-section-hidden');
+                activeFocusTab = 'overview';
+                applyFocusTabState();
+                return;
+            }
+            title.textContent = node.name || node.id;
+            const appendMeta = (label, value) => {
+                const wrapper = document.createElement('div');
+                const labelSpan = document.createElement('span');
+                labelSpan.textContent = label;
+                const valueStrong = document.createElement('strong');
+                valueStrong.textContent = value;
+                wrapper.appendChild(labelSpan);
+                wrapper.appendChild(valueStrong);
+                meta.appendChild(wrapper);
+            };
+            appendMeta('Type', node.type === 'actor' ? 'Actor' : 'CVE');
+            const neighborIds = Array.from(adjacency.get(node.id) || []);
+            appendMeta(node.type === 'actor' ? 'Linked CVEs' : 'Linked Actors', neighborIds.length.toString());
+            if (node.type === 'cve') {
+                const severityText = prettifySeverity((node.details?.severity || 'UNKNOWN').toUpperCase());
+                appendMeta('Severity', severityText);
+                appendMeta('Published', node.details?.dateAdded || 'Unknown');
+                const desc = node.details?.shortDescription || 'No description available';
+                const trimmed = desc.length > 240 ? `${desc.slice(0, 240)}...` : desc;
+                descEl.textContent = trimmed;
+            } else {
+                const severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
+                for (const id of neighborIds) {
+                    const neighbor = nodeMap.get(id);
+                    if (neighbor && neighbor.details) {
+                        const sev = (neighbor.details.severity || 'UNKNOWN').toUpperCase();
+                        if (severityCounts[sev] == null) severityCounts.UNKNOWN += 1;
+                        else severityCounts[sev] += 1;
+                    }
+                }
+                const summary = SEVERITY_ORDER.filter(level => severityCounts[level] > 0)
+                    .map(level => `${severityCounts[level]} ${prettifySeverity(level)}`)
+                    .join(', ');
+                descEl.textContent = neighborIds.length ? `Exposure mix: ${summary || 'Unknown severities'}.` : 'No linked CVEs currently in view.';
+            }
+            const neighbors = neighborIds
+                .map(id => nodeMap.get(id))
+                .filter(Boolean)
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            if (!neighbors.length) {
+                const li = document.createElement('li');
+                li.textContent = 'No linked nodes in the current view.';
+                neighborsEl.appendChild(li);
+            } else {
+                neighbors.forEach(neighbor => {
+                    const li = document.createElement('li');
+                    if (node.type === 'actor') {
+                        const sev = prettifySeverity((neighbor.details?.severity || 'UNKNOWN').toUpperCase());
+                        li.textContent = `${neighbor.name || neighbor.id} (${sev})`;
+                    } else {
+                        li.textContent = neighbor.name || neighbor.id;
+                    }
+                    neighborsEl.appendChild(li);
+                });
+            }
+            applyFocusTabState();
+        }
+
+        function refreshFocusStyles(activeId) {
+            if (!nodeSel) return;
+            nodeSel.classed('is-focus', d => d.id === activeId);
+            if (labelSel) {
+                labelSel.classed('is-focus', d => d.id === activeId);
+            }
+        }
+
+        function applyFocusTabState() {
+            const overview = document.getElementById('focusOverview');
+            const neighborsSection = document.getElementById('focusNeighborsSection');
+            if (overview) overview.classList.toggle('focus-section-hidden', activeFocusTab !== 'overview');
+            if (neighborsSection) neighborsSection.classList.toggle('focus-section-hidden', activeFocusTab !== 'neighbors');
+            const tabsContainer = document.getElementById('focusTabs');
+            if (tabsContainer) {
+                tabsContainer.querySelectorAll('.focus-tab').forEach(btn => {
+                    const tab = btn.getAttribute('data-tab');
+                    btn.classList.toggle('active', tab === activeFocusTab);
+                });
+            }
+        }
+
+        function setChipState(id, text, { variant = null, hidden = false } = {}) {
+            const chip = document.getElementById(id);
+            if (!chip) return;
+            const label = chip.querySelector('.label-text');
+            if (label) label.textContent = text;
+            if (hidden) {
+                chip.classList.add('hidden');
+            } else {
+                chip.classList.remove('hidden');
+            }
+            if (variant) {
+                chip.setAttribute('data-variant', variant);
+            } else {
+                chip.removeAttribute('data-variant');
+            }
+        }
+
+        function prettifySeverity(value) {
+            if (!value || value === 'all') return 'All';
+            return value.charAt(0) + value.slice(1).toLowerCase();
+        }
+
+        function setDelta(id, delta) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('positive', 'negative');
+            if (delta == null || delta === 0) {
+                el.textContent = '';
+                return;
+            }
+            el.textContent = delta > 0 ? `+${delta}` : `${delta}`;
+            el.classList.add(delta > 0 ? 'positive' : 'negative');
+        }
+
+        function updateStatusChips() {
+            const totalText = pageInfo.total != null ? pageInfo.total : '?';
+            const current = pageInfo.current || 0;
+            setChipState('chipPage', `Page ${current}/${totalText}`, {
+                hidden: current === 0 && pageInfo.total == null
+            });
+
+            setChipState('chipLayout', `Layout: ${organicMode ? 'Organic' : 'Structured'}`, {
+                variant: organicMode ? 'warning' : null
+            });
+
+            const severityText = prettifySeverity(severityFilter);
+            let severityVariant = null;
+            if (severityFilter === 'CRITICAL') severityVariant = 'danger';
+            else if (severityFilter === 'HIGH') severityVariant = 'warning';
+            setChipState('chipSeverity', `Severity: ${severityText}`, { variant: severityVariant });
+
+            setChipState('chipMinDegree', `Min CVEs: ${minDegree}`, {
+                variant: minDegree > 0 ? 'warning' : null
+            });
+
+            const actorLabel = actorDisplayName ? `Actor: ${actorDisplayName}${filterActors ? ' (filtered)' : ''}` : (filterActors ? 'Actor: Filter On' : 'Actor: All');
+            setChipState('chipActor', actorLabel, {
+                variant: actorDisplayName || filterActors ? 'warning' : null
+            });
+
+            setChipState('chipLabels', `Labels: ${labelsOn ? 'On' : 'Off'}`, {
+                variant: labelsOn ? null : 'warning'
+            });
+
+            let focusText = 'Focus Off';
+            let focusVariant = null;
+            if (focusMode) {
+                focusVariant = 'warning';
+                if (focusedNodeId) {
+                    const focusName = (nodeMap.get(focusedNodeId) || {}).name || focusedNodeId;
+                    focusText = `Focus: ${focusName}`;
+                } else {
+                    focusText = 'Focus Ready';
+                }
+            }
+            setChipState('chipFocus', focusText, { variant: focusVariant });
+            updateSeverityChips();
+            updateTips();
+        }
+
+        function updateSeverityChips() {
+            const container = document.getElementById('severityQuickFilters');
+            if (!container) return;
+            const buttons = container.querySelectorAll('.severity-chip');
+            buttons.forEach(btn => {
+                const val = btn.getAttribute('data-severity');
+                btn.classList.toggle('active', (severityFilter || 'all') === val);
+            });
+        }
+
+        function updateTips() {
+            const list = document.getElementById('interactionTips');
+            if (!list) return;
+            list.innerHTML = '';
+            const tips = [];
+            tips.push('Scroll or pinch to zoom, drag the background to pan.');
+            tips.push('Use + / - keys or the toolbar buttons to adjust zoom. Press F to fit, R to reset.');
+            if (!focusMode) {
+                tips.push('Toggle Focus Mode to isolate a node and its neighborhood.');
+            } else if (!focusedNodeId) {
+                tips.push('Click any node to lock focus while Focus Mode is enabled.');
+            } else {
+                tips.push('Use the Exit Focus button or press Esc to leave the focused neighborhood.');
+            }
+            if (severityFilter !== 'all') {
+                tips.push(`Severity filter is set to ${prettifySeverity(severityFilter)}. Click a severity chip to change or show all.`);
+            }
+            if (minDegree > 0) {
+                tips.push(`Min CVEs slider is hiding actors linked to fewer than ${minDegree} CVEs.`);
+            }
+            for (const tip of tips.slice(0, 5)) {
+                const li = document.createElement('li');
+                li.textContent = tip;
+                list.appendChild(li);
+            }
+        }
+
+        function bindKeyboardShortcuts() {
+            document.addEventListener('keydown', (event) => {
+                if (event.defaultPrevented) return;
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+                    return;
+                }
+                switch (event.key) {
+                    case '+':
+                    case '=':
+                        zoomBy(1.2);
+                        event.preventDefault();
+                        break;
+                    case '-':
+                    case '_':
+                        zoomBy(1 / 1.2);
+                        event.preventDefault();
+                        break;
+                    case 'f':
+                    case 'F':
+                        fitToScreen();
+                        event.preventDefault();
+                        break;
+                    case 'r':
+                    case 'R':
+                        if (rootSvg && zoomBehavior) {
+                            rootSvg.transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity);
+                        }
+                        event.preventDefault();
+                        break;
+                    case 'Escape':
+                        if (focusMode && focusedNodeId) {
+                            focusedNodeId = null;
+                            document.getElementById('exitFocus').style.display = 'none';
+                            visualizeData({ nodes: allNodes, links: allLinks });
+                            updateStatusChips();
+                            refreshSidebarFocus();
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            });
+        }
+
         // Status + progress
         function setStatus(text) { document.getElementById('statusText').textContent = text; }
         function updateCounts() { document.getElementById('countsText').textContent = `Nodes: ${allNodes.length}, Links: ${allLinks.length}`; }
@@ -1382,11 +2827,20 @@
                 if (p) { perPage = Math.max(1, Math.min(100, p)); document.getElementById('perPage').value = perPage; }
                 if (actor) {
                     document.getElementById('actorSearch').value = actor;
+                    actorDisplayName = actor;
                     searchedActor = actor.toLowerCase();
+                    updateStatusChips();
                     fetchDataByActor(searchedActor);
                 }
             } catch { /* ignore */ }
         })();
+
+        updateGraphSnapshot([], []);
+        scheduleMiniMapRender([]);
+        updateStatusChips();
+        window.addEventListener('beforeunload', persistNodePositions);
+        refreshSidebarFocus();
+        bindKeyboardShortcuts();
 
     </script>
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
