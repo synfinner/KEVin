@@ -75,6 +75,15 @@
             stroke: #444;
         }
 
+        .node.has-poc {
+            filter: drop-shadow(0 0 8px rgba(220, 53, 69, 0.6));
+            animation: pocHalo 2.2s ease-in-out infinite;
+        }
+
+        body.bg-dark .node.has-poc {
+            filter: drop-shadow(0 0 9px rgba(255, 115, 155, 0.65));
+        }
+
         .link {
             stroke: #999;
             stroke-opacity: 0.6;
@@ -337,6 +346,38 @@
             color: #dfe6ff;
         }
 
+        .focus-pocs {
+            margin-top: 12px;
+            font-size: 0.82rem;
+            line-height: 1.4;
+            max-height: 160px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+
+        .focus-pocs-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .focus-pocs-list {
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 0;
+        }
+
+        .focus-pocs-list li {
+            margin-bottom: 6px;
+        }
+
+        .focus-pocs a {
+            word-break: break-all;
+        }
+
+        body.bg-dark .focus-pocs a {
+            color: #a9c4ff;
+        }
+
         .quick-filters {
             margin-top: 14px;
             display: grid;
@@ -483,6 +524,11 @@
 
         .label.is-focus {
             font-weight: 700;
+        }
+
+        @keyframes pocHalo {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
         }
 
         .controls {
@@ -993,6 +1039,7 @@
                     <div id="focusOverview">
                         <div class="focus-meta" id="focusMeta"></div>
                         <div class="focus-description" id="focusDescription"></div>
+                        <div class="focus-pocs focus-section-hidden" id="focusPocs"></div>
                     </div>
                     <div id="focusNeighborsSection" class="focus-neighbors-wrapper">
                         <ul class="focus-neighbors" id="focusNeighbors"></ul>
@@ -1851,7 +1898,8 @@
 
             nodeSel = nodeEnter.merge(nodeSel)
                 .attr('r', d => getRadius(d, degreeMap))
-                .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d));
+                .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d))
+                .classed('has-poc', d => getValidGithubPocs(d).length > 0);
 
             // 4) Data join (labels)
             labelSel = gLabels.selectAll('text').data(filteredNodes, d => d.id);
@@ -1915,7 +1963,6 @@
                 tooltip.text(d.name)
                     .style("left", (event.pageX + 5) + "px")
                     .style("top", (event.pageY - 28) + "px");
-                setInsightNode(d, { persist: false });
             }
 
             function mouseout(event, d) {
@@ -2484,23 +2531,29 @@
             const meta = document.getElementById('focusMeta');
             const neighborsEl = document.getElementById('focusNeighbors');
             const descEl = document.getElementById('focusDescription');
+            const pocsEl = document.getElementById('focusPocs');
             const neighborsSection = document.getElementById('focusNeighborsSection');
             if (!title || !meta || !neighborsEl || !descEl) return;
             meta.innerHTML = '';
             neighborsEl.innerHTML = '';
             descEl.textContent = '';
+            if (pocsEl) {
+                pocsEl.innerHTML = '';
+                pocsEl.classList.add('focus-section-hidden');
+            }
             refreshFocusStyles(node ? node.id : null);
             if (!node) {
                 title.textContent = 'No selection yet';
                 const li = document.createElement('li');
-                li.textContent = 'Hover or select a node to inspect details.';
+                li.textContent = 'Click a node to inspect details.';
                 neighborsEl.appendChild(li);
                 if (neighborsSection) neighborsSection.classList.remove('focus-section-hidden');
+                if (pocsEl) pocsEl.classList.add('focus-section-hidden');
                 activeFocusTab = 'overview';
                 applyFocusTabState();
                 return;
             }
-            title.textContent = node.name || node.id;
+            let displayTitle = node.name || node.id;
             const appendMeta = (label, value) => {
                 const wrapper = document.createElement('div');
                 const labelSpan = document.createElement('span');
@@ -2515,12 +2568,44 @@
             const neighborIds = Array.from(adjacency.get(node.id) || []);
             appendMeta(node.type === 'actor' ? 'Linked CVEs' : 'Linked Actors', neighborIds.length.toString());
             if (node.type === 'cve') {
-                const severityText = prettifySeverity((node.details?.severity || 'UNKNOWN').toUpperCase());
+                const detail = node.details || {};
+                const cveIdValue = detail.cveID || node.name || node.id;
+                const cveId = cveIdValue ? String(cveIdValue) : 'Unknown';
+                const githubPocs = getValidGithubPocs(node);
+                const hasPocs = githubPocs.length > 0;
+                const baseTitle = cveId;
+                displayTitle = hasPocs ? `${baseTitle} 🚩` : baseTitle;
+                appendMeta('CVE ID', cveId);
+                const severityText = prettifySeverity((detail.severity || 'UNKNOWN').toUpperCase());
                 appendMeta('Severity', severityText);
-                appendMeta('Published', node.details?.dateAdded || 'Unknown');
-                const desc = node.details?.shortDescription || 'No description available';
+                appendMeta('Published', detail.dateAdded || 'Unknown');
+                const desc = detail.shortDescription || 'No description available';
                 const trimmed = desc.length > 240 ? `${desc.slice(0, 240)}...` : desc;
                 descEl.textContent = trimmed;
+                if (pocsEl) {
+                    if (hasPocs) {
+                        pocsEl.classList.remove('focus-section-hidden');
+                        const titleEl = document.createElement('div');
+                        titleEl.className = 'focus-pocs-title';
+                        titleEl.textContent = 'GitHub PoCs';
+                        pocsEl.appendChild(titleEl);
+                        const listEl = document.createElement('ul');
+                        listEl.className = 'focus-pocs-list';
+                        githubPocs.forEach(url => {
+                            const li = document.createElement('li');
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.textContent = url;
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer nofollow ugc';
+                            li.appendChild(link);
+                            listEl.appendChild(li);
+                        });
+                        pocsEl.appendChild(listEl);
+                    } else {
+                        pocsEl.classList.add('focus-section-hidden');
+                    }
+                }
             } else {
                 const severityCounts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNKNOWN: 0 };
                 for (const id of neighborIds) {
@@ -2535,6 +2620,8 @@
                     .map(level => `${severityCounts[level]} ${prettifySeverity(level)}`)
                     .join(', ');
                 descEl.textContent = neighborIds.length ? `Exposure mix: ${summary || 'Unknown severities'}.` : 'No linked CVEs currently in view.';
+                if (pocsEl) pocsEl.classList.add('focus-section-hidden');
+                displayTitle = node.name || node.id;
             }
             const neighbors = neighborIds
                 .map(id => nodeMap.get(id))
@@ -2556,6 +2643,7 @@
                     neighborsEl.appendChild(li);
                 });
             }
+            title.textContent = displayTitle;
             applyFocusTabState();
         }
 
@@ -2601,6 +2689,13 @@
         function prettifySeverity(value) {
             if (!value || value === 'all') return 'All';
             return value.charAt(0) + value.slice(1).toLowerCase();
+        }
+
+        function getValidGithubPocs(node) {
+            if (!node || !node.details) return [];
+            const { githubPocs } = node.details;
+            if (!Array.isArray(githubPocs)) return [];
+            return githubPocs.filter(url => typeof url === 'string' && /^https?:\/\//i.test(url));
         }
 
         function setDelta(id, delta) {
@@ -2676,6 +2771,7 @@
             if (!list) return;
             list.innerHTML = '';
             const tips = [];
+            tips.push('🚩 - Denotes CVE with PoCs');
             tips.push('Scroll or pinch to zoom, drag the background to pan.');
             tips.push('Use + / - keys or the toolbar buttons to adjust zoom. Press F to fit, R to reset.');
             if (!focusMode) {
