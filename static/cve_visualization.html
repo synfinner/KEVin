@@ -2428,7 +2428,7 @@
         }
 
         function handleMiniMapPointer(event) {
-            if (!miniMapState || !miniMapCanvas || !rootSvg || !zoomBehavior) return;
+            if (!miniMapState || !miniMapCanvas || !canvas || !zoomBehavior) return;
             event.preventDefault();
             const rect = miniMapCanvas.getBoundingClientRect();
             const updateView = (clientX, clientY, withTransition) => {
@@ -2439,10 +2439,11 @@
                 const targetY = minY + my / scale;
                 const k = currentTransform.k;
                 const newTransform = d3.zoomIdentity.translate(chartWidth / 2, chartHeight / 2).scale(k).translate(-targetX, -targetY);
+                const canvasSel = d3.select(canvas);
                 if (withTransition) {
-                    rootSvg.transition().duration(160).call(zoomBehavior.transform, newTransform);
+                    canvasSel.transition().duration(160).call(zoomBehavior.transform, newTransform);
                 } else {
-                    rootSvg.call(zoomBehavior.transform, newTransform);
+                    canvasSel.call(zoomBehavior.transform, newTransform);
                 }
             };
             miniMapCanvas.setPointerCapture(event.pointerId);
@@ -3301,8 +3302,8 @@
                         break;
                     case 'r':
                     case 'R':
-                        if (rootSvg && zoomBehavior) {
-                            rootSvg.transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity);
+                        if (canvas && zoomBehavior) {
+                            d3.select(canvas).transition().duration(250).call(zoomBehavior.transform, d3.zoomIdentity);
                         }
                         event.preventDefault();
                         break;
