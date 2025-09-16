@@ -109,6 +109,24 @@
             stroke: rgba(0, 0, 0, 0.85);
         }
 
+        .node.dimmed {
+            opacity: 0.18;
+            filter: blur(1.6px);
+        }
+
+        body.bg-dark .node.dimmed {
+            opacity: 0.12;
+        }
+
+        .label.dimmed {
+            opacity: 0.18;
+            filter: blur(1px);
+        }
+
+        .link.dimmed {
+            opacity: 0.05;
+        }
+
         .info-box {
             position: absolute;
             width: 350px;
@@ -1091,6 +1109,7 @@
         let minDegree = 0;
         let focusMode = false;
         let focusedNodeId = null;
+        let spotlightNodeId = null;
         let rootSvg, zoomBehavior, zoomGroup; // for zoom controls
         let gLinks, gNodes, gLabels; // groups
         let linkSel, nodeSel, labelSel; // selections
@@ -1158,6 +1177,7 @@
             currentPage = 1;
             searchedActor = ''; // Clear searched actor on reset
             minDegree = 0;
+            spotlightNodeId = null;
             const minSlider = document.getElementById('minDegree');
             const minLabel = document.getElementById('minDegreeValue');
             if (minSlider) { minSlider.value = 0; }
@@ -1258,6 +1278,7 @@
                 focusedNodeId = null;
                 document.getElementById('exitFocus').style.display = 'none';
             }
+            spotlightNodeId = null;
             visualizeData({ nodes: allNodes, links: allLinks });
             updateStatusChips();
             refreshSidebarFocus();
@@ -1887,7 +1908,20 @@
                         updateStatusChips();
                         return;
                     }
+                    let spotlightChanged = false;
+                    if (d.type === 'actor' || d.type === 'cve') {
+                        const alreadyFocused = spotlightNodeId === d.id;
+                        spotlightNodeId = alreadyFocused ? null : d.id;
+                        spotlightChanged = true;
+                    } else if (spotlightNodeId) {
+                        spotlightNodeId = null;
+                        spotlightChanged = true;
+                    }
+                    if (spotlightChanged) {
+                        refreshSpotlightStyles();
+                    }
                     setInsightNode(d);
+                    event.stopPropagation();
                 });
             const newNodes = nodeEnter.filter(d => d.__fresh);
             newNodes.classed('new-node', true).each(function(d){
@@ -1914,6 +1948,8 @@
                 .style('font-weight', d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? 'bold' : 'normal')
                 .style('font-size', d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? '20px' : '12px')
                 .style('display', labelsOn || focusMode ? null : 'none');
+
+            refreshSpotlightStyles();
 
             // 5) Init or update simulation
             if (!simulation) {
@@ -1992,14 +2028,24 @@
             // Helper: neighbor highlight
             function highlightNode(d, on) {
                 const neighbors = adjacency.get(d.id) || new Set();
-                const opacityNode = on ? 1 : 0.9;
-                const opacityFaded = on ? 0.08 : 0.9;
-                nodeSel && nodeSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? opacityNode : opacityFaded);
-                labelSel && labelSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : (on ? 0.08 : 1));
-                linkSel && linkSel
-                    .style('opacity', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id || (neighbors.has(getLinkEndId(l.source)) && neighbors.has(getLinkEndId(l.target)))) ? 0.8 : (on ? 0.05 : 0.6))
-                    .style('stroke', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? '#555' : '#999')
-                    .style('stroke-width', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? 2.5 : 1.5);
+                if (!on) {
+                    if (nodeSel) nodeSel.style('opacity', null);
+                    if (labelSel) labelSel.style('opacity', null);
+                    if (linkSel) linkSel.style('opacity', null).style('stroke', null).style('stroke-width', null);
+                    return;
+                }
+                if (nodeSel) {
+                    nodeSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : 0.08);
+                }
+                if (labelSel) {
+                    labelSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : 0.08);
+                }
+                if (linkSel) {
+                    linkSel
+                        .style('opacity', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id || (neighbors.has(getLinkEndId(l.source)) && neighbors.has(getLinkEndId(l.target)))) ? 0.8 : 0.05)
+                        .style('stroke', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? '#555' : '#999')
+                        .style('stroke-width', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? 2.5 : 1.5);
+                }
             }
 
             function showInfoBox(event, d) {
@@ -2122,6 +2168,14 @@
                 return -event.deltaY * base;
                 });
                 rootSvg.call(zoomBehavior);
+                rootSvg.on('click', (event) => {
+                    const targetTag = (event.target && event.target.tagName) ? event.target.tagName.toLowerCase() : '';
+                    if (targetTag === 'circle') return;
+                    if (spotlightNodeId) {
+                        spotlightNodeId = null;
+                        refreshSpotlightStyles();
+                    }
+                });
                 tooltip = d3.select('#chart').append('div').attr('class', 'tooltip');
                 infoBox = d3.select('#infoBox');
             } else {
@@ -2652,6 +2706,34 @@
             nodeSel.classed('is-focus', d => d.id === activeId);
             if (labelSel) {
                 labelSel.classed('is-focus', d => d.id === activeId);
+            }
+        }
+
+        function refreshSpotlightStyles() {
+            if (!nodeSel || typeof nodeSel.classed !== 'function') return;
+            const hasLabels = !!labelSel && typeof labelSel.classed === 'function';
+            const hasLinks = !!linkSel && typeof linkSel.classed === 'function';
+            const activeId = spotlightNodeId;
+            if (!activeId || !adjacency.has(activeId)) {
+                spotlightNodeId = null;
+                nodeSel.classed('dimmed', false);
+                if (hasLabels) labelSel.classed('dimmed', false);
+                if (hasLinks) linkSel.classed('dimmed', false);
+                return;
+            }
+            const focusSet = new Set([activeId]);
+            const neighbors = adjacency.get(activeId) || new Set();
+            neighbors.forEach(id => focusSet.add(id));
+            nodeSel.classed('dimmed', d => !focusSet.has(d.id));
+            if (hasLabels) {
+                labelSel.classed('dimmed', d => !focusSet.has(d.id));
+            }
+            if (hasLinks) {
+                linkSel.classed('dimmed', l => {
+                    const s = getLinkEndId(l.source);
+                    const t = getLinkEndId(l.target);
+                    return !(focusSet.has(s) && focusSet.has(t));
+                });
             }
         }
 
