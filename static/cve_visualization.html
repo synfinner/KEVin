@@ -109,6 +109,19 @@
             stroke: rgba(0, 0, 0, 0.85);
         }
 
+        .node.is-search-match {
+            stroke: #ff9800;
+            stroke-width: 3px;
+        }
+
+        body.bg-dark .node.is-search-match {
+            stroke: #ffd166;
+        }
+
+        .label.is-search-match {
+            font-weight: 600;
+        }
+
         .node.dimmed {
             opacity: 0.18;
             filter: blur(1.6px);
@@ -125,6 +138,26 @@
 
         .link.dimmed {
             opacity: 0.05;
+        }
+
+        .node.search-dimmed {
+            opacity: 0.2;
+            filter: blur(1.4px);
+        }
+
+        body.bg-dark .node.search-dimmed {
+            opacity: 0.14;
+        }
+
+        .label.search-dimmed {
+            opacity: 0.2;
+            filter: blur(1px);
+        }
+
+        .node.search-hidden,
+        .label.search-hidden,
+        .link.search-hidden {
+            display: none;
         }
 
         .info-box {
@@ -979,11 +1012,12 @@
                                 <input type="checkbox" class="custom-control-input" id="focusModeToggle">
                                 <label class="custom-control-label" for="focusModeToggle">Focus Mode</label>
                             </div>
-                            <div class="input-group" style="width: 260px;">
+                            <div class="input-group" style="width: 320px;">
                                 <div class="input-group-prepend"><span class="input-group-text">Actor</span></div>
                                 <input type="text" id="actorSearch" placeholder="Search by Actor" class="form-control">
                                 <div class="input-group-append">
-                                    <button class="btn btn-success" id="searchByActor"><i class="fas fa-search"></i></button>
+                                    <button class="btn btn-success" id="searchByActor" title="Search"><i class="fas fa-search"></i></button>
+                                    <button class="btn btn-outline-secondary" id="clearActorSearch" title="Clear"><i class="fas fa-times"></i></button>
                                 </div>
                             </div>
                             <button class="btn btn-warning" id="cancelSearch" style="display: none;">Cancel</button>
@@ -1002,6 +1036,11 @@
                                 <div class="input-group-prepend"><span class="input-group-text">Min CVEs</span></div>
                                 <input type="range" id="minDegree" class="form-control" min="0" max="10" step="1" value="0" oninput="document.getElementById('minDegreeValue').textContent=this.value">
                                 <div class="input-group-append"><span class="input-group-text" id="minDegreeValue">0</span></div>
+                            </div>
+                            <div class="input-group" style="width: 320px;">
+                                <div class="input-group-prepend"><span class="input-group-text">Spacing</span></div>
+                                <input type="range" id="spacingSlider" class="form-control" min="0" max="100" step="5" value="0" oninput="document.getElementById('spacingValue').textContent=this.value">
+                                <div class="input-group-append"><span class="input-group-text" id="spacingValue">0</span></div>
                             </div>
                             <button class="btn btn-outline-dark" id="exitFocus" style="display:none;">Exit Focus</button>
                         </div>
@@ -1110,9 +1149,8 @@
         let focusMode = false;
         let focusedNodeId = null;
         let spotlightNodeId = null;
-        let rootSvg, zoomBehavior, zoomGroup; // for zoom controls
-        let gLinks, gNodes, gLabels; // groups
-        let linkSel, nodeSel, labelSel; // selections
+        let rootSvg = null;
+        let zoomBehavior = null;
         let tooltip, infoBox; // overlays
         let actorLoadTimer = null;
         let loadAllTimer = null;
@@ -1130,6 +1168,9 @@
         let miniMapPayload = null;
         let miniMapPending = false;
         let miniMapTick = 0;
+        const MINIMAP_RENDER_INTERVAL = 160;
+        let lastMiniMapRender = 0;
+        let miniMapThrottleTimer = null;
         let hasInitialFit = false;
         let currentTransform = d3.zoomIdentity;
         let miniMapState = null;
@@ -1137,7 +1178,26 @@
         let chartHeight = 0;
         let lastSnapshot = null;
         let lastMiniMapNodes = [];
+        let lastRenderedNodeCount = 0;
         let activeFocusTab = 'overview';
+        let searchMatchIds = new Set();
+        let lastActorSearchTerm = '';
+        let canvas = null;
+        let ctx = null;
+        let currentRenderNodes = [];
+        let currentRenderLinks = [];
+        let currentDegreeMap = null;
+        let spotlightFocusSet = null;
+        let searchVisibleNodeSet = null;
+        let searchHiddenActorSet = null;
+        let focusHighlightId = null;
+        let hoveredNode = null;
+        let pointerDownNode = null;
+        let isDraggingCanvas = false;
+        let zoomTargetAlpha = 0.02;
+        let canvasInteractionsBound = false;
+        let spacingStrength = 0;
+        let canvasWasPanned = false;
 
         document.getElementById('fetchData').addEventListener('click', function () {
             searchedActor = ''; // Clear searched actor when fetching general data
@@ -1190,10 +1250,26 @@
             actorDisplayName = '';
             pageInfo = { current: 0, total: null };
             hasInitialFit = false;
-            rootSvg = null; zoomBehavior = null; zoomGroup = null;
-            gLinks = gNodes = gLabels = null;
-            linkSel = nodeSel = labelSel = null;
+            rootSvg = null;
+            zoomBehavior = null;
             tooltip = infoBox = null;
+            canvas = null;
+            ctx = null;
+            currentRenderNodes = [];
+            currentRenderLinks = [];
+            currentDegreeMap = null;
+            spotlightFocusSet = null;
+            searchVisibleNodeSet = null;
+            searchHiddenActorSet = null;
+            hoveredNode = null;
+            pointerDownNode = null;
+            canvasInteractionsBound = false;
+            spacingStrength = 0;
+            const spacingSlider = document.getElementById('spacingSlider');
+            if (spacingSlider) spacingSlider.value = 0;
+            const spacingValue = document.getElementById('spacingValue');
+            if (spacingValue) spacingValue.textContent = '0';
+            clearActorSearchMatches();
             updateStatusChips();
             refreshSidebarFocus();
             updateGraphSnapshot([], []);
@@ -1201,10 +1277,22 @@
         });
 
         document.getElementById('searchByActor').addEventListener('click', function () {
-            cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
             const actorInput = document.getElementById('actorSearch');
             actorDisplayName = actorInput.value.trim();
-            searchedActor = actorDisplayName.toLowerCase(); // Store the searched actor in lowercase
+            if (!actorDisplayName) {
+                clearActorSearchMatches({ reheatAlpha: 0.1 });
+                return;
+            }
+            searchedActor = actorDisplayName.toLowerCase();
+            if (performActorGraphSearch(actorDisplayName)) {
+                document.getElementById('cancelSearch').style.display = 'none';
+                hideProgress();
+                updateStatusChips();
+                refreshSidebarFocus();
+                return;
+            }
+            clearActorSearchMatches();
+            cancelCurrentRequest();
             fetchDataByActor(searchedActor);
             updateStatusChips();
             refreshSidebarFocus();
@@ -1217,41 +1305,66 @@
             hideProgress();
             setStatus('Canceled.');
             actorDisplayName = '';
+            clearActorSearchMatches({ reheatAlpha: 0.1 });
             updateStatusChips();
             refreshSidebarFocus();
         });
 
         document.getElementById('actorSearch').addEventListener('keypress', function (event) {
             if (event.key === 'Enter') {
-                cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
-                actorDisplayName = document.getElementById('actorSearch').value.trim();
-                searchedActor = actorDisplayName.toLowerCase(); // Store the searched actor in lowercase
+                const actorInput = document.getElementById('actorSearch');
+                actorDisplayName = actorInput.value.trim();
+                if (!actorDisplayName) {
+                    clearActorSearchMatches({ reheatAlpha: 0.1 });
+                    return;
+                }
+                searchedActor = actorDisplayName.toLowerCase();
+                if (performActorGraphSearch(actorDisplayName)) {
+                    document.getElementById('cancelSearch').style.display = 'none';
+                    hideProgress();
+                    updateStatusChips();
+                    refreshSidebarFocus();
+                    return;
+                }
+                clearActorSearchMatches();
+                cancelCurrentRequest();
                 fetchDataByActor(searchedActor);
                 updateStatusChips();
                 refreshSidebarFocus();
             }
         });
 
+        document.getElementById('clearActorSearch').addEventListener('click', function(){
+            const actorInput = document.getElementById('actorSearch');
+            if (actorInput) actorInput.value = '';
+            actorDisplayName = '';
+            searchedActor = '';
+            clearActorSearchMatches({ reheatAlpha: 0.1 });
+            updateStatusChips();
+            refreshSidebarFocus();
+            setStatus('Actor search cleared.');
+        });
+
         document.getElementById('filterActorsToggle').addEventListener('change', function () {
             filterActors = this.checked;
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.2 });
             updateStatusChips();
         });
 
         document.getElementById('labelsToggle').addEventListener('change', function () {
             labelsOn = this.checked;
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.1 });
             updateStatusChips();
         });
 
         document.getElementById('sizeByDegreeToggle').addEventListener('change', function () {
             sizeByDegree = this.checked;
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.12 });
         });
 
         document.getElementById('severityFilter').addEventListener('change', function () {
             severityFilter = this.value;
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.22 });
             updateStatusChips();
             const container = document.getElementById('severityQuickFilters');
             if (container) {
@@ -1268,8 +1381,13 @@
 
         document.getElementById('minDegree').addEventListener('input', function(){
             minDegree = parseInt(this.value, 10) || 0;
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.22 });
             updateStatusChips();
+        });
+
+        document.getElementById('spacingSlider').addEventListener('input', function(){
+            spacingStrength = parseInt(this.value, 10) || 0;
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.18 });
         });
 
         document.getElementById('focusModeToggle').addEventListener('change', function(){
@@ -1279,7 +1397,7 @@
                 document.getElementById('exitFocus').style.display = 'none';
             }
             spotlightNodeId = null;
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.24 });
             updateStatusChips();
             refreshSidebarFocus();
         });
@@ -1295,7 +1413,7 @@
                 severityFilter = value;
                 const select = document.getElementById('severityFilter');
                 if (select) select.value = value;
-                visualizeData({ nodes: allNodes, links: allLinks });
+                visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.22 });
                 updateStatusChips();
             });
         })();
@@ -1317,7 +1435,7 @@
         document.getElementById('exitFocus').addEventListener('click', function(){
             focusedNodeId = null;
             document.getElementById('exitFocus').style.display = 'none';
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.22 });
             updateStatusChips();
             refreshSidebarFocus();
         });
@@ -1334,9 +1452,17 @@
                 document.getElementById('actorSearch').value = q;
                 actorDisplayName = q;
                 searchedActor = q.toLowerCase();
-                fetchDataByActor(searchedActor);
-                updateStatusChips();
-                refreshSidebarFocus();
+                if (performActorGraphSearch(actorDisplayName)) {
+                    document.getElementById('cancelSearch').style.display = 'none';
+                    hideProgress();
+                    updateStatusChips();
+                    refreshSidebarFocus();
+                } else {
+                    clearActorSearchMatches();
+                    fetchDataByActor(searchedActor);
+                    updateStatusChips();
+                    refreshSidebarFocus();
+                }
             }
         });
 
@@ -1354,7 +1480,7 @@
             btn.classList.toggle('btn-info', !organicMode);
             btn.innerHTML = organicMode ? '<i class="fas fa-project-diagram"></i> Organic On' : '<i class="fas fa-project-diagram"></i> Organic';
             setStatus(organicMode ? 'Organic layout' : 'Structured layout');
-            visualizeData({ nodes: allNodes, links: allLinks });
+            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: organicMode ? 0.32 : 0.28 });
             updateStatusChips();
         });
 
@@ -1404,8 +1530,12 @@
                     if (signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
                     mergeGraph(formattedData.nodes, formattedData.links);
-                    visualizeData({ nodes: allNodes, links: allLinks });
+                    const reheat = lastActorSearchTerm ? 0.18 : 0.24;
+                    visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: reheat });
                     updateCounts();
+                    if (lastActorSearchTerm) {
+                        performActorGraphSearch(lastActorSearchTerm, { focus: false, updateStatus: false });
+                    }
                     setStatus(`Page ${data.page}/${data.total_pages || '?'} loaded.`);
                     const current = typeof data.page === 'number' ? data.page : page;
                     pageInfo = {
@@ -1442,7 +1572,8 @@
                     if (signal.aborted) return; // Check if the request was aborted
                     const formattedData = formatData(data.vulnerabilities);
                     mergeGraph(formattedData.nodes, formattedData.links);
-                    visualizeData({ nodes: allNodes, links: allLinks });
+                    const reheat = lastActorSearchTerm ? 0.18 : 0.24;
+                    visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: reheat });
 
                     // Show cancel button
                     document.getElementById('cancelSearch').style.display = 'inline-block';
@@ -1454,6 +1585,7 @@
                         total: typeof data.total_pages === 'number' ? data.total_pages : pageInfo.total
                     };
                     updateStatusChips();
+                    performActorGraphSearch(actorDisplayName, { focus: true, updateStatus: false });
 
                     // Automatically load subsequent pages if total_pages > 1
                     if (data.total_pages > 1) {
@@ -1498,12 +1630,14 @@
                         if (!actorLoadActive || signal.aborted) return;
                         const formattedData = formatData(data.vulnerabilities);
                         mergeGraph(formattedData.nodes, formattedData.links);
-                        visualizeData({ nodes: allNodes, links: allLinks });
+                        const reheat = lastActorSearchTerm ? 0.14 : 0.2;
+                        visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: reheat });
                         updateCounts();
                         showProgress();
                         updateProgress(page, totalPages);
                         pageInfo = { current: page, total: totalPages };
                         updateStatusChips();
+                        performActorGraphSearch(actorDisplayName, { focus: false, updateStatus: false });
                         page++;
                         actorLoadTimer = setTimeout(() => {
                             actorLoadTimer = null;
@@ -1545,8 +1679,12 @@
                     if (!loadAllActive || signal.aborted) return;
                     const formatted = formatData(first.vulnerabilities);
                     mergeGraph(formatted.nodes, formatted.links);
-                    visualizeData({ nodes: allNodes, links: allLinks });
+                    const initialReheat = lastActorSearchTerm ? 0.18 : 0.24;
+                    visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: initialReheat });
                     updateCounts();
+                    if (lastActorSearchTerm) {
+                        performActorGraphSearch(lastActorSearchTerm, { focus: false, updateStatus: false });
+                    }
                     const totalPages = first.total_pages;
                     updateProgress(1, totalPages);
                     setStatus(`Loading all pages: 1/${totalPages}`);
@@ -1580,8 +1718,12 @@
                                 if (!loadAllActive) return;
                                 const f = formatData(data.vulnerabilities);
                                 mergeGraph(f.nodes, f.links);
-                                visualizeData({ nodes: allNodes, links: allLinks });
+                                const stepReheat = lastActorSearchTerm ? 0.14 : 0.2;
+                                visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: stepReheat });
                                 updateCounts();
+                                if (lastActorSearchTerm) {
+                                    performActorGraphSearch(lastActorSearchTerm, { focus: false, updateStatus: false });
+                                }
                                 updateProgress(p, totalPages);
                                 setStatus(`Loading all pages: ${p}/${totalPages}`);
                                 pageInfo = { current: p, total: totalPages };
@@ -1639,7 +1781,11 @@
             'threat analysis',
             'a few critical',
             'kaseya vsa',
-            'The State of Colorado'
+            'the state of colorado',
+            'cyber threat',
+            'global group',
+            ':core.vmware.com/resource/vmsa-2023-0023-questions-answers#introduction',
+            
         ];
         const ACTOR_CONTAINS_EXCLUDE = [
             'brian sabey',
@@ -1674,7 +1820,9 @@
             'andariel': 'Onyx Sleet',
             'silent chollima': 'Onyx Sleet',
             'chollima': 'Onyx Sleet',
-            'plutonium': 'Onyx Sleet'
+            'plutonium': 'Onyx Sleet',
+            'play ransomware group': 'Play Ransomware',
+            'play': 'Play Ransomware',
         };
 
         function canonicalizeActorName(name) {
@@ -1788,11 +1936,12 @@
         }
 
         // Update the visualizeData function to filter nodes based on the searched actor
-        function visualizeData(data) {
+        function renderGraph(data, { reheatAlpha = null } = {}) {
             // 1) Filter data
             let filteredNodes = data.nodes;
             let filteredLinks = data.links;
             miniMapTick = 0;
+            const nodeCountChanged = filteredNodes.length !== lastRenderedNodeCount;
 
             // Filter nodes and links if the filter toggle is active
             if (filterActors && searchedActor) {
@@ -1852,6 +2001,8 @@
             }
 
             updateGraphSnapshot(filteredNodes, filteredLinks);
+            currentRenderNodes = filteredNodes;
+            currentRenderLinks = filteredLinks;
 
             const width = document.getElementById('chart').clientWidth;
             const height = document.getElementById('chart').clientHeight;
@@ -1870,119 +2021,47 @@
 
             computeAdjacency(filteredNodes, filteredLinks);
             const degreeMap = computeDegreeMap(filteredNodes, filteredLinks);
+            currentDegreeMap = degreeMap;
+            const hasFreshNodes = filteredNodes.some(n => n.__fresh);
+            if (hasFreshNodes) {
+                filteredNodes.forEach(n => { if (n.__fresh) n.__fresh = false; });
+            }
             refreshSidebarFocus();
             scheduleMiniMapRender(filteredNodes);
-            // 2) Data join (links)
-            const linkKey = d => {
-                const s = getLinkEndId(d.source);
-                const t = getLinkEndId(d.target);
-                return s < t ? `${s}|${t}` : `${t}|${s}`;
-            };
-            linkSel = gLinks.selectAll('line').data(filteredLinks, linkKey);
-            linkSel.exit().remove();
-            const linkEnter = linkSel.enter().append('line')
-                .attr('class', 'link')
-                .attr('stroke-width', 1.5)
-                .attr('stroke', '#999')
-                .attr('stroke-opacity', 0.6)
-                .attr('marker-end', 'url(#arrowhead)');
-            linkSel = linkEnter.merge(linkSel).attr('marker-end', 'url(#arrowhead)');
-
-            // 3) Data join (nodes)
-            nodeSel = gNodes.selectAll('circle').data(filteredNodes, d => d.id);
-            nodeSel.exit().remove();
-            const nodeEnter = nodeSel.enter().append('circle')
-                .attr('class', 'node')
-                .attr('r', d => getRadius(d, degreeMap))
-                .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d))
-                .call(d3.drag().on('start', dragstarted).on('drag', dragged).on('end', dragended))
-                .on('mouseover', function(event, d){ mouseover(event, d); highlightNode(d, true); })
-                .on('mouseout', function(event, d){ mouseout(event, d); highlightNode(d, false); })
-                .on('click', function(event, d){
-                    if (focusMode) {
-                        focusedNodeId = d.id;
-                        document.getElementById('exitFocus').style.display = 'inline-block';
-                        setStatus(`Focused on ${d.name}`);
-                        setInsightNode(d);
-                        visualizeData({ nodes: allNodes, links: allLinks });
-                        updateStatusChips();
-                        return;
-                    }
-                    let spotlightChanged = false;
-                    if (d.type === 'actor' || d.type === 'cve') {
-                        const alreadyFocused = spotlightNodeId === d.id;
-                        spotlightNodeId = alreadyFocused ? null : d.id;
-                        spotlightChanged = true;
-                    } else if (spotlightNodeId) {
-                        spotlightNodeId = null;
-                        spotlightChanged = true;
-                    }
-                    if (spotlightChanged) {
-                        refreshSpotlightStyles();
-                    }
-                    setInsightNode(d);
-                    event.stopPropagation();
-                });
-            const newNodes = nodeEnter.filter(d => d.__fresh);
-            newNodes.classed('new-node', true).each(function(d){
-                d.__fresh = false;
-                const el = d3.select(this);
-                setTimeout(() => el.classed('new-node', false), 1300);
-            });
-
-            nodeSel = nodeEnter.merge(nodeSel)
-                .attr('r', d => getRadius(d, degreeMap))
-                .attr('fill', d => d.type === 'actor' ? '#ff5733' : severityColor(d))
-                .classed('has-poc', d => getValidGithubPocs(d).length > 0);
-
-            // 4) Data join (labels)
-            labelSel = gLabels.selectAll('text').data(filteredNodes, d => d.id);
-            labelSel.exit().remove();
-            const labelEnter = labelSel.enter().append('text')
-                .attr('class', 'label')
-                .attr('dx', 12)
-                .attr('dy', '.35em')
-                .text(d => d.name);
-            labelSel = labelEnter.merge(labelSel)
-                .style('fill', d => body.classList.contains('bg-dark') ? '#E0E0E0' : '#000')
-                .style('font-weight', d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? 'bold' : 'normal')
-                .style('font-size', d => searchedActor && (d.name.toLowerCase() === searchedActor || d.name.toLowerCase().includes(searchedActor)) ? '20px' : '12px')
-                .style('display', labelsOn || focusMode ? null : 'none');
 
             refreshSpotlightStyles();
+            refreshSearchMatchStyles();
+            applySearchFocus();
+
+            drawScene();
 
             // 5) Init or update simulation
             if (!simulation) {
                 simulation = d3.forceSimulation(filteredNodes)
                     .force('link', d3.forceLink(filteredLinks).id(d => d.id).distance(d => getLinkDistance(d)).strength(0.6))
-                    .force('charge', d3.forceManyBody().strength(-120))
+                    .force('charge', d3.forceManyBody().strength(-110))
                     .force('center', d3.forceCenter(width / 2, height / 2))
                     .force('collision', d3.forceCollide().radius(d => getRadius(d, degreeMap) + 6).strength(1))
+                    .velocityDecay(0.64)
                     .on('end', persistNodePositions);
             }
 
             simulation.nodes(filteredNodes).on('tick', () => {
-                linkSel
-                    .attr('x1', d => d.source.x)
-                    .attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x)
-                    .attr('y2', d => d.target.y);
-
-                nodeSel
-                    .attr('cx', d => d.x)
-                    .attr('cy', d => d.y);
-
-                labelSel
-                    .attr('x', d => d.x)
-                    .attr('y', d => d.y);
-
                 miniMapTick = (miniMapTick + 1) % 4;
                 if (miniMapTick === 0) scheduleMiniMapRender(filteredNodes);
+                drawScene();
             });
             simulation.force('link').links(filteredLinks);
             // apply layout-specific forces
-            applyForces(degreeMap, width, height);
-            simulation.on('end', persistNodePositions);
+            let targetReheat = reheatAlpha;
+            if (targetReheat == null) {
+                targetReheat = (hasFreshNodes || nodeCountChanged) ? (organicMode ? 0.18 : 0.16) : 0.06;
+            }
+            applyForces(degreeMap, width, height, { reheatAlpha: targetReheat });
+            simulation.on('end', () => {
+                persistNodePositions();
+            });
+            lastRenderedNodeCount = filteredNodes.length;
 
             d3.select("body").on("click", function (event) {
                 const isOutside = !event.target.closest("#chart") && !event.target.closest(".info-box");
@@ -1992,144 +2071,6 @@
                 }
             });
 
-            function mouseover(event, d) {
-                tooltip.transition()
-                    .duration(200)
-                    .style("opacity", .9);
-                tooltip.text(d.name)
-                    .style("left", (event.pageX + 5) + "px")
-                    .style("top", (event.pageY - 28) + "px");
-            }
-
-            function mouseout(event, d) {
-                tooltip.transition()
-                    .duration(500)
-                    .style("opacity", 0);
-                refreshSidebarFocus();
-            }
-
-            function dragstarted(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-
-            function dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-
-            function dragended(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-
-            // Helper: neighbor highlight
-            function highlightNode(d, on) {
-                const neighbors = adjacency.get(d.id) || new Set();
-                if (!on) {
-                    if (nodeSel) nodeSel.style('opacity', null);
-                    if (labelSel) labelSel.style('opacity', null);
-                    if (linkSel) linkSel.style('opacity', null).style('stroke', null).style('stroke-width', null);
-                    return;
-                }
-                if (nodeSel) {
-                    nodeSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : 0.08);
-                }
-                if (labelSel) {
-                    labelSel.style('opacity', n => (n.id === d.id || neighbors.has(n.id)) ? 1 : 0.08);
-                }
-                if (linkSel) {
-                    linkSel
-                        .style('opacity', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id || (neighbors.has(getLinkEndId(l.source)) && neighbors.has(getLinkEndId(l.target)))) ? 0.8 : 0.05)
-                        .style('stroke', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? '#555' : '#999')
-                        .style('stroke-width', l => (getLinkEndId(l.source) === d.id || getLinkEndId(l.target) === d.id) ? 2.5 : 1.5);
-                }
-            }
-
-            function showInfoBox(event, d) {
-                const detail = d.details || {};
-                const severityText = detail.severity || 'UNKNOWN';
-                const description = detail.shortDescription || 'No description available';
-                const githubPocs = Array.isArray(detail.githubPocs) ? detail.githubPocs : [];
-                const cveId = (detail.cveID || d.name || '').toString();
-
-                const el = infoBox.node();
-                el.innerHTML = '';
-
-                const h = document.createElement('h5');
-                h.textContent = detail.vulnerabilityName || d.name || cveId;
-                el.appendChild(h);
-
-                const mkP = (label, value) => {
-                    const p = document.createElement('p');
-                    const b = document.createElement('strong');
-                    b.textContent = label + ': ';
-                    p.appendChild(b);
-                    p.appendChild(document.createTextNode(value || 'Unknown'));
-                    return p;
-                };
-                el.appendChild(mkP('CVE ID', cveId));
-                el.appendChild(mkP('Severity', severityText));
-                el.appendChild(mkP('Published Date', detail.dateAdded || 'Unknown'));
-
-                const pd = document.createElement('p');
-                const bdesc = document.createElement('strong');
-                bdesc.textContent = 'Description: ';
-                pd.appendChild(bdesc);
-                pd.appendChild(document.createTextNode(description));
-                el.appendChild(pd);
-
-                const pocWrap = document.createElement('div');
-                const pocTitle = document.createElement('strong');
-                pocTitle.textContent = 'GitHub PoCs:';
-                pocWrap.appendChild(pocTitle);
-                const pocList = document.createElement('div');
-                pocList.className = 'github-pocs';
-                if (githubPocs.length) {
-                    const valid = githubPocs.filter(u => /^https?:\/\//i.test(u));
-                    valid.forEach((u, i) => {
-                        const a = document.createElement('a');
-                        a.href = u;
-                        a.textContent = u;
-                        a.target = '_blank';
-                        a.rel = 'noopener noreferrer nofollow ugc';
-                        pocList.appendChild(a);
-                        if (i < valid.length - 1) pocList.appendChild(document.createTextNode(', '));
-                    });
-                    if (!valid.length) pocList.textContent = 'No GitHub PoCs';
-                } else {
-                    pocList.textContent = 'No GitHub PoCs';
-                }
-                pocWrap.appendChild(pocList);
-                el.appendChild(pocWrap);
-
-                const actions = document.createElement('div');
-                actions.style.marginTop = '8px';
-                const mkBtn = (href, cls, icon, text) => {
-                    const a = document.createElement('a');
-                    a.className = `btn btn-sm ${cls}`;
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                    a.href = href;
-                    a.innerHTML = `<i class="${icon}"></i> ${text}`;
-                    return a;
-                };
-                const safeCve = /^CVE-\d{4}-\d{4,}$/.test(cveId) ? cveId : '';
-                actions.appendChild(mkBtn(`/vuln/${safeCve}/report`, 'btn-outline-primary', 'fas fa-file-alt', 'Report'));
-                actions.appendChild(mkBtn(`/vuln/${safeCve}`, 'btn-outline-secondary', 'fas fa-external-link-alt', 'Details'));
-                el.appendChild(actions);
-
-                infoBox.style('display', 'block')
-                  .style('left', (event.pageX + 10) + 'px')
-                  .style('top', (event.pageY - 28) + 'px')
-                  .transition().duration(200)
-                  .style('opacity', .9);
-                event.stopPropagation();
-                setInsightNode(d);
-            }
-
             if (!hasInitialFit && filteredNodes.length) {
                 hasInitialFit = true;
                 setTimeout(() => fitToScreen(), 60);
@@ -2138,48 +2079,72 @@
             updateStatusChips();
         }
 
+        let pendingRender = null;
+        let renderScheduled = false;
+
+        function visualizeData(data, { immediate = false, reheatAlpha = null } = {}) {
+            if (!data || typeof data !== 'object') return;
+            if (immediate) {
+                pendingRender = null;
+                renderScheduled = false;
+                renderGraph(data, { reheatAlpha });
+                return;
+            }
+            pendingRender = { data, reheatAlpha };
+            if (!renderScheduled) {
+                renderScheduled = true;
+                requestAnimationFrame(() => {
+                    renderScheduled = false;
+                    const payload = pendingRender;
+                    pendingRender = null;
+                    if (payload) renderGraph(payload.data, { reheatAlpha: payload.reheatAlpha });
+                });
+            }
+        }
+
         function ensureScene(width, height) {
+            const chart = d3.select('#chart');
+            if (!canvas) {
+                canvas = chart.append('canvas').attr('width', width).attr('height', height).style('position', 'absolute').style('top', 0).style('left', 0).node();
+                ctx = canvas.getContext('2d');
+            } else {
+                d3.select(canvas).attr('width', width).attr('height', height);
+            }
             if (!rootSvg) {
-                rootSvg = d3.select('#chart').append('svg').attr('width', width).attr('height', height);
-                // Define arrow marker for link direction
-                const defs = rootSvg.append('defs');
-                defs.append('marker')
-                    .attr('id', 'arrowhead')
-                    .attr('viewBox', '0 -5 10 10')
-                    .attr('refX', 12)
-                    .attr('refY', 0)
-                    .attr('markerWidth', 6)
-                    .attr('markerHeight', 6)
-                    .attr('orient', 'auto')
-                    .append('path')
-                    .attr('d', 'M0,-5L10,0L0,5')
-                    .attr('fill', '#999')
-                    .attr('opacity', 0.7);
-                zoomGroup = rootSvg.append('g');
-                gLinks = zoomGroup.append('g').attr('class', 'links');
-                gNodes = zoomGroup.append('g').attr('class', 'nodes');
-                gLabels = zoomGroup.append('g').attr('class', 'labels');
-                zoomBehavior = d3.zoom().scaleExtent([0.2, 5]).on('zoom', (event) => {
-                    currentTransform = event.transform;
-                    zoomGroup.attr('transform', event.transform);
-                    scheduleMiniMapRender(lastMiniMapNodes);
-                }).wheelDelta(event => {
-                const base = event.deltaMode === 1 ? 0.05 : 0.0025;
-                return -event.deltaY * base;
-                });
-                rootSvg.call(zoomBehavior);
-                rootSvg.on('click', (event) => {
-                    const targetTag = (event.target?.tagName || '').toLowerCase();
-                    if (targetTag === 'circle' || targetTag === 'text' || targetTag === 'line') return;
-                    if (spotlightNodeId) {
-                        spotlightNodeId = null;
-                        refreshSpotlightStyles();
-                    }
-                });
-                tooltip = d3.select('#chart').append('div').attr('class', 'tooltip');
+                rootSvg = chart.append('svg').attr('width', width).attr('height', height).style('position', 'absolute').style('top', 0).style('left', 0).style('pointer-events', 'none');
+                tooltip = chart.append('div').attr('class', 'tooltip');
                 infoBox = d3.select('#infoBox');
             } else {
                 rootSvg.attr('width', width).attr('height', height);
+            }
+            if (!zoomBehavior) {
+                zoomBehavior = d3.zoom()
+                    .scaleExtent([0.2, 5])
+                    .filter(event => {
+                        if (!canvas) return true;
+                        if (event.type === 'wheel') return true;
+                        if (event.type === 'dblclick') return false;
+                        if (event.type === 'mousedown' || event.type === 'pointerdown' || event.type === 'touchstart') {
+                            return !hitTestEvent(event);
+                        }
+                        return true;
+                    })
+                    .on('zoom', (event) => {
+                        currentTransform = event.transform;
+                        if (event.sourceEvent && event.sourceEvent.type && event.sourceEvent.type.startsWith('pointer')) {
+                            canvasWasPanned = true;
+                        }
+                        scheduleMiniMapRender(lastMiniMapNodes);
+                        drawScene();
+                    }).wheelDelta(event => {
+                        const base = event.deltaMode === 1 ? 0.05 : 0.0025;
+                        return -event.deltaY * base;
+                    });
+            }
+            d3.select(canvas).call(zoomBehavior);
+            if (!canvasInteractionsBound) {
+                attachCanvasInteractions();
+                canvasInteractionsBound = true;
             }
         }
 
@@ -2464,23 +2429,39 @@
 
         function handleMiniMapPointer(event) {
             if (!miniMapState || !miniMapCanvas || !rootSvg || !zoomBehavior) return;
+            event.preventDefault();
             const rect = miniMapCanvas.getBoundingClientRect();
-            const mx = event.clientX - rect.left;
-            const my = event.clientY - rect.top;
-            const { minX, minY, scale } = miniMapState;
-            const targetX = minX + mx / scale;
-            const targetY = minY + my / scale;
-            const k = currentTransform.k;
-            const newTransform = d3.zoomIdentity.translate(chartWidth / 2, chartHeight / 2).scale(k).translate(-targetX, -targetY);
+            const updateView = (clientX, clientY, withTransition) => {
+                const mx = clientX - rect.left;
+                const my = clientY - rect.top;
+                const { minX, minY, scale } = miniMapState;
+                const targetX = minX + mx / scale;
+                const targetY = minY + my / scale;
+                const k = currentTransform.k;
+                const newTransform = d3.zoomIdentity.translate(chartWidth / 2, chartHeight / 2).scale(k).translate(-targetX, -targetY);
+                if (withTransition) {
+                    rootSvg.transition().duration(160).call(zoomBehavior.transform, newTransform);
+                } else {
+                    rootSvg.call(zoomBehavior.transform, newTransform);
+                }
+            };
             miniMapCanvas.setPointerCapture(event.pointerId);
             miniMapCanvas.style.cursor = 'grabbing';
-            rootSvg.transition().duration(200).call(zoomBehavior.transform, newTransform);
+            updateView(event.clientX, event.clientY, true);
+
+            const pointerMove = (moveEvent) => {
+                updateView(moveEvent.clientX, moveEvent.clientY, false);
+            };
+
             const pointerUp = () => {
                 miniMapCanvas.style.cursor = 'grab';
                 try { miniMapCanvas.releasePointerCapture(event.pointerId); } catch (_) { }
                 miniMapCanvas.removeEventListener('pointerup', pointerUp);
                 miniMapCanvas.removeEventListener('pointerleave', pointerUp);
+                miniMapCanvas.removeEventListener('pointermove', pointerMove);
             };
+
+            miniMapCanvas.addEventListener('pointermove', pointerMove);
             miniMapCanvas.addEventListener('pointerup', pointerUp);
             miniMapCanvas.addEventListener('pointerleave', pointerUp);
         }
@@ -2488,15 +2469,130 @@
         function scheduleMiniMapRender(nodes) {
             ensureMiniMapContext();
             if (!miniMapCtx) return;
-            lastMiniMapNodes = Array.isArray(nodes) ? nodes.slice() : [];
+            lastMiniMapNodes = Array.isArray(nodes) ? nodes : [];
             miniMapPayload = lastMiniMapNodes;
-            if (!miniMapPending) {
+            if (miniMapPending) return;
+            const fire = () => {
+                miniMapThrottleTimer = null;
                 miniMapPending = true;
                 requestAnimationFrame(() => {
                     miniMapPending = false;
+                    lastMiniMapRender = performance.now();
                     drawMiniMap();
                 });
+            };
+            const now = performance.now();
+            const delta = now - lastMiniMapRender;
+            if (delta >= MINIMAP_RENDER_INTERVAL) {
+                fire();
+            } else if (!miniMapThrottleTimer) {
+                miniMapThrottleTimer = setTimeout(fire, MINIMAP_RENDER_INTERVAL - delta);
             }
+        }
+
+        function drawScene() {
+            if (!ctx || !canvas) return;
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(currentTransform.x, currentTransform.y);
+            ctx.scale(currentTransform.k, currentTransform.k);
+
+            const linkAlphaBase = 0.35;
+            const nodeDimAlpha = 0.22;
+            const searchDimAlpha = 0.3;
+            const spotlightActive = Boolean(spotlightNodeId && spotlightFocusSet);
+
+            ctx.lineCap = 'round';
+            ctx.globalAlpha = 1;
+
+            for (const link of currentRenderLinks) {
+                const source = typeof link.source === 'object' ? link.source : nodeMap.get(link.source);
+                const target = typeof link.target === 'object' ? link.target : nodeMap.get(link.target);
+                if (!source || !target) continue;
+                if (searchHiddenActorSet && ((source.type === 'actor' && searchHiddenActorSet.has(source.id)) || (target.type === 'actor' && searchHiddenActorSet.has(target.id)))) continue;
+                if (spotlightActive && (!spotlightFocusSet.has(source.id) || !spotlightFocusSet.has(target.id))) continue;
+                let alpha = linkAlphaBase;
+                if (searchVisibleNodeSet && (!searchVisibleNodeSet.has(source.id) || !searchVisibleNodeSet.has(target.id))) alpha = Math.min(alpha, 0.1);
+                ctx.globalAlpha = alpha;
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(source.x, source.y);
+                ctx.lineTo(target.x, target.y);
+                ctx.stroke();
+            }
+
+            ctx.globalAlpha = 1;
+            for (const node of currentRenderNodes) {
+                if (!node) continue;
+                if (searchHiddenActorSet && node.type === 'actor' && searchHiddenActorSet.has(node.id)) continue;
+                if (spotlightActive && !spotlightFocusSet.has(node.id)) continue;
+                const radius = Math.max(2, getRadius(node, currentDegreeMap || new Map()));
+                let fill = node.type === 'actor' ? '#ff5733' : severityColor(node);
+                let alpha = 1;
+                if (searchVisibleNodeSet && !searchVisibleNodeSet.has(node.id)) alpha = Math.min(alpha, searchDimAlpha);
+
+                let halo = false;
+                if (node.type === 'cve') {
+                    const hasPoc = getValidGithubPocs(node).length > 0;
+                    if (hasPoc) halo = true;
+                }
+
+                if (halo) {
+                    ctx.globalAlpha = Math.min(alpha, 0.65);
+                    ctx.beginPath();
+                    ctx.fillStyle = 'rgba(255, 153, 0, 0.35)';
+                    ctx.arc(node.x, node.y, radius + 6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.globalAlpha = alpha;
+                ctx.beginPath();
+                ctx.fillStyle = fill;
+                ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (searchMatchIds.has(node.id)) {
+                    ctx.globalAlpha = 1;
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#ff9800';
+                    ctx.stroke();
+                } else if (spotlightNodeId === node.id) {
+                    ctx.globalAlpha = 1;
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#3290ff';
+                    ctx.stroke();
+                }
+                if (focusHighlightId && node.id === focusHighlightId) {
+                    ctx.globalAlpha = 1;
+                    ctx.lineWidth = 3;
+                    ctx.strokeStyle = '#ffd54f';
+                    ctx.stroke();
+                }
+                if (hoveredNode && hoveredNode.id === node.id) {
+                    ctx.globalAlpha = 1;
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.stroke();
+                }
+            }
+
+            if (labelsOn || focusMode || (searchMatchIds && searchMatchIds.size)) {
+                ctx.font = `${Math.max(10, 12 / currentTransform.k)}px sans-serif`;
+                ctx.textBaseline = 'middle';
+                for (const node of currentRenderNodes) {
+                    if (!node || !node.name) continue;
+                    if (searchHiddenActorSet && node.type === 'actor' && searchHiddenActorSet.has(node.id)) continue;
+                    if (spotlightActive && !spotlightFocusSet.has(node.id)) continue;
+                    if (!labelsOn && node.type !== 'actor' && !searchMatchIds.has(node.id) && !(spotlightFocusSet && spotlightFocusSet.has(node.id))) continue;
+                    ctx.globalAlpha = 0.95;
+                    ctx.fillStyle = body.classList.contains('bg-dark') ? '#E0E0E0' : '#000';
+                    ctx.fillText(node.name, node.x + 6, node.y);
+                }
+            }
+
+            ctx.restore();
         }
 
         function drawMiniMap() {
@@ -2702,39 +2798,343 @@
         }
 
         function refreshFocusStyles(activeId) {
-            if (!nodeSel) return;
-            nodeSel.classed('is-focus', d => d.id === activeId);
-            if (labelSel) {
-                labelSel.classed('is-focus', d => d.id === activeId);
+            focusHighlightId = activeId || null;
+            drawScene();
+        }
+
+        function refreshSearchMatchStyles() {
+            drawScene();
+        }
+
+        function applySearchFocus() {
+            const hasMatches = searchMatchIds && searchMatchIds.size > 0;
+            searchVisibleNodeSet = null;
+            searchHiddenActorSet = null;
+            if (!hasMatches) {
+                if (simulation) {
+                    currentRenderNodes.forEach(d => {
+                        if (d && d._searchFixed) {
+                            d.fx = null;
+                            d.fy = null;
+                            d._searchFixed = false;
+                        }
+                    });
+                }
+                drawScene();
+                return;
             }
+
+            const actorMatches = new Set();
+            const focusSet = new Set();
+            searchMatchIds.forEach(id => {
+                const node = nodeMap.get(id);
+                if (!node) return;
+                actorMatches.add(id);
+                focusSet.add(id);
+                const neighbors = adjacency.get(id) || new Set();
+                neighbors.forEach(nid => focusSet.add(nid));
+            });
+
+            searchVisibleNodeSet = focusSet;
+            searchHiddenActorSet = actorMatches;
+
+            if (simulation) {
+                currentRenderNodes.forEach(d => {
+                    if (!d) return;
+                    if (d.type === 'actor' && !actorMatches.has(d.id)) {
+                        d.fx = d.x;
+                        d.fy = d.y;
+                        d._searchFixed = true;
+                    } else if (d._searchFixed) {
+                        d.fx = null;
+                        d.fy = null;
+                        d._searchFixed = false;
+                    }
+                });
+                simulation.alpha(Math.max(simulation.alpha(), 0.08)).alphaTarget(0.02);
+            }
+
+            drawScene();
+        }
+
+        function attachCanvasInteractions() {
+            if (!canvas) return;
+            let lastPointerX = null;
+            let lastPointerY = null;
+
+            const pointerMove = (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = (event.clientX - rect.left - currentTransform.x) / currentTransform.k;
+                const y = (event.clientY - rect.top - currentTransform.y) / currentTransform.k;
+                const hit = hitTestNode(x, y);
+                if (hit !== hoveredNode) {
+                    hoveredNode = hit;
+                    if (hoveredNode) {
+                        tooltip.transition().duration(120).style('opacity', 0.9);
+                        tooltip.text(hoveredNode.name)
+                            .style('left', `${event.pageX + 5}px`)
+                            .style('top', `${event.pageY - 28}px`);
+                        canvas.style.cursor = isDraggingCanvas ? 'grabbing' : 'grab';
+                    } else {
+                        tooltip.transition().duration(180).style('opacity', 0);
+                        if (!isDraggingCanvas) canvas.style.cursor = 'default';
+                    }
+                    drawScene();
+                } else if (hoveredNode) {
+                    tooltip.style('left', `${event.pageX + 5}px`).style('top', `${event.pageY - 28}px`);
+                    canvas.style.cursor = isDraggingCanvas ? 'grabbing' : 'grab';
+                } else if (!isDraggingCanvas) {
+                    canvas.style.cursor = 'default';
+                }
+                if (pointerDownNode) {
+                    if (!isDraggingCanvas && lastPointerX != null) {
+                        const dx = Math.abs(event.clientX - lastPointerX);
+                        const dy = Math.abs(event.clientY - lastPointerY);
+                        if (dx > 2 || dy > 2) {
+                            isDraggingCanvas = true;
+                            pointerDownNode._dragging = true;
+                            if (pointerDownNode._dragOffsetX == null) pointerDownNode._dragOffsetX = pointerDownNode.x - x;
+                            if (pointerDownNode._dragOffsetY == null) pointerDownNode._dragOffsetY = pointerDownNode.y - y;
+                        }
+                    }
+                    if (isDraggingCanvas) {
+                        const offsetX = pointerDownNode._dragOffsetX || 0;
+                        const offsetY = pointerDownNode._dragOffsetY || 0;
+                        const newX = x + offsetX;
+                        const newY = y + offsetY;
+                        pointerDownNode.fx = newX;
+                        pointerDownNode.fy = newY;
+                        pointerDownNode.x = newX;
+                        pointerDownNode.y = newY;
+                        pointerDownNode._searchFixed = false;
+                        if (simulation) simulation.alphaTarget(0.08);
+                        drawScene();
+                    }
+                }
+                lastPointerX = event.clientX;
+                lastPointerY = event.clientY;
+            };
+
+            const pointerDown = (event) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = (event.clientX - rect.left - currentTransform.x) / currentTransform.k;
+                const y = (event.clientY - rect.top - currentTransform.y) / currentTransform.k;
+                const hit = hitTestNode(x, y);
+                canvasWasPanned = false;
+                if (hit) {
+                    if (typeof event.stopPropagation === 'function') event.stopPropagation();
+                    if (typeof event.preventDefault === 'function') event.preventDefault();
+                    pointerDownNode = hit;
+                    isDraggingCanvas = false;
+                    hit.fx = hit.x;
+                    hit.fy = hit.y;
+                    hit._dragging = false;
+                    hit._dragOffsetX = hit.x - x;
+                    hit._dragOffsetY = hit.y - y;
+                    hit.manualFixed = false;
+                    if (simulation) simulation.alphaTarget(0.08);
+                    canvas.style.cursor = 'grabbing';
+                } else {
+                    pointerDownNode = null;
+                    isDraggingCanvas = false;
+                    canvas.style.cursor = 'grab';
+                }
+                lastPointerX = event.clientX;
+                lastPointerY = event.clientY;
+                canvas.setPointerCapture(event.pointerId);
+            };
+
+            const pointerUp = (event) => {
+                if (pointerDownNode) {
+                    if (pointerDownNode._dragging) {
+                        const finalX = pointerDownNode.fx;
+                        const finalY = pointerDownNode.fy;
+                        if (typeof finalX === 'number' && typeof finalY === 'number') {
+                            pointerDownNode.x = finalX;
+                            pointerDownNode.y = finalY;
+                            pointerDownNode.fx = finalX;
+                            pointerDownNode.fy = finalY;
+                            pointerDownNode.manualFixed = true;
+                            persistNodePositions();
+                        }
+                    } else {
+                        handleCanvasClick(event, pointerDownNode);
+                        if (!pointerDownNode.manualFixed) {
+                            pointerDownNode.fx = null;
+                            pointerDownNode.fy = null;
+                        }
+                    }
+                    pointerDownNode._searchFixed = false;
+                    pointerDownNode._dragging = false;
+                    pointerDownNode._dragOffsetX = pointerDownNode._dragOffsetY = null;
+                }
+                pointerDownNode = null;
+                isDraggingCanvas = false;
+                canvas.releasePointerCapture(event.pointerId);
+                if (simulation) simulation.alphaTarget(zoomTargetAlpha);
+                lastPointerX = null;
+                lastPointerY = null;
+                canvas.style.cursor = 'default';
+                drawScene();
+            };
+            const pointerLeave = () => {
+                hoveredNode = null;
+                pointerDownNode = null;
+                tooltip.transition().duration(150).style('opacity', 0);
+                isDraggingCanvas = false;
+                if (simulation) simulation.alphaTarget(zoomTargetAlpha);
+                lastPointerX = null;
+                lastPointerY = null;
+                canvas.style.cursor = 'default';
+                canvasWasPanned = false;
+                drawScene();
+            };
+
+            canvas.onpointerdown = pointerDown;
+            canvas.onpointermove = pointerMove;
+            canvas.onpointerup = pointerUp;
+            canvas.onpointerleave = pointerLeave;
+            canvas.addEventListener('click', (event) => {
+                if (canvasWasPanned) {
+                    canvasWasPanned = false;
+                    return;
+                }
+                if (hitTestEvent(event)) return;
+                if (spotlightNodeId) {
+                    spotlightNodeId = null;
+                    refreshSpotlightStyles();
+                }
+                canvasWasPanned = false;
+            });
+        }
+
+        function handleCanvasClick(event, node) {
+            if (!node) return;
+            if ((event.altKey || event.metaKey) && node.manualFixed) {
+                node.manualFixed = false;
+                node.fx = null;
+                node.fy = null;
+                persistNodePositions();
+                drawScene();
+                return;
+            }
+            if (focusMode) {
+                focusedNodeId = node.id;
+                document.getElementById('exitFocus').style.display = 'inline-block';
+                setStatus(`Focused on ${node.name}`);
+                setInsightNode(node);
+                visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.24 });
+                updateStatusChips();
+                return;
+            }
+            if (node.type === 'actor' || node.type === 'cve') {
+                const alreadyFocused = spotlightNodeId === node.id;
+                spotlightNodeId = alreadyFocused ? null : node.id;
+                refreshSpotlightStyles();
+            }
+            setInsightNode(node);
+            event.stopPropagation();
+        }
+
+        function hitTestEvent(event) {
+            if (!canvas) return null;
+            let clientX = event.clientX;
+            let clientY = event.clientY;
+            if (clientX == null && event.touches && event.touches.length) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            }
+            if (clientX == null || clientY == null) return null;
+            const rect = canvas.getBoundingClientRect();
+            const x = (clientX - rect.left - currentTransform.x) / currentTransform.k;
+            const y = (clientY - rect.top - currentTransform.y) / currentTransform.k;
+            return hitTestNode(x, y);
+        }
+
+        function hitTestNode(x, y) {
+            let nearest = null;
+            let minDist = Infinity;
+            const maxSize = currentDegreeMap || new Map();
+            for (const node of currentRenderNodes) {
+                if (!node) continue;
+                if (searchHiddenActorSet && node.type === 'actor' && searchHiddenActorSet.has(node.id)) continue;
+                const dx = node.x - x;
+                const dy = node.y - y;
+                const r = Math.max(6, getRadius(node, maxSize));
+                const dist = dx * dx + dy * dy;
+                if (dist <= r * r && dist < minDist) {
+                    minDist = dist;
+                    nearest = node;
+                }
+            }
+            return nearest;
+        }
+
+        function isPointerOverNode(event) {
+            return !!hitTestEvent(event);
         }
 
         function refreshSpotlightStyles() {
-            if (!nodeSel || typeof nodeSel.classed !== 'function') return;
-            const hasLabels = !!labelSel && typeof labelSel.classed === 'function';
-            const hasLinks = !!linkSel && typeof linkSel.classed === 'function';
             const activeId = spotlightNodeId;
             if (!activeId || !adjacency.has(activeId)) {
                 spotlightNodeId = null;
-                nodeSel.classed('dimmed', false);
-                if (hasLabels) labelSel.classed('dimmed', false);
-                if (hasLinks) linkSel.classed('dimmed', false);
+                spotlightFocusSet = null;
+                drawScene();
                 return;
             }
             const focusSet = new Set([activeId]);
             const neighbors = adjacency.get(activeId) || new Set();
             neighbors.forEach(id => focusSet.add(id));
-            nodeSel.classed('dimmed', d => !focusSet.has(d.id));
-            if (hasLabels) {
-                labelSel.classed('dimmed', d => !focusSet.has(d.id));
+            spotlightFocusSet = focusSet;
+            drawScene();
+        }
+
+        function clearActorSearchMatches({ reheatAlpha = 0.12 } = {}) {
+            if (!searchMatchIds.size && !lastActorSearchTerm) return;
+            searchMatchIds = new Set();
+            lastActorSearchTerm = '';
+            refreshSearchMatchStyles();
+            applySearchFocus();
+            refreshSpotlightStyles();
+            if (simulation) {
+                simulation.alpha(Math.max(simulation.alpha(), reheatAlpha)).alphaTarget(0.02);
             }
-            if (hasLinks) {
-                linkSel.classed('dimmed', l => {
-                    const s = getLinkEndId(l.source);
-                    const t = getLinkEndId(l.target);
-                    return !(focusSet.has(s) && focusSet.has(t));
-                });
+        }
+
+        function performActorGraphSearch(term, { focus = true, updateStatus = true } = {}) {
+            const raw = (term || '').trim();
+            if (!raw) {
+                clearActorSearchMatches();
+                if (updateStatus) setStatus('Enter an actor name to search.');
+                return false;
             }
+            const normalized = raw.toLowerCase();
+            const matches = allNodes.filter(n => n.type === 'actor' && (n.name || '').toLowerCase().includes(normalized));
+            if (!matches.length) {
+                clearActorSearchMatches();
+                if (updateStatus) setStatus(`No actor matching "${raw}" in current graph.`);
+                return false;
+            }
+            spotlightNodeId = null;
+            searchMatchIds = new Set(matches.map(n => n.id));
+            lastActorSearchTerm = raw;
+            refreshSearchMatchStyles();
+            applySearchFocus();
+            refreshSpotlightStyles();
+            let spotlightNode = null;
+            if (focus) {
+                spotlightNode = matches.find(n => (n.name || '').toLowerCase() === normalized) || matches[0];
+                if (spotlightNode) {
+                    setInsightNode(spotlightNode);
+                    focusOnNodeById(spotlightNode.id);
+                }
+            }
+            if (updateStatus) {
+                const label = matches.length > 1 ? `${matches.length} actors` : (spotlightNode?.name || matches[0].name || matches[0].id);
+                setStatus(`Found ${label} matching "${raw}".`);
+            }
+            drawScene();
+            return true;
         }
 
         function applyFocusTabState() {
@@ -2910,7 +3310,7 @@
                         if (focusMode && focusedNodeId) {
                             focusedNodeId = null;
                             document.getElementById('exitFocus').style.display = 'none';
-                            visualizeData({ nodes: allNodes, links: allLinks });
+                            visualizeData({ nodes: allNodes, links: allLinks }, { reheatAlpha: 0.22 });
                             updateStatusChips();
                             refreshSidebarFocus();
                         }
@@ -2937,63 +3337,75 @@
 
         // Zoom helpers
         function zoomBy(k) {
-            if (!rootSvg || !zoomBehavior) return;
-            rootSvg.transition().duration(200).call(zoomBehavior.scaleBy, k);
+            if (!canvas || !zoomBehavior) return;
+            d3.select(canvas).transition().duration(200).call(zoomBehavior.scaleBy, k);
         }
         function fitToScreen() {
-            if (!rootSvg || !zoomGroup || !zoomBehavior) return;
-            const bounds = zoomGroup.node().getBBox();
-            const parent = rootSvg.node().getBoundingClientRect();
-            const fullWidth = parent.width, fullHeight = parent.height;
-            const width = bounds.width, height = bounds.height;
-            const midX = bounds.x + width / 2, midY = bounds.y + height / 2;
-            if (!width || !height) return; // no content
-            const scale = 0.9 / Math.max(width / fullWidth, height / fullHeight);
-            const transform = d3.zoomIdentity.translate(fullWidth / 2, fullHeight / 2).scale(scale).translate(-midX, -midY);
-            rootSvg.transition().duration(400).call(zoomBehavior.transform, transform);
+            if (!canvas || !zoomBehavior) return;
+            if (!currentRenderNodes.length) return;
+            const xs = currentRenderNodes.map(n => n.x);
+            const ys = currentRenderNodes.map(n => n.y);
+            const minX = Math.min(...xs);
+            const maxX = Math.max(...xs);
+            const minY = Math.min(...ys);
+            const maxY = Math.max(...ys);
+            const width = maxX - minX || 1;
+            const height = maxY - minY || 1;
+            const parent = canvas.getBoundingClientRect();
+            const fullWidth = parent.width;
+            const fullHeight = parent.height;
+            const scale = Math.min(1.2, 0.9 / Math.max(width / fullWidth, height / fullHeight));
+            const transform = d3.zoomIdentity
+                .translate(fullWidth / 2, fullHeight / 2)
+                .scale(scale)
+                .translate(-(minX + width / 2), -(minY + height / 2));
+            d3.select(canvas).transition().duration(400).call(zoomBehavior.transform, transform);
         }
 
-        // Export SVG
+        // Export snapshot
         function exportSVG() {
-            if (!rootSvg) return;
-            const serializer = new XMLSerializer();
-            const source = serializer.serializeToString(rootSvg.node());
-            const blob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'kev_graph.svg';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            if (!canvas) return;
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png');
+            link.download = 'kev_graph.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
-        function applyForces(degreeMap, width, height) {
+        function applyForces(degreeMap, width, height, { reheatAlpha = 0.12 } = {}) {
             if (!simulation) return;
             const linkForce = simulation.force('link');
-            if (linkForce && linkForce.distance) linkForce.distance(d => getLinkDistance(d)).strength(organicMode ? 0.5 : 0.6);
+            const spacingScalar = 1 + spacingStrength / 50;
+            const collisionPadding = spacingStrength / 6;
+            if (linkForce && linkForce.distance) {
+                linkForce.distance(d => getLinkDistance(d) * spacingScalar).strength(organicMode ? 0.45 : 0.55);
+            }
             const chargeForce = simulation.force('charge');
-            if (chargeForce && chargeForce.strength) chargeForce.strength(organicMode ? -220 : -120);
+            if (chargeForce && chargeForce.strength) {
+                const baseCharge = (organicMode ? -150 : -75) * spacingScalar;
+                chargeForce.strength(baseCharge);
+            }
             const collForce = simulation.force('collision');
-            if (collForce && collForce.radius) collForce.radius(d => getRadius(d, degreeMap) + (organicMode ? 2 : 6));
+            if (collForce && collForce.radius) collForce.radius(d => getRadius(d, degreeMap) + (organicMode ? 2 : 6) + collisionPadding);
             if (organicMode) {
                 simulation.force('x', null);
             } else {
                 simulation.force('x', d3.forceX(d => d.type === 'actor' ? width * 0.3 : width * 0.7).strength(0.05));
             }
-            simulation.alpha(0.7).restart();
+            const desiredAlpha = Math.min(Math.max(reheatAlpha, 0.03), 0.16);
+            simulation.alpha(Math.max(simulation.alpha(), desiredAlpha)).alphaTarget(0).restart();
         }
 
         // Focus by node id (best-effort)
         function focusOnNodeById(id) {
             const match = allNodes.find(n => n.id === id);
-            if (!match || !rootSvg || !zoomBehavior || !zoomGroup) return;
-            // approximate center on latest layout
-            const cx = match.x || 0, cy = match.y || 0;
-            const parent = rootSvg.node().getBoundingClientRect();
+            if (!match || !canvas || !zoomBehavior) return;
+            const cx = match.x || 0;
+            const cy = match.y || 0;
+            const parent = canvas.getBoundingClientRect();
             const transform = d3.zoomIdentity.translate(parent.width / 2, parent.height / 2).scale(1.5).translate(-cx, -cy);
-            rootSvg.transition().duration(300).call(zoomBehavior.transform, transform);
+            d3.select(canvas).transition().duration(300).call(zoomBehavior.transform, transform);
         }
 
         // Initialize from URL params if present
