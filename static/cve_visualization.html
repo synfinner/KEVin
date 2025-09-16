@@ -2169,8 +2169,8 @@
                 });
                 rootSvg.call(zoomBehavior);
                 rootSvg.on('click', (event) => {
-                    const targetTag = (event.target && event.target.tagName) ? event.target.tagName.toLowerCase() : '';
-                    if (targetTag === 'circle') return;
+                    const targetTag = (event.target?.tagName || '').toLowerCase();
+                    if (targetTag === 'circle' || targetTag === 'text' || targetTag === 'line') return;
                     if (spotlightNodeId) {
                         spotlightNodeId = null;
                         refreshSpotlightStyles();
