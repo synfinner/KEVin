@@ -286,8 +286,12 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 search_term = re.escape(search_query.strip())
                 # Only search in the vendorProject field
                 query["vendorProject"] = {"$regex": search_term, "$options": "i"}
-            if filter_ransomware.lower() == 'ransomware':
-                query["knownRansomwareCampaignUse"] = "Known"
+            if filter_ransomware:
+                filter_ransomware_lower = filter_ransomware.lower()
+                if filter_ransomware_lower == "ransomware":
+                    query["knownRansomwareCampaignUse"] = "Known"
+                else:
+                    return self.handle_error("Invalid filter parameter. Must be 'ransomware'.", 400)
             if actor_query and actor_query.strip():  # Ensure actor_query is not empty or just whitespace
                 # Fuzzy match for actor search
                 actor_query = {"$or": [
@@ -456,10 +460,11 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             return self.handle_error("You must provide 'days' parameter", 400)
         # Sanitize the 'days' parameter
         days = sanitize_query(days)
-        if not days.isdigit() or int(days) < 0:
-            return self.handle_error("Invalid value for days parameter. Please provide a non-negative integer no greater than 14.", 400)
-        if int(days) > 14:  # Limit the 'days' parameter to a maximum of 14
-            return self.handle_error("Exceeded the maximum limit of 14 days", 400)
+        # fix/vuln_days_dos - Check if days is none after sanitization to prevent dos via large inputs
+        if days is None or not days.isdigit():
+            return self.handle_error("Invalid value for days parameter. Please provide a non-negative integer no greater than 30.", 400)
+        if int(days) > 30:  # Limit the 'days' parameter to a maximum of 30
+            return self.handle_error("Exceeded the maximum limit of 30 days", 400)
 
         # Process the request directly - caching is handled at the method level now
         cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
