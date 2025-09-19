@@ -456,10 +456,11 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             return self.handle_error("You must provide 'days' parameter", 400)
         # Sanitize the 'days' parameter
         days = sanitize_query(days)
-        if not days.isdigit() or int(days) < 0:
-            return self.handle_error("Invalid value for days parameter. Please provide a non-negative integer no greater than 14.", 400)
-        if int(days) > 14:  # Limit the 'days' parameter to a maximum of 14
-            return self.handle_error("Exceeded the maximum limit of 14 days", 400)
+        # fix/vuln_days_dos - Check if days is none after sanitization to prevent dos via large inputs
+        if days is None or not days.isdigit():
+            return self.handle_error("Invalid value for days parameter. Please provide a non-negative integer no greater than 30.", 400)
+        if int(days) > 30:  # Limit the 'days' parameter to a maximum of 30
+            return self.handle_error("Exceeded the maximum limit of 30 days", 400)
 
         # Process the request directly - caching is handled at the method level now
         cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
