@@ -110,7 +110,19 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             # Skip self (args[0]) if this is a method
             method_args = args[1:] if args and hasattr(args[0], '__class__') else args
 
-            key_parts = [key_prefix, func.__name__]
+            prefix_value = key_prefix
+            if callable(prefix_value):
+                prefix_value = prefix_value(*args, **kwargs)
+
+            if prefix_value is None:
+                prefix_value = "cache"
+            else:
+                prefix_value = str(prefix_value)
+
+            if not SAFE_KEY_RE.match(prefix_value):
+                prefix_value = hashlib.sha256(prefix_value.encode('utf-8')).hexdigest()
+
+            key_parts = [prefix_value, func.__name__]
             if method_args:
                 args_hash = hashlib.sha256(
                     orjson.dumps(make_orjson_safe(method_args), option=orjson.OPT_SORT_KEYS)
