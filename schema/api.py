@@ -5,7 +5,7 @@ from utils.cache_manager import cache_manager, kev_cache as cache
 from utils.sanitizer import sanitize_query
 from functools import partial
 from flask_restful import Resource
-from flask import request, Response, json, jsonify, make_response
+from flask import request, Response, json, jsonify, make_response, stream_with_context
 from pymongo import ASCENDING, DESCENDING
 from datetime import datetime, timedelta
 import math
@@ -18,6 +18,10 @@ import re
 # Load env using python-dotenv
 from dotenv import load_dotenv
 load_dotenv()
+
+# Fields clients are allowed to sort on for KEV listings. Keep in sync with
+# Mongo indexes so we never trigger an expensive collection scan.
+ALLOWED_KEV_SORT_FIELDS = {"dateAdded", "dueDate", "cveID"}
 
 # Configure the maximum number of concurrent greenlets
 # This helps prevent server overload from too many concurrent operations
@@ -285,9 +289,17 @@ class AllKevVulnerabilitiesResource(BaseResource):
 
             sort_input = request.args.get("sort", "dateAdded")
             sort_param = sanitize_query(sort_input)
-            if sort_param is None or sort_param == "":
+            if not sort_param:
                 return self.handle_error("Invalid sort parameter", 400)
-            order_param = sanitize_query(request.args.get("order", "desc"))
+            sort_param = sort_param.strip()
+            if sort_param not in ALLOWED_KEV_SORT_FIELDS:
+                return self.handle_error("Unsupported sort parameter", 400)
+
+            order_raw = request.args.get("order", "desc")
+            order_param = sanitize_query(order_raw)
+            order_param = (order_param or "desc").lower()
+            if order_param not in {"asc", "desc"}:
+                order_param = "desc"
             search_query = sanitize_query(request.args.get("search", ''))
             filter_ransomware = sanitize_query(request.args.get("filter", ''))
             actor_query = sanitize_query(request.args.get("actor", ''))
@@ -378,50 +390,34 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         
         # Use server-side filtering - only fetch vulnerabilities with dateAdded >= cutoff_date
         cursor = collection.find({"dateAdded": {"$gte": cutoff_date_str}})
-        
-        # Process results in batches to avoid memory issues
-        # Ensure batch_size is at least 1 to prevent crashes
-        batch_size = max(1, MAX_GREENLETS)
-        all_results = []
-        
-        # Process the cursor in batches
-        batch = []
-        for vulnerability in cursor:
-            batch.append(vulnerability)
-            
-            # Process batch when it reaches the maximum size
-            if len(batch) >= batch_size:
-                greenlets = []
-                
-                # Process each vulnerability in the batch
-                for vuln in batch:
-                    greenlets.append(GREENLET_POOL.spawn(serialize_vulnerability, vuln))
-                
-                # Wait for all greenlets to complete
-                joinall(greenlets)
-                
-                # Collect results and extend the list
-                batch_results = [g.value for g in greenlets if g.value]
-                all_results.extend(batch_results)
-                
-                # Clear batch for next iteration
-                batch = []
-        
-        # Process any remaining items in the final batch
-        if batch:
-            greenlets = []
-            for vuln in batch:
-                greenlets.append(GREENLET_POOL.spawn(serialize_vulnerability, vuln))
-            
-            joinall(greenlets)
-            batch_results = [g.value for g in greenlets if g.value]
-            all_results.extend(batch_results)
-        
-        # Use all collected results
-        recent_vulnerabilities = all_results
 
-        # Return the JSON response with the serialized data
-        return self.make_json_response(recent_vulnerabilities)
+        # Stream the cursor in manageable batches to avoid loading every
+        # vulnerability into memory at once.
+        batch_size = max(1, min(MAX_GREENLETS, 200))
+        cursor = cursor.batch_size(batch_size)
+
+        def stream_vulnerabilities():
+            yield '['
+            first_chunk = True
+            try:
+                for vulnerability in cursor:
+                    serialized = serialize_vulnerability(vulnerability)
+                    payload = json.dumps(serialized, default=str)
+                    if first_chunk:
+                        first_chunk = False
+                    else:
+                        yield ','
+                    yield payload
+            finally:
+                cursor.close()
+            yield ']'
+
+        response = Response(
+            stream_with_context(stream_vulnerabilities()),
+            mimetype="application/json"
+        )
+
+        return response
 
     def process_vulnerability(self, vulnerability, cutoff_date):
         """Process a single vulnerability to check if it meets the cutoff date."""

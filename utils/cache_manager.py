@@ -77,6 +77,10 @@ class CacheManager:
         """Set data in the cache with a checksum for integrity."""
         try:
             if isinstance(value, Response):
+                # Streaming responses should not be cached; forcing them through
+                # get_data would buffer the entire payload and defeat streaming.
+                if getattr(value, "is_streamed", False):
+                    return
                 # Persist only essential headers to reduce cache footprint
                 content_type = value.headers.get("Content-Type")
                 minimal_headers = {"Content-Type": content_type} if content_type else {}
