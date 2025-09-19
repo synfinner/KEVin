@@ -286,8 +286,12 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 search_term = re.escape(search_query.strip())
                 # Only search in the vendorProject field
                 query["vendorProject"] = {"$regex": search_term, "$options": "i"}
-            if filter_ransomware.lower() == 'ransomware':
-                query["knownRansomwareCampaignUse"] = "Known"
+            if filter_ransomware:
+                filter_ransomware_lower = filter_ransomware.lower()
+                if filter_ransomware_lower == "ransomware":
+                    query["knownRansomwareCampaignUse"] = "Known"
+                else:
+                    return self.handle_error("Invalid filter parameter. Must be 'ransomware'.", 400)
             if actor_query and actor_query.strip():  # Ensure actor_query is not empty or just whitespace
                 # Fuzzy match for actor search
                 actor_query = {"$or": [
