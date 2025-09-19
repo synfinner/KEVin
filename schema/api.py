@@ -129,6 +129,8 @@ class cveNVDResource(BaseResource):
         """
         # Sanitize the input CVE ID
         sanitized_cve_id = sanitize_query(cve_id)
+        if sanitized_cve_id is None:
+            return self.handle_error("Invalid CVE ID", 400)
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if not vulnerability:
             return self.handle_error("Vulnerability not found")
@@ -158,6 +160,8 @@ class cveMitreResource(BaseResource):
         """
         # Sanitize the input CVE ID to prevent injection attacks
         sanitized_cve_id = sanitize_query(cve_id)
+        if sanitized_cve_id is None:
+            return self.handle_error("Invalid CVE ID", 400)
         # Fetch the vulnerability with the sanitized CVE ID from the 'all_vulns_collection'
         vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
         if not vulnerability:
@@ -195,8 +199,13 @@ class VulnerabilityResource(BaseResource):
         """
         # Sanitize the input CVE ID
         sanitized_cve_id = sanitize_query(cve_id)
+        if sanitized_cve_id is None:
+            return self.handle_error("Invalid CVE ID", 400)
         # Get the 'references' argument and sanitize it
-        references_arg = sanitize_query(request.args.get('references'))
+        references_raw = request.args.get('references')
+        references_arg = sanitize_query(references_raw)
+        if references_raw is not None and references_arg is None:
+            return self.handle_error("Invalid value for references parameter", 400)
         # Check if the user has requested for PoCs
         if references_arg == 'pocs':
             # Bypass the cache and call the serialize_githubpocs function
@@ -274,7 +283,10 @@ class AllKevVulnerabilitiesResource(BaseResource):
             except ValueError:
                 return self.handle_error("Invalid page or per_page parameter. Must be integers.", 400)
 
-            sort_param = sanitize_query(request.args.get("sort", "dateAdded"))
+            sort_input = request.args.get("sort", "dateAdded")
+            sort_param = sanitize_query(sort_input)
+            if sort_param is None or sort_param == "":
+                return self.handle_error("Invalid sort parameter", 400)
             order_param = sanitize_query(request.args.get("order", "desc"))
             search_query = sanitize_query(request.args.get("search", ''))
             filter_ransomware = sanitize_query(request.args.get("filter", ''))
