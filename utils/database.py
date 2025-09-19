@@ -1,5 +1,5 @@
 # Import the MongoClient class from the pymongo module
-from pymongo import MongoClient, errors
+from pymongo import MongoClient, errors, ASCENDING
 # Import the os module to interact with the operating system
 import os
 import time  # Import time for sleep functionality
@@ -74,6 +74,50 @@ COLLECTION_NAME = "vulns"
 # Get the database and the collection from the client
 db = client[DB_NAME]
 collection = db[COLLECTION_NAME]
+
+# Required indexes to support API sort allowlists without forcing
+# collection scans. Keep aligned with ALLOWED_KEV_SORT_FIELDS.
+REQUIRED_KEV_INDEXES = [
+    ("dateAdded", ASCENDING, "idx_dateAdded"),
+    ("dueDate", ASCENDING, "idx_dueDate"),
+    ("cveID", ASCENDING, "idx_cveID"),
+]
+
+
+def ensure_collection_indexes(coll, index_specs):
+    """Create missing indexes for the given collection and return the final list."""
+    try:
+        existing_indexes = list(coll.list_indexes())
+    except errors.PyMongoError:
+        # Avoid crashing application startup if we cannot enumerate indexes.
+        return []
+
+    existing_names = {index["name"] for index in existing_indexes}
+
+    for field, direction, name in index_specs:
+        if name not in existing_names:
+            try:
+                coll.create_index([(field, direction)], name=name, background=True)
+            except errors.PyMongoError:
+                # Best effort – if creation fails we simply continue.
+                continue
+
+    # Re-fetch to return an up-to-date snapshot resembling getIndexes().
+    try:
+        return list(coll.list_indexes())
+    except errors.PyMongoError:
+        return existing_indexes
+
+
+KEV_INDEXES_ON_STARTUP = ensure_collection_indexes(collection, REQUIRED_KEV_INDEXES)
+if KEV_INDEXES_ON_STARTUP:
+    try:
+        kev_index_names = [index.get("name", "<unnamed>") for index in KEV_INDEXES_ON_STARTUP]
+        print(f"KEV collection indexes on startup: {kev_index_names}")
+    except Exception:
+        print("KEV collection indexes on startup: <error printing names>")
+else:
+    print("KEV collection indexes on startup: unavailable")
 
 # Define the name of the all vulnerabilities database and the all vulnerabilities collection
 ALL_VULNS_DB_NAME = "cveland"
