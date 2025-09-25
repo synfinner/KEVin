@@ -76,15 +76,29 @@ class cveLandResource(BaseResource):
         # Wait for all greenlets to complete with a timeout
         joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-        cached_data = greenlets[0].value if greenlets[0].ready() else None
-        vulnerability = greenlets[1].value if greenlets[1].ready() else None
+        def safe_value(greenlet):
+            if not greenlet.ready():
+                return None
+            if getattr(greenlet, "exception", None):
+                return None
+            try:
+                return greenlet.value
+            except Exception:
+                return None
 
-        # If cache has data, return immediately even if query timed out
+        cached_data = safe_value(greenlets[0])
+        vulnerability = safe_value(greenlets[1])
+
+        # Prefer any ready result
         if cached_data:
             return self.make_json_response(cached_data)
+        if vulnerability:
+            data = serialize_all_vulnerability(vulnerability)
+            cache_manager.set(cache_key_func(), data, timeout=180)  # Manually cache ready DB results
+            return self.make_json_response(data)
 
-        # If neither result is ready, treat as timeout
-        if not greenlets[0].ready() or not greenlets[1].ready():
+        # If nothing has finished yet, treat as timeout
+        if not all(g.ready() for g in greenlets):
             for g in greenlets:
                 if not g.ready():
                     try:
@@ -93,12 +107,8 @@ class cveLandResource(BaseResource):
                         pass
             return self.handle_error("Upstream timeout", 504)
 
-        if not vulnerability:
-            return self.handle_error("Vulnerability not found")
-
-        data = serialize_all_vulnerability(vulnerability)
-        cache_manager.set(cache_key_func(), data,timeout=180)  # Manually caching the data
-        return self.make_json_response(data)
+        # Both completed without data
+        return self.handle_error("Vulnerability not found")
 
     def get_cached_data(self, cache_key_func):
         """Fetch cached data."""
@@ -228,18 +238,18 @@ class VulnerabilityResource(BaseResource):
             # Wait for all greenlets to complete with a timeout
             joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-            cached_data = greenlets[0].value if greenlets[0].ready() else None
-            vulnerability = greenlets[1].value if greenlets[1].ready() else None
+            def safe_value(greenlet):
+                if not greenlet.ready():
+                    return None
+                if getattr(greenlet, "exception", None):
+                    return None
+                try:
+                    return greenlet.value
+                except Exception:
+                    return None
 
-            timed_out = not all(g.ready() for g in greenlets)
-            if timed_out:
-                for g in greenlets:
-                    if not g.ready():
-                        try:
-                            g.kill(block=False)
-                        except Exception:
-                            pass
-                return self.handle_error("Upstream timeout", 504)
+            cached_data = safe_value(greenlets[0])
+            vulnerability = safe_value(greenlets[1])
 
             if cached_data:
                 data = serialize_vulnerability(cached_data)
@@ -247,6 +257,14 @@ class VulnerabilityResource(BaseResource):
                 cache_manager.set(sanitized_cve_id, vulnerability)
                 data = serialize_vulnerability(vulnerability)
             else:
+                if not all(g.ready() for g in greenlets):
+                    for g in greenlets:
+                        if not g.ready():
+                            try:
+                                g.kill(block=False)
+                            except Exception:
+                                pass
+                    return self.handle_error("Upstream timeout", 504)
                 return self.handle_error("Vulnerability not found")
 
         return self.make_json_response(data)
