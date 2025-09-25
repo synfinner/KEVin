@@ -32,6 +32,16 @@ GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', 10)))
 # Create a global pool to limit concurrent greenlets
 GREENLET_POOL = Pool(MAX_GREENLETS)
 
+
+def greenlet_value_or_raise(greenlet):
+    """Return a greenlet's value or re-raise its stored exception."""
+    if not greenlet.ready():
+        return None
+    exc = getattr(greenlet, "exception", None)
+    if exc:
+        raise exc
+    return greenlet.value
+
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
         response = {"message": message}
@@ -76,18 +86,8 @@ class cveLandResource(BaseResource):
         # Wait for all greenlets to complete with a timeout
         joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-        def safe_value(greenlet):
-            if not greenlet.ready():
-                return None
-            if getattr(greenlet, "exception", None):
-                return None
-            try:
-                return greenlet.value
-            except Exception:
-                return None
-
-        cached_data = safe_value(greenlets[0])
-        vulnerability = safe_value(greenlets[1])
+        cached_data = greenlet_value_or_raise(greenlets[0])
+        vulnerability = greenlet_value_or_raise(greenlets[1])
 
         # Prefer any ready result
         if cached_data:
@@ -238,18 +238,8 @@ class VulnerabilityResource(BaseResource):
             # Wait for all greenlets to complete with a timeout
             joinall(greenlets, timeout=GREENLET_TIMEOUT)
 
-            def safe_value(greenlet):
-                if not greenlet.ready():
-                    return None
-                if getattr(greenlet, "exception", None):
-                    return None
-                try:
-                    return greenlet.value
-                except Exception:
-                    return None
-
-            cached_data = safe_value(greenlets[0])
-            vulnerability = safe_value(greenlets[1])
+            cached_data = greenlet_value_or_raise(greenlets[0])
+            vulnerability = greenlet_value_or_raise(greenlets[1])
 
             if cached_data:
                 data = serialize_vulnerability(cached_data)
@@ -528,8 +518,8 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
                         pass
             return self.handle_error("Upstream timeout", 504)
 
-        total_entries = greenlets[0].value
-        recent_vulnerabilities_list = greenlets[1].value
+        total_entries = greenlet_value_or_raise(greenlets[0])
+        recent_vulnerabilities_list = greenlet_value_or_raise(greenlets[1])
 
         # Check if recent_vulnerabilities_list is None
         if recent_vulnerabilities_list is None:
