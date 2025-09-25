@@ -42,6 +42,26 @@ def greenlet_value_or_raise(greenlet):
         raise exc
     return greenlet.value
 
+
+def cleanup_pending_greenlets(pool):
+    """Cancel any non-ready greenlets so they do not tie up the pool."""
+    try:
+        greenlets_snapshot = list(getattr(pool, "greenlets", []))
+    except Exception:
+        greenlets_snapshot = []
+
+    kill_unfinished_greenlets(greenlets_snapshot)
+
+
+def kill_unfinished_greenlets(greenlets):
+    """Kill any unfinished greenlets from the provided iterable."""
+    for greenlet in greenlets or []:
+        if not getattr(greenlet, "ready", lambda: True)():
+            try:
+                greenlet.kill(block=False)
+            except Exception:
+                pass
+
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
         response = {"message": message}
@@ -91,10 +111,14 @@ class cveLandResource(BaseResource):
 
         # Prefer any ready result
         if cached_data:
+            kill_unfinished_greenlets(greenlets)
+            cleanup_pending_greenlets(GREENLET_POOL)
             return self.make_json_response(cached_data)
         if vulnerability:
             data = serialize_all_vulnerability(vulnerability)
             cache_manager.set(cache_key_func(), data, timeout=180)  # Manually cache ready DB results
+            kill_unfinished_greenlets(greenlets)
+            cleanup_pending_greenlets(GREENLET_POOL)
             return self.make_json_response(data)
 
         # If nothing has finished yet, treat as timeout
@@ -257,6 +281,8 @@ class VulnerabilityResource(BaseResource):
                     return self.handle_error("Upstream timeout", 504)
                 return self.handle_error("Vulnerability not found")
 
+            kill_unfinished_greenlets(greenlets)
+            cleanup_pending_greenlets(GREENLET_POOL)
         return self.make_json_response(data)
 
     def get_cached_data(self, sanitized_cve_id):
