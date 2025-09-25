@@ -231,12 +231,8 @@ class VulnerabilityResource(BaseResource):
             cached_data = greenlets[0].value if greenlets[0].ready() else None
             vulnerability = greenlets[1].value if greenlets[1].ready() else None
 
-            if cached_data:
-                data = serialize_vulnerability(cached_data)
-            elif vulnerability:
-                cache_manager.set(sanitized_cve_id, vulnerability)
-                data = serialize_vulnerability(vulnerability)
-            else:
+            timed_out = not all(g.ready() for g in greenlets)
+            if timed_out:
                 for g in greenlets:
                     if not g.ready():
                         try:
@@ -244,6 +240,14 @@ class VulnerabilityResource(BaseResource):
                         except Exception:
                             pass
                 return self.handle_error("Upstream timeout", 504)
+
+            if cached_data:
+                data = serialize_vulnerability(cached_data)
+            elif vulnerability:
+                cache_manager.set(sanitized_cve_id, vulnerability)
+                data = serialize_vulnerability(vulnerability)
+            else:
+                return self.handle_error("Vulnerability not found")
 
         return self.make_json_response(data)
 
