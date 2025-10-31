@@ -1,6 +1,7 @@
 aniso8601==9.0.1
 blinker==1.8.2
-Brotli==1.1.0
+#Brotli==1.2.0
+Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
 certifi==2024.8.30
 charset-normalizer==3.3.2
 click==8.1.7
