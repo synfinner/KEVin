@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,6 +12,7 @@
             padding: 0;
             background-color: #f9f9f9;
         }
+
         .container {
             max-width: 800px;
             margin: 50px auto;
@@ -19,14 +21,17 @@
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             border-radius: 8px;
         }
+
         h1 {
             text-align: center;
             color: #333;
         }
+
         .crypto-list {
             list-style-type: none;
             padding: 0;
         }
+
         .crypto-item {
             display: flex;
             justify-content: space-between;
@@ -34,16 +39,20 @@
             padding: 15px;
             border-bottom: 1px solid #eee;
         }
+
         .crypto-item:last-child {
             border-bottom: none;
         }
+
         .crypto-item .name {
             font-weight: bold;
         }
+
         .crypto-item .address {
             font-family: 'Courier New', Courier, monospace;
             word-break: break-all;
         }
+
         @media (max-width: 600px) {
             .crypto-item {
                 flex-direction: column;
@@ -52,19 +61,22 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container" role="region" aria-labelledby="donation-title">
         <h1 id="donation-title">Cryptocurrency Addresses</h1>
         <ul class="crypto-list">
             <li class="crypto-item">
                 <span class="name">₿itcoin Lightning (⚡️):</span>
-                <span class="address" aria-label="Bitcoin Lightning Address">synfinner@primal.net</span>
+                <span class="address" aria-label="Bitcoin Lightning Address">synfinner@strike.me</span>
             </li>
             <li class="crypto-item">
                 <span class="name">₿itcoin (On-chain):</span>
-                <span class="address" aria-label="Bitcoin On-chain Address">3QdAMn6XnEL4rnSAAZwB4hmHRM8h5Fk6Lm</span>
+                <span class="address"
+                    aria-label="Bitcoin On-chain Address">bc1q5nawusf4mwk784s3uvk8cn9l808k5u7kc7sljv</span>
             </li>
         </ul>
     </div>
 </body>
+
 </html>

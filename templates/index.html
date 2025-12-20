@@ -1,348 +1,473 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <title>KEVin Vulnerability API</title>
     <meta charset="UTF-8">
-    <meta name="description" content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API. Retrieve information about CVEs, KEVs, and more.">
+    <meta name="description"
+        content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
+    <link rel="canonical" href="{{ url_for('index', _external=True) }}">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0b0f17">
+    <meta property="og:title" content="KEVin Vulnerability API">
+    <meta property="og:description"
+        content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ url_for('index', _external=True) }}">
+    <meta property="og:image" content="{{ url_for('static', filename='android-chrome-512x512.png', _external=True) }}">
+    <meta property="og:image:alt" content="KEVin API logo">
+    <meta property="og:site_name" content="KEVin API">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="KEVin Vulnerability API">
+    <meta name="twitter:description"
+        content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
+    <meta name="twitter:image" content="{{ url_for('static', filename='android-chrome-512x512.png', _external=True) }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Include Bootstrap CSS -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <!-- Favicon Links -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}" alt="Apple Touch Icon">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}" alt="Apple Touch Icon">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}" alt="Apple Touch Icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}"
+        alt="Apple Touch Icon">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}"
+        alt="Apple Touch Icon">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}"
+        alt="Apple Touch Icon">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": "KEVin Vulnerability API",
+            "url": "{{ url_for('index', _external=True) }}",
+            "description": "Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API."
+        }
+    </script>
     <style>
+        :root {
+            --bg: #0b0f17;
+            --surface: #121826;
+            --surface-2: #161e30;
+            --text: #e6edf7;
+            --muted: #a2acbd;
+            --accent: #23d3b7;
+            --accent-soft: rgba(35, 211, 183, 0.2);
+            --warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: 'Roboto', sans-serif;
-            background: linear-gradient(to right, #f8f9fa, #e9ecef);
-            transition: background-color 0.3s, color 0.3s;
+            margin: 0;
+            font-family: "Space Grotesk", system-ui, sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at 20% 20%, rgba(35, 211, 183, 0.18), transparent 45%),
+                radial-gradient(circle at 80% 0%, rgba(79, 70, 229, 0.18), transparent 40%),
+                var(--bg);
         }
-        .container {
-            max-width: 900px;
-            margin: auto;
-            padding: 20px;
-        }
-        .jumbotron {
-            background: linear-gradient(to right, #ffffff, #f1f1f1);
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            padding: 30px;
-            transition: box-shadow 0.3s;
-        }
-        .jumbotron:hover {
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-        }
-        hr {
-            border-color: #dee2e6;
-        }
+
         a {
-            color: #007bff;
+            color: inherit;
             text-decoration: none;
-            transition: color 0.3s;
-        }
-        a:hover {
-            color: #0056b3;
-        }
-        .card {
-            background: linear-gradient(to right, #ffffff, #f8f9fa);
-            border: 1px solid #dee2e6;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-            transition: box-shadow 0.3s, transform 0.3s;
-        }
-        .card:hover {
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-            transform: translateY(-5px);
-        }
-        .card-header {
-            background-color: #f8f9fa;
-            border-bottom: 1px solid #dee2e6;
-            font-weight: 500;
-        }
-        .btn-primary {
-            background: linear-gradient(to right, #007bff, #0056b3);
-            border: none;
-            color: #ffffff;
-            padding: 10px 20px;
-            border-radius: 50px;
-            transition: background 0.3s, color 0.3s, transform 0.3s;
-        }
-        .btn-primary:hover {
-            background: linear-gradient(to right, #0056b3, #004085);
-            color: #ffffff;
-            transform: scale(1.05);
-        }
-        .custom-control-label {
-            color: #212529;
         }
 
-        /* Dark mode styles */
-        body.bg-dark {
-            background: linear-gradient(to right, #121212, #1E1E1E);
-            color: #E0E0E0;
-        }
-        body.bg-dark .jumbotron {
-            background: linear-gradient(to right, #1E1E1E, #2E2E2E);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        }
-        body.bg-dark hr {
-            border-color: #333;
-        }
-        body.bg-dark a {
-            color: #BB86FC;
-            text-decoration: none;
-            transition: color 0.3s;
-        }
-        body.bg-dark a:hover {
-            color: #FF79C6;
-        }
-        body.bg-dark .card {
-            background: linear-gradient(to right, #2C2C2C, #3C3C3C);
-            border: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            margin-bottom: 20px;
-        }
-        body.bg-dark .card:hover {
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
-            transform: translateY(-5px);
-        }
-        body.bg-dark .card-header {
-            background-color: #292929;
-            border-bottom: 1px solid #333;
-            font-weight: 500;
-        }
-        body.bg-dark .card-body {
-            color: #E0E0E0;
-        }
-        body.bg-dark .btn-primary {
-            background: linear-gradient(to right, #BB86FC, #9C64FE);
-            border: none;
-            color: #ffffff;
-            padding: 10px 20px;
-            border-radius: 50px;
-            transition: background 0.3s, color 0.3s, transform 0.3s;
-        }
-        body.bg-dark .btn-primary:hover {
-            background: linear-gradient(to right, #FF79C6, #FF4081);
-            color: #ffffff;
-            transform: scale(1.05);
-        }
-        body.bg-dark .custom-control-label {
-            color: #E0E0E0;
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 32px 24px 72px;
+            position: relative;
         }
 
-        /* Flexbox layout for buttons */
-        .button-group {
+        .page::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+            background-size: 60px 60px;
+            opacity: 0.25;
+            pointer-events: none;
+        }
+
+        .topbar {
             display: flex;
-            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            position: relative;
+            z-index: 1;
         }
 
-        /* Responsive design adjustments */
-        @media (max-width: 768px) {
-            .button-group {
+        .brand {
+            font-size: 1.2rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 16px;
+            color: var(--muted);
+            font-size: 0.95rem;
+            flex-wrap: wrap;
+        }
+
+        .hero {
+            margin-top: 30px;
+            padding: 28px;
+            border-radius: 22px;
+            background: linear-gradient(145deg, rgba(18, 24, 38, 0.95), rgba(22, 30, 48, 0.95));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+            display: grid;
+            grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+            gap: 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            margin: 0 0 12px;
+            font-size: clamp(2.2rem, 2.8vw, 3rem);
+        }
+
+        .hero p {
+            margin: 0 0 18px;
+            color: var(--muted);
+            font-size: 1.05rem;
+        }
+
+        .cta-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: transparent;
+            color: var(--text);
+            font-weight: 500;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .btn.primary {
+            border-color: transparent;
+            background: var(--accent);
+            color: #04121a;
+            box-shadow: 0 10px 20px rgba(35, 211, 183, 0.35);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-panel {
+            display: grid;
+            gap: 14px;
+        }
+
+        .signal-card {
+            padding: 16px 18px;
+            border-radius: 16px;
+            background: var(--surface-2);
+            border: 1px solid rgba(35, 211, 183, 0.3);
+        }
+
+        .signal-label {
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .signal-value {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        .section {
+            margin-top: 36px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .section h2 {
+            font-size: 1.4rem;
+            margin: 0 0 16px;
+        }
+
+        .api-grid {
+            display: grid;
+            gap: 18px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        }
+
+        .api-card {
+            background: rgba(18, 24, 38, 0.9);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 18px;
+        }
+
+        .api-card h3 {
+            margin: 0 0 12px;
+            font-size: 1.1rem;
+        }
+
+        .endpoint-row {
+            display: grid;
+            gap: 6px;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border-left: 3px solid var(--accent);
+            background: rgba(35, 211, 183, 0.05);
+            border-radius: 8px;
+        }
+
+        .endpoint-row code {
+            font-family: "JetBrains Mono", ui-monospace, monospace;
+            color: var(--accent);
+            font-size: 0.95rem;
+        }
+
+        .endpoint-row a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .endpoint-row span {
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .info-grid {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        }
+
+        .info-card {
+            background: rgba(18, 24, 38, 0.9);
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 16px;
+            color: var(--muted);
+        }
+
+        .info-card h4 {
+            margin: 0 0 8px;
+            color: var(--text);
+        }
+
+        .info-card a {
+            color: var(--accent);
+        }
+
+        @media (max-width: 900px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
+
+            .topbar {
                 flex-direction: column;
-            }
-        }
-
-        /* Custom toggle switch */
-        .custom-switch .custom-control-input:checked ~ .custom-control-label::before {
-            background-color: #007bff;
-            border-color: #007bff;
-        }
-        .custom-switch .custom-control-input:checked ~ .custom-control-label::after {
-            background-color: #ffffff;
-            transform: translateX(1.25rem);
-        }
-        .custom-switch .custom-control-label::before {
-            background-color: #6c757d;
-            border-color: #6c757d;
-            transition: background-color 0.3s, border-color 0.3s;
-        }
-        .custom-switch .custom-control-label::after {
-            transition: background-color 0.3s, transform 0.3s;
-        }
-
-        /* Animations */
-        .fade-in {
-            animation: fadeIn 0.5s ease-in-out;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+                align-items: flex-start;
             }
         }
     </style>
 </head>
+
 <body>
-<div class="container mt-5 fade-in">
-    <div class="jumbotron">
-        <h1 class="display-4">Welcome to the KEVin API</h1>
-        <p class="lead">An API for accessing CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data</p>
-        <div class="custom-control custom-switch mt-4">
-            <input type="checkbox" class="custom-control-input" id="darkThemeToggle">
-            <label class="custom-control-label" for="darkThemeToggle">Dark Theme</label>
-        </div>
-        <div class="button-group mt-3">
-            <a href="{{ url_for('example') }}" target="_blank" class="btn btn-primary">Go to Examples</a>
-            <a href="https://kevin.gtfkd.com/about" target="_blank" class="btn btn-primary">About KEVin</a>
-            <a href="https://kevin.gtfkd.com/viz" target="_blank" class="btn btn-primary">KEV Viewer</a>
-            <a href="https://kevin.gtfkd.com/rss" target="_blank" class="btn btn-primary">KEV RSS Feed</a>
-            <a href="https://kevin.gtfkd.com/graph" target="_blank" class="btn btn-primary">KEV TA Graph</a>
-        </div>
-        <hr class="my-4">
-        <div class="row">
-            <div class="col-md-6">
-                <p><strong><u>Number of CVEs:</u></strong></p>
-                <p id="metrics-cves">Loading...</p>
-            </div>
-            <div class="col-md-6">
-                <p><strong><u>Number of KEVs:</u></strong></p>
-                <p id="metrics-kevs">Loading...</p>
-            </div>
-        </div>
-        <!-- Accordion Panel for API Usage -->
-        <div id="accordion">
-            <!-- KEV API Usage Panel -->
-            <div class="card">
-                <div class="card-header" id="kev-api-usage-heading">
-                    <h5 class="mb-0">
-                        <button class="btn btn-link" data-toggle="collapse" data-target="#kev-api-usage-content" aria-expanded="true" aria-controls="kev-api-usage-content">
-                            KEV API Usage
-                        </button>                        
-                    </h5>
-                </div>
+    <div class="page">
+        <header class="topbar">
+            <div class="brand">KEVin API</div>
+            <nav class="nav-links">
+                <a href="{{ url_for('example') }}" target="_blank" rel="noopener">Examples</a>
+                <a href="https://kevin.gtfkd.com/about" target="_blank" rel="noopener">About</a>
+                <a href="https://kevin.gtfkd.com/viz" target="_blank" rel="noopener">KEV Viewer</a>
+                <a href="https://kevin.gtfkd.com/rss" target="_blank" rel="noopener">RSS Feed</a>
+                <a href="https://kevin.gtfkd.com/graph" target="_blank" rel="noopener">TA Graph</a>
+            </nav>
+        </header>
 
-                <div id="kev-api-usage-content" class="collapse show" aria-labelledby="kev-api-usage-heading" data-parent="#accordion">
-                    <div class="card-body">
-                        <!-- /kev Usage -->
-                        <h6>/kev Usage</h6>
-                        <ul>
-                            <li><a href="/kev" target="_blank">/kev</a> - Get the most recently added KEVs</li>
-                            <li><a href="/kev/exists?cve=CVE-2023-22527" target="_blank">/kev/exists?cve=CVE-2023-22527</a> - Get a bool value if a CVE is in the KEV or not.</li>
-                            <li><a href="/kev?filter=ransomware" target="_blank">/kev?filter=ransomware</a> - Filter by vulnerabilities known to be used in ransomware</li>
-                            <li><a href="/kev?page=1&per_page=25" target="_blank">/kev?page=1&per_page=25</a> - Get the first 25 Known Exploited Vulnerabilities (default pagination)</li>
-                            <li><a href="/kev?page=2&per_page=25" target="_blank">/kev?page=2&per_page=25</a> - Get the next 25 Known Exploited Vulnerabilities (default pagination)</li>
-                            <li><a href="/kev?search=Microsoft&page=1&per_page=10" target="_blank">/kev?search=Microsoft&page=1&per_page=10</a> - Search KEV based on description (first 10 results)</li>
-                            <li><a href="/kev/CVE-2023-1234" target="_blank">/kev/CVE-ID</a> - Fetch a KEV by CVE-ID</li>
-                            <li><a href="/kev/recent?days=7" target="_blank">/kev/recent?days=7</a> - Get new vulnerabilities added in the last 7 days</li>
-                            <li><a href="/kev?sort=date&order=desc&page=1&per_page=15" target="_blank">/kev?sort=date&order=desc&page=1&per_page=15</a> - Sort first 15 KEV by date added (newest first)</li>
-                            <li><a href="/kev?sort=severity&order=desc&page=1&per_page=15" target="_blank">/kev?sort=severity&order=desc&page=1&per_page=15</a> - Sort first 15 KEV by NVD baseScore in descending order (highest scores first)</li>
-                            <li><a href="/kev?actor=Lazarus%20Group" target="_blank">/kev?actor=Lazarus%20Group</a> - Search for vulnerabilities related to the Lazarus Group</li>
-                        </ul>
-                    </div>
+        <section class="hero">
+            <div>
+                <h1>Security intelligence, delivered fast.</h1>
+                <p>Query the CISA Known Exploited Vulnerabilities Catalog (KEV) and Common Vulnerabilities and Exposures
+                    (CVE) data with predictable endpoints designed for analysts and automation.
+                </p>
+                <div class="cta-row">
+                    <a class="btn primary" href="{{ url_for('example') }}" target="_blank" rel="noopener">Go to
+                        Examples</a>
+                    <a class="btn" href="https://kevin.gtfkd.com/viz" target="_blank" rel="noopener">KEV Viewer</a>
+                    <a class="btn" href="https://kevin.gtfkd.com/rss" target="_blank" rel="noopener">RSS Feed</a>
+                    <a class="btn" href="https://kevin.gtfkd.com/graph" target="_blank" rel="noopener">KEV TA Graph</a>
                 </div>
             </div>
-            <!-- Vuln API Usage Panel -->
-            <div class="card">
-                <div class="card-header" id="vuln-api-usage-heading">
-                    <h5 class="mb-0">
-                        <button class="btn btn-link" data-toggle="collapse" data-target="#vuln-api-usage-content" aria-expanded="true" aria-controls="vuln-api-usage-content">
-                            Vuln API Usage
-                        </button>
-                    </h5>
+            <div class="stat-panel">
+                <div class="signal-card">
+                    <div class="signal-label">Total CVEs</div>
+                    <div id="metrics-cves" class="signal-value">Loading...</div>
                 </div>
+                <div class="signal-card">
+                    <div class="signal-label">Total KEVs</div>
+                    <div id="metrics-kevs" class="signal-value">Loading...</div>
+                </div>
+                <div class="signal-card">
+                    <div class="signal-label">Rate Limit</div>
+                    <div class="signal-value">2 RPS</div>
+                </div>
+            </div>
+        </section>
 
-                <div id="vuln-api-usage-content" class="collapse show" aria-labelledby="vuln-api-usage-heading" data-parent="#accordion">
-                    <div class="card-body">
-                        <!-- /vuln Usage -->
-                        <h6>/vuln Usage</h6>
-                        <ul>
-                            <li><a href="/vuln/CVE-2023-1234" target="_blank">/vuln/CVE-2023-1234</a> - Get all data on a CVE (CISA, MITRE, NVD)</li>
-                            <li><a href="/vuln/CVE-2023-1234/nvd" target="_blank">/vuln/CVE-2023-1234/nvd</a> - Get all NVD data on a CVE</li>
-                            <li><a href="/vuln/CVE-2023-1234/mitre" target="_blank">/vuln/CVE-2023-1234/mitre</a> - Get all MITRE/CVE.org data on a CVE</li>
-                            <li><a href="/vuln/published?days=7" target="_blank">/vuln/published?days=7</a> - Get all NVD vulns published in the last 7 days.</li>
-                            <li><a href="/vuln/published?days=7&page=2" target="_blank">/vuln/published?days=7&page=2</a> - Get all NVD vulns published recently on page 2 (responses are paginated)</li>
-                            <li><a href="/vuln/published?days=7&page=1&per_page=30" target="_blank">/vuln/published?days=7&page=1&per_page=30</a> - Get NVD vulns published and limit results to 30 per page</li>
-                        </ul>
+        <section class="section">
+            <h2>API Usage</h2>
+            <div class="api-grid">
+                <article class="api-card">
+                    <h3>KEV Endpoints</h3>
+                    <div class="endpoint-row">
+                        <a href="/kev" target="_blank" rel="noopener"><code>/kev</code></a>
+                        <span>Latest KEVs</span>
                     </div>
+                    <div class="endpoint-row">
+                        <a href="/kev/exists?cve=CVE-2023-22527" target="_blank"
+                            rel="noopener"><code>/kev/exists?cve=CVE-2023-22527</code></a>
+                        <span>KEV presence check</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?filter=ransomware" target="_blank"
+                            rel="noopener"><code>/kev?filter=ransomware</code></a>
+                        <span>Filter by ransomware</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?page=1&amp;per_page=25" target="_blank"
+                            rel="noopener"><code>/kev?page=1&amp;per_page=25</code></a>
+                        <span>Paginated KEV list</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?page=2&amp;per_page=25" target="_blank"
+                            rel="noopener"><code>/kev?page=2&amp;per_page=25</code></a>
+                        <span>Next page of KEVs</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?search=Microsoft&amp;page=1&amp;per_page=10" target="_blank"
+                            rel="noopener"><code>/kev?search=Microsoft&amp;page=1&amp;per_page=10</code></a>
+                        <span>Keyword search</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev/CVE-2023-1234" target="_blank" rel="noopener"><code>/kev/CVE-2023-1234</code></a>
+                        <span>Fetch by CVE ID</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev/recent?days=7" target="_blank" rel="noopener"><code>/kev/recent?days=7</code></a>
+                        <span>Recent additions</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?sort=date&amp;order=desc&amp;page=1&amp;per_page=15" target="_blank"
+                            rel="noopener"><code>/kev?sort=date&amp;order=desc&amp;page=1&amp;per_page=15</code></a>
+                        <span>Sort by newest date added</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?sort=severity&amp;order=desc&amp;page=1&amp;per_page=15" target="_blank"
+                            rel="noopener"><code>/kev?sort=severity&amp;order=desc&amp;page=1&amp;per_page=15</code></a>
+                        <span>Sort by highest severity</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/kev?actor=Lazarus%20Group" target="_blank"
+                            rel="noopener"><code>/kev?actor=Lazarus%20Group</code></a>
+                        <span>Search by threat actor</span>
+                    </div>
+                </article>
+                <article class="api-card">
+                    <h3>Vuln Endpoints</h3>
+                    <div class="endpoint-row">
+                        <a href="/vuln/CVE-2023-1234" target="_blank"
+                            rel="noopener"><code>/vuln/CVE-2023-1234</code></a>
+                        <span>CVE details</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/vuln/CVE-2023-1234/nvd" target="_blank"
+                            rel="noopener"><code>/vuln/CVE-2023-1234/nvd</code></a>
+                        <span>NVD data</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/vuln/CVE-2023-1234/mitre" target="_blank"
+                            rel="noopener"><code>/vuln/CVE-2023-1234/mitre</code></a>
+                        <span>MITRE data</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/vuln/published?days=7" target="_blank"
+                            rel="noopener"><code>/vuln/published?days=7</code></a>
+                        <span>Recent NVD vulns</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/vuln/published?days=7&amp;page=2" target="_blank"
+                            rel="noopener"><code>/vuln/published?days=7&amp;page=2</code></a>
+                        <span>Paginated results</span>
+                    </div>
+                    <div class="endpoint-row">
+                        <a href="/vuln/published?days=7&amp;page=1&amp;per_page=30" target="_blank"
+                            rel="noopener"><code>/vuln/published?days=7&amp;page=1&amp;per_page=30</code></a>
+                        <span>Custom page size</span>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Operations</h2>
+            <div class="info-grid">
+                <div class="info-card">
+                    <h4>Limits</h4>
+                    <p>2 requests per second per IP. One hour block on violations.</p>
+                    <p>Search is limited to KEV data only (as of 29 August 2023).</p>
+                </div>
+                <div class="info-card">
+                    <h4>Edge Cache</h4>
+                    <p>Edge cache set to 3 hours. Updates may be delayed if CVE data is stuck in cache.</p>
+                </div>
+                <div class="info-card">
+                    <h4>Policies</h4>
+                    <p><a href="https://kevin.gtfkd.com/agreement" target="_blank" rel="noopener">Terms of Agreement</a>
+                    </p>
+                    <p><a href="https://kevin.gtfkd.com/privacy-policy" target="_blank" rel="noopener">Privacy
+                            Policy</a></p>
+                </div>
+                <div class="info-card">
+                    <h4>Support</h4>
+                    <p>Open issues on <a href="https://github.com/synfinner/KEVin/issues" target="_blank"
+                            rel="noopener">GitHub</a>.</p>
+                    <p>Support infrastructure on the <a href="https://kevin.gtfkd.com/donate" target="_blank"
+                            rel="noopener">donations page</a>.</p>
                 </div>
             </div>
-        </div>
-        <hr class="my-4">
-        <!-- Limits Section Header -->
-        <h5 class="mt-4">Limits</h5>
-        <!-- Limits Section Content -->
-        <ul>
-            <li>KEVin is currently set to allow two (2) requests per second. A one (1) hour block is placed on IPs violating this limit.</li>
-            <li>Edge cache is set to 3 hours. Updates may be delayed if CVE data is stuck in cache</li>
-            <li>As of <i>29 August 2023</i>, search is limited to only KEV data</li>
-        </ul>
-        <p>
-            Please see our <a href="https://kevin.gtfkd.com/agreement" target="_blank">Terms of Agreement</a> for more information.
-        </p>
-        <!-- Issues/Requests Section Header -->
-        <h5 class="mt-4">Issues/Requests</h5>
-        <!-- Issues/Requests Section Content -->
-        <p>If you have any issues or feature requests, please feel free to submit them on our <a href="https://github.com/synfinner/KEVin/issues" target="_blank">GitHub repository</a>.</p>
-        <h5 class="mt-4">Privacy Policy</h5>
-        <!-- Issues/Requests Section Content -->
-        <p> <a href="https://kevin.gtfkd.com/privacy-policy" target="_blank">GTFKD KEVin Privacy Policy</a>.</p>
-        <h5 class="mt-4">Donations</h5>
-        <!-- Issues/Requests Section Content -->
-        <p>This project is provided for free to the security community. If you'd like to donate to support infrastructure costs or buy me a coffee, please see the donation page here:</p>
-        <p>
-            <ul>
-                <li><a href="https://kevin.gtfkd.com/donate" target="_blank">KEVin API Donations Page</a></li>
-            </ul>
-        </p>
+        </section>
     </div>
-</div>
-<!-- Include Bootstrap JS and jQuery -->
-<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
-<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-<script>
-    // Function to get the metrics
-    function getMetrics() {
-        fetch('/get_metrics') // Call the route that returns the metrics
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('metrics-cves').innerText = Number(data.cves_count).toLocaleString();
-                document.getElementById('metrics-kevs').innerText = Number(data.kevs_count).toLocaleString();
-            })
-            .catch(error => {
-                console.error('Error fetching metrics:', error);
-                document.getElementById('metrics-cves').innerText = 'Error fetching metrics';
-                document.getElementById('metrics-kevs').innerText = 'Error fetching metrics';
-            });
-    }
 
-    // Call the function when the page loads
-    getMetrics();
-
-    // Toggle Dark Theme
-    const darkThemeToggle = document.getElementById('darkThemeToggle');
-    const body = document.body;
-
-    // Load the user's theme preference from Local Storage
-    const userThemePreference = localStorage.getItem('darkTheme');
-    if (userThemePreference === 'true') {
-        body.classList.add('bg-dark');
-        body.classList.add('text-light');
-        darkThemeToggle.checked = true;
-    }
-
-    darkThemeToggle.addEventListener('change', () => {
-        if (darkThemeToggle.checked) {
-            body.classList.add('bg-dark');
-            body.classList.add('text-light');
-            localStorage.setItem('darkTheme', 'true'); // Store the preference
-        } else {
-            body.classList.remove('bg-dark');
-            body.classList.remove('text-light');
-            localStorage.setItem('darkTheme', 'false'); // Store the preference
+    <script>
+        function getMetrics() {
+            fetch('/get_metrics')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('metrics-cves').innerText = Number(data.cves_count).toLocaleString();
+                    document.getElementById('metrics-kevs').innerText = Number(data.kevs_count).toLocaleString();
+                })
+                .catch(error => {
+                    console.error('Error fetching metrics:', error);
+                    document.getElementById('metrics-cves').innerText = 'Unavailable';
+                    document.getElementById('metrics-kevs').innerText = 'Unavailable';
+                });
         }
-    });
-</script>
+
+        getMetrics();
+    </script>
 </body>
+
 </html>
