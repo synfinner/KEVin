@@ -4,7 +4,7 @@ blinker==1.9.0
 Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
 certifi==2026.2.25
 charset-normalizer==3.4.7
-click==8.3.1
+click==8.3.2
 cramjam==2.9.0
 defusedxml==0.7.1
 dnspython==2.8.0
@@ -36,7 +36,7 @@ setuptools==78.1.1
 six==1.16.0
 terminaltables==3.1.10
 urllib3==2.6.3
-Werkzeug==3.1.7
+Werkzeug==3.1.8
 zope.event==6.1
 zope.interface==8.2
 zstandard==0.23.0
