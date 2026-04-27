@@ -4,7 +4,7 @@ blinker==1.9.0
 Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
 certifi==2026.2.25
 charset-normalizer==3.4.7
-click==8.3.2
+click==8.3.3
 cramjam==2.11.0
 defusedxml==0.7.1
 dnspython==2.8.0
