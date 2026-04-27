@@ -22,7 +22,7 @@ itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 orjson==3.11.8
-packaging==26.1
+packaging==26.2
 pluggy==1.6.0
 pymongo==4.17.0
 pytest==9.0.3
