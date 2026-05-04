@@ -29,7 +29,7 @@ pytest==9.0.3
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-snappy==0.7.3
-pytz==2026.1.post1
+pytz==2026.2
 redis==7.4.0
 requests==2.33.1
 setuptools==82.0.1
@@ -37,6 +37,6 @@ six==1.17.0
 terminaltables==3.1.10
 urllib3==2.6.3
 Werkzeug==3.1.8
-zope.event==6.1
+zope.event==6.2
 zope.interface==8.4
 zstandard==0.25.0
