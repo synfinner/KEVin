@@ -37,6 +37,6 @@ six==1.17.0
 terminaltables==3.1.10
 urllib3==2.6.3
 Werkzeug==3.1.8
-zope.event==6.1
+zope.event==6.2
 zope.interface==8.4
 zstandard==0.25.0
