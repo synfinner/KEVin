@@ -15,13 +15,13 @@ flask-orjson==2.0.0
 Flask-RESTful==0.3.10
 gevent==26.4.0
 greenlet==3.5.0
-gunicorn==25.3.0
-idna==3.13
+gunicorn==26.0.0
+idna==3.14
 iniconfig==2.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
 MarkupSafe==3.0.3
-orjson==3.11.8
+orjson==3.11.9
 packaging==26.2
 pluggy==1.6.0
 pymongo==4.17.0
@@ -35,7 +35,7 @@ requests==2.33.1
 setuptools==82.0.1
 six==1.17.0
 terminaltables==3.1.10
-urllib3==2.6.3
+urllib3==2.7.0
 Werkzeug==3.1.8
 zope.event==6.2
 zope.interface==8.4
