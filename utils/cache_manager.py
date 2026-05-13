@@ -1,6 +1,6 @@
 import functools
 import hashlib
-from flask import Response
+from flask import Response, has_request_context, request
 from utils.cache_config import redis_client
 import re
 import orjson
@@ -16,6 +16,58 @@ def sanitize_cache_key(key):
     if not SAFE_KEY_RE.match(key):
         raise ValueError(f"Unsafe cache key: {key}")
     return key
+
+def hash_cache_component(value):
+    """Hash arbitrary cache-key material into a safe fixed-width component."""
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
+def normalize_cache_key_prefix(prefix_value):
+    """Return a safe cache-key prefix, hashing caller values with unsafe characters."""
+    if prefix_value is None:
+        prefix_value = "cache"
+    else:
+        prefix_value = str(prefix_value)
+
+    if not SAFE_KEY_RE.match(prefix_value):
+        prefix_value = hash_cache_component(prefix_value)
+
+    return prefix_value
+
+def build_cache_key(
+    prefix_value,
+    func_identity,
+    method_args=None,
+    kwargs=None,
+    query_items=None,
+    path=None,
+):
+    """Build a route-aware cache key for cached Flask handlers."""
+    key_parts = [
+        normalize_cache_key_prefix(prefix_value),
+        f"func_{hash_cache_component(func_identity)}",
+    ]
+
+    if path:
+        key_parts.append(f"path_{hash_cache_component(path)}")
+
+    if method_args:
+        args_hash = hashlib.sha256(
+            orjson.dumps(make_orjson_safe(method_args), option=orjson.OPT_SORT_KEYS)
+        ).hexdigest()
+        key_parts.append(f"args_{args_hash}")
+
+    if kwargs:
+        kwargs_hash = hashlib.sha256(
+            orjson.dumps(make_orjson_safe(dict(sorted(kwargs.items()))), option=orjson.OPT_SORT_KEYS)
+        ).hexdigest()
+        key_parts.append(f"kwargs_{kwargs_hash}")
+
+    if query_items is not None:
+        query_params = str(sorted(query_items))
+        query_hash = hashlib.sha256(query_params.encode('utf-8')).hexdigest()
+        key_parts.append(f"query_{query_hash}")
+
+    return sanitize_cache_key("_".join(key_parts))
 
 def make_orjson_safe(obj):
     """
@@ -118,37 +170,19 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             if callable(prefix_value):
                 prefix_value = prefix_value(*args, **kwargs)
 
-            if prefix_value is None:
-                prefix_value = "cache"
-            else:
-                prefix_value = str(prefix_value)
+            path = request.path if has_request_context() else None
+            query_items = None
+            if query_string and has_request_context():
+                query_items = list(request.args.lists())
 
-            if not SAFE_KEY_RE.match(prefix_value):
-                prefix_value = hashlib.sha256(prefix_value.encode('utf-8')).hexdigest()
-
-            key_parts = [prefix_value, func.__name__]
-            if method_args:
-                args_hash = hashlib.sha256(
-                    orjson.dumps(make_orjson_safe(method_args), option=orjson.OPT_SORT_KEYS)
-                ).hexdigest()
-                key_parts.append(f"args_{args_hash}")
-
-            if kwargs:
-                kwargs_hash = hashlib.sha256(
-                    orjson.dumps(make_orjson_safe(dict(sorted(kwargs.items()))), option=orjson.OPT_SORT_KEYS)
-                ).hexdigest()
-                key_parts.append(f"kwargs_{kwargs_hash}")
-
-            cache_key = "_".join(key_parts)
-
-            if query_string:
-                from flask import request
-                query_params = str(sorted(request.args.items()))
-                query_hash = hashlib.sha256(query_params.encode('utf-8')).hexdigest()
-                cache_key += f"_query_{query_hash}"
-
-            # Sanitize the generated cache key
-            cache_key = sanitize_cache_key(cache_key)
+            cache_key = build_cache_key(
+                prefix_value,
+                f"{func.__module__}.{func.__qualname__}",
+                method_args=method_args,
+                kwargs=kwargs,
+                query_items=query_items,
+                path=path,
+            )
 
             # Debug: print cache key
             # print(f"[kev_cache] Cache key: {cache_key}")

@@ -2,6 +2,12 @@ import html
 from defusedxml import ElementTree
 from xml.etree.ElementTree import Element, SubElement
 
+def escape_feed_html(value, default=""):
+    """Escape values before interpolating them into RSS description HTML."""
+    if value is None:
+        value = default
+    return html.escape(str(value), quote=True)
+
 def create_rss_feed(recent_entries):
     # Create the root element for the RSS feed
     rss = Element("rss", version="2.0")
@@ -36,11 +42,17 @@ def create_rss_feed(recent_entries):
         guid.set("isPermaLink", "true")
 
         # Add description with additional information
+        safe_cve_id = escape_feed_html(entry.get('cveID'), 'No CVE ID')
+        safe_description = escape_feed_html(entry.get('shortDescription'), 'No Description')
+        safe_ransomware_use = escape_feed_html(
+            entry.get('knownRansomwareCampaignUse'),
+            'No Known Ransomware Usage'
+        )
         description_html = f"""
-        <p><strong>CVE:</strong> {html.escape(entry.get('cveID', 'No CVE ID'))}</p>
-        <p><strong>Description:</strong> {html.escape(entry.get('shortDescription', 'No Description'))}</p>
+        <p><strong>CVE:</strong> {safe_cve_id}</p>
+        <p><strong>Description:</strong> {safe_description}</p>
         <ul>
-            <li><strong>Known Ransomware Usage:</strong> {entry.get('knownRansomwareCampaignUse', 'No Known Ransomware Usage')}</li>
+            <li><strong>Known Ransomware Usage:</strong> {safe_ransomware_use}</li>
             <li><strong>GitHub POCs:</strong>
                 <ul>
         """
@@ -49,7 +61,7 @@ def create_rss_feed(recent_entries):
         github_pocs = entry.get("githubPocs", [])
         if isinstance(github_pocs, list) and github_pocs:
             for poc in github_pocs:
-                description_html += f"<li>{poc}</li>"
+                description_html += f"<li>{escape_feed_html(poc)}</li>"
         else:
             description_html += "<li>No GitHub POCs</li>"
 
@@ -60,11 +72,17 @@ def create_rss_feed(recent_entries):
             adversaries = []
             affected_industries = []
             for data in open_threat_data:
+                if not isinstance(data, dict):
+                    continue
                 adversaries.extend(data.get("adversaries", []))
                 affected_industries.extend(data.get("affectedIndustries", []))
             
-            adversaries_str = ", ".join(set(adversaries)) if adversaries else "No Adversaries"
-            affected_industries_str = ", ".join(set(affected_industries)) if affected_industries else "No Affected Industries"
+            adversaries_str = ", ".join(
+                sorted({escape_feed_html(adversary) for adversary in adversaries})
+            ) if adversaries else "No Adversaries"
+            affected_industries_str = ", ".join(
+                sorted({escape_feed_html(industry) for industry in affected_industries})
+            ) if affected_industries else "No Affected Industries"
             open_threat_data_html = f"""
             <ul>
                 <li><strong>Adversaries:</strong> {adversaries_str}</li>

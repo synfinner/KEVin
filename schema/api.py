@@ -22,6 +22,7 @@ load_dotenv()
 # Fields clients are allowed to sort on for KEV listings. Keep in sync with
 # Mongo indexes so we never trigger an expensive collection scan.
 ALLOWED_KEV_SORT_FIELDS = {"dateAdded", "dueDate", "cveID"}
+MAX_PAGE = max(1, int(os.environ.get("MAX_PAGE", 1000)))
 
 # Configure the maximum number of concurrent greenlets
 # This helps prevent server overload from too many concurrent operations
@@ -51,6 +52,12 @@ def kill_unfinished_greenlets(greenlets):
                 greenlet.kill(block=False)
             except Exception:
                 pass
+
+def validate_page(page):
+    """Reject non-positive and unbounded pages before MongoDB skip() calls."""
+    if page < 1:
+        return None
+    return min(page, MAX_PAGE)
 
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
@@ -311,6 +318,9 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 per_page = max(1, min(100, int(request.args.get("per_page", 25))))
             except ValueError:
                 return self.handle_error("Invalid page or per_page parameter. Must be integers.", 400)
+            page = validate_page(page)
+            if page is None:
+                return self.handle_error("Invalid page parameter. Must be a positive integer.", 400)
 
             sort_input = request.args.get("sort", "dateAdded")
             sort_param = sanitize_query(sort_input)
@@ -485,6 +495,13 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         days = request.args.get("days")
         page = request.args.get("page", default=1, type=int)  # Default to page 1 if not provided
         per_page = request.args.get("per_page", default=25, type=int)
+        if page is None:
+            return self.handle_error("Invalid page parameter. Must be an integer.", 400)
+        if per_page is None:
+            return self.handle_error("Invalid per_page parameter. Must be an integer.", 400)
+        page = validate_page(page)
+        if page is None:
+            return self.handle_error("Invalid page parameter. Must be a positive integer.", 400)
         if per_page > 100:
             return self.handle_error("The 'per_page' parameter cannot exceed 100.", 400)
         per_page = max(1, per_page)  # Ensure per_page is at least 1

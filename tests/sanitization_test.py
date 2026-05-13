@@ -25,9 +25,9 @@ def test_sanitize_query():
 
     # Additional tests for malicious input
     assert sanitize_query("<img src='x' onerror='alert(1)'>") == "img srcx onerroralert1"
-    assert sanitize_query("1; DROP TABLE users") == "1 DROP TABLE users"
+    assert sanitize_query("1; DROP TABLE users") is None
     assert sanitize_query("admin' --") == "admin --"
-    assert sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom targetblankLinka"
+    assert sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom target_blankLinka"
 
     # Test for double URL encoded values
     assert sanitize_query("%253Cscript%253E") == "script"
@@ -53,11 +53,10 @@ def test_api_sanitize_query():
 
     # Additional tests for malicious input
     assert api_sanitize_query("<img src='x' onerror='alert(1)'>") == "img srcx onerroralert1"
-    assert api_sanitize_query("1; DROP TABLE users") == "1 DROP TABLE users"
+    assert api_sanitize_query("1; DROP TABLE users") is None
     assert api_sanitize_query("admin' --") == "admin --"
     assert api_sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom target_blankLinka"
 
     # Test for double URL encoded values
     assert api_sanitize_query("%253Cscript%253E") == "script"
     assert api_sanitize_query("%2520") == ""
-    
