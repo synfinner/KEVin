@@ -1,3 +1,5 @@
+"""Redis cache helpers for KEVin API responses."""
+
 import functools
 import hashlib
 from flask import Response, has_request_context, request
@@ -162,6 +164,7 @@ class CacheManager:
 cache_manager = CacheManager(redis_client)
 
 def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
+    """Cache Flask handler responses using route-aware Redis cache keys."""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

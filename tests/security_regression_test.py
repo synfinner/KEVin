@@ -4,7 +4,7 @@ from datetime import datetime
 import importlib
 from pathlib import Path
 import sys
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as element_tree
 
 from utils.rss_feed import create_rss_feed
 
@@ -31,7 +31,7 @@ def test_rss_feed_escapes_description_html_fields():
         ],
     }
 
-    root = ET.fromstring(create_rss_feed([entry]))
+    root = element_tree.fromstring(create_rss_feed([entry]))
     description = root.find("channel/item/description").text
 
     assert "<img" not in description
