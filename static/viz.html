@@ -518,22 +518,50 @@
     <script src="https://cdn.datatables.net/1.10.21/js/jquery.dataTables.min.js"></script>
     <script>
         $(document).ready(function () {
+            function textValue(value, fallback = '') {
+                return value === null || value === undefined ? fallback : String(value);
+            }
+
+            function escapeHtml(value) {
+                return textValue(value)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            function textRenderer(data, type) {
+                return type === 'display' || type === 'filter' ? escapeHtml(data) : textValue(data);
+            }
+
+            function isHttpUrl(value) {
+                if (typeof value !== 'string') {
+                    return false;
+                }
+                try {
+                    const parsed = new URL(value);
+                    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+                } catch (error) {
+                    return false;
+                }
+            }
+
             $('#kevTable').DataTable({
                 serverSide: true,
                 processing: true,
                 ajax: function (data, callback, settings) {
                     const page = Math.ceil(data.start / data.length) + 1;
                     fetch(`/kev?page=${page}&per_page=${data.length}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            const formattedData = data.vulnerabilities.map(kev => ({
-                                cveId: kev.cveID,
-                                description: kev.shortDescription,
-                                publishedDate: new Date(kev.dateAdded).toLocaleDateString(),
-                                severity: kev.nvdData[0]?.baseSeverity || 'Unknown',
-                                link: `<a href="#" class="view-link" data-id="${kev.cveID}">View</a>`,
-                                githubPocs: kev.githubPocs
-                            }));
+	                        .then(response => response.json())
+	                        .then(data => {
+	                            const formattedData = data.vulnerabilities.map(kev => ({
+	                                cveId: textValue(kev.cveID),
+	                                description: textValue(kev.shortDescription),
+	                                publishedDate: new Date(kev.dateAdded).toLocaleDateString(),
+	                                severity: Array.isArray(kev.nvdData) ? kev.nvdData[0]?.baseSeverity || 'Unknown' : 'Unknown',
+	                                githubPocs: Array.isArray(kev.githubPocs) ? kev.githubPocs : []
+	                            }));
                             callback({
                                 draw: data.draw,
                                 recordsTotal: data.total_vulns,
@@ -542,20 +570,29 @@
                             });
                         })
                         .catch(error => console.error('Error fetching KEV data:', error));
-                },
-                columns: [
-                    { data: 'cveId' },
-                    { data: 'description', className: 'description' },
-                    { data: 'publishedDate' },
-                    { data: 'severity' },
-                    { data: 'link' },
-                    {
-                        data: 'githubPocs',
-                        render: function (data) {
-                            return data.length === 0
-                                ? '<span class="status-negative">No PoCs</span>'
-                                : '<span class="status-positive">Potential PoCs</span>';
-                        }
+	                },
+	                columns: [
+	                    { data: 'cveId', render: textRenderer },
+	                    { data: 'description', className: 'description', render: textRenderer },
+	                    { data: 'publishedDate', render: textRenderer },
+	                    { data: 'severity', render: textRenderer },
+	                    {
+	                        data: 'cveId',
+	                        orderable: false,
+	                        render: function (data, type) {
+	                            if (type !== 'display') {
+	                                return textValue(data);
+	                            }
+	                            return `<a href="#" class="view-link" data-id="${escapeHtml(data)}">View</a>`;
+	                        }
+	                    },
+	                    {
+	                        data: 'githubPocs',
+	                        render: function (data) {
+	                            return !Array.isArray(data) || data.length === 0
+	                                ? '<span class="status-negative">No PoCs</span>'
+	                                : '<span class="status-positive">Potential PoCs</span>';
+	                        }
                     }
                 ],
                 pageLength: 25,
@@ -564,56 +601,80 @@
                 searching: false
             });
 
-            $(document).on('click', '.view-link', function (e) {
-                e.preventDefault();
-                const cveId = $(this).data('id');
-                fetchVulnerabilityDetails(cveId);
-            });
+	            $(document).on('click', '.view-link', function (e) {
+	                e.preventDefault();
+	                const cveId = $(this).attr('data-id');
+	                fetchVulnerabilityDetails(cveId);
+	            });
 
-            function fetchVulnerabilityDetails(cveId) {
-                fetch(`/kev/${cveId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        $('#kevModalLabel').text(`Vulnerability Details for ${data.cveID}`);
+	            function fetchVulnerabilityDetails(cveId) {
+	                fetch(`/kev/${encodeURIComponent(cveId)}`)
+	                    .then(response => response.json())
+	                    .then(data => {
+	                        $('#kevModalLabel').text(`Vulnerability Details for ${textValue(data.cveID, 'Unknown')}`);
 
-                        const threatActors = new Set();
-                        if (data.openThreatData && data.openThreatData.length > 0) {
-                            const threatData = data.openThreatData[0];
-                            threatData.adversaries.forEach(actor => threatActors.add(actor));
-                            threatData.communityAdversaries.forEach(actor => threatActors.add(actor));
-                        }
+	                        const threatActors = new Set();
+	                        if (Array.isArray(data.openThreatData) && data.openThreatData.length > 0) {
+	                            const threatData = data.openThreatData[0];
+	                            if (Array.isArray(threatData.adversaries)) {
+	                                threatData.adversaries.forEach(actor => threatActors.add(textValue(actor)));
+	                            }
+	                            if (Array.isArray(threatData.communityAdversaries)) {
+	                                threatData.communityAdversaries.forEach(actor => threatActors.add(textValue(actor)));
+	                            }
+	                        }
 
-                        const threatActorsHtml = threatActors.size > 0
-                            ? `<ul>${Array.from(threatActors).map(actor => `<li>${actor}</li>`).join('')}</ul>`
-                            : '<p>No Threat Actors available.</p>';
+	                        const severity = Array.isArray(data.nvdData) ? data.nvdData[0]?.baseSeverity || 'Unknown' : 'Unknown';
+	                        const $card = $('<div>', { class: 'card mb-3' });
+	                        const $body = $('<div>', { class: 'card-body' }).appendTo($card);
+	                        $('<h5>', { class: 'card-title' }).text(textValue(data.vulnerabilityName, 'Unknown')).appendTo($body);
+	                        $('<p>', { class: 'card-text' }).text(textValue(data.shortDescription, 'No description available.')).appendTo($body);
 
-                        const githubPocsHtml = data.githubPocs.length > 0
-                            ? `<ul class="list-group">${data.githubPocs.map(poc => `<li class="list-group-item"><a href="${poc}" target="_blank" rel="noopener noreferrer">${poc}</a></li>`).join('')}</ul>`
-                            : '<p>No PoCs available.</p>';
+	                        [
+	                            ['Published Date', data.dateAdded || 'Unknown'],
+	                            ['Severity', severity],
+	                            ['Required Action', data.requiredAction || 'Unknown']
+	                        ].forEach(([label, value]) => {
+	                            $('<p>')
+	                                .append($('<strong>').text(`${label}: `))
+	                                .append(document.createTextNode(textValue(value)))
+	                                .appendTo($body);
+	                        });
 
-                        $('#modalContent').html(`
-                        <div class="card mb-3">
-                            <div class="card-body">
-                                <h5 class="card-title">${data.vulnerabilityName}</h5>
-                                <p class="card-text">${data.shortDescription}</p>
-                                <p><strong>Published Date:</strong> ${data.dateAdded}</p>
-                                <p><strong>Severity:</strong> ${data.nvdData[0]?.baseSeverity || 'Unknown'}</p>
-                                <p><strong>Required Action:</strong> ${data.requiredAction}</p>
-                                <div class="scrollable">
-                                    <strong>Threat Actors:</strong>
-                                    <div class="scrollable">
-                                        ${threatActorsHtml}
-                                    </div>
-                                </div>
-                                <div class="scrollable">
-                                    <strong>GitHub PoCs:</strong>
-                                    ${githubPocsHtml}
-                                </div>
-                            </div>
-                        </div>
-                    `);
-                        $('#kevModal').modal('show');
-                    })
+	                        const $threatSection = $('<div>', { class: 'scrollable' })
+	                            .append($('<strong>').text('Threat Actors:'))
+	                            .appendTo($body);
+	                        const $threatBody = $('<div>', { class: 'scrollable' }).appendTo($threatSection);
+	                        if (threatActors.size > 0) {
+	                            const $list = $('<ul>').appendTo($threatBody);
+	                            Array.from(threatActors).forEach(actor => $('<li>').text(actor).appendTo($list));
+	                        } else {
+	                            $('<p>').text('No Threat Actors available.').appendTo($threatBody);
+	                        }
+
+	                        const $pocSection = $('<div>', { class: 'scrollable' })
+	                            .append($('<strong>').text('GitHub PoCs:'))
+	                            .appendTo($body);
+	                        const pocs = Array.isArray(data.githubPocs) ? data.githubPocs.filter(isHttpUrl) : [];
+	                        if (pocs.length > 0) {
+	                            const $list = $('<ul>', { class: 'list-group' }).appendTo($pocSection);
+	                            pocs.forEach(poc => {
+	                                const safeUrl = new URL(poc).href;
+	                                $('<li>', { class: 'list-group-item' })
+	                                    .append($('<a>', {
+	                                        href: safeUrl,
+	                                        target: '_blank',
+	                                        rel: 'noopener noreferrer'
+	                                    }).text(poc))
+	                                    .appendTo($list);
+	                            });
+	                        } else {
+	                            $('<p>').text('No PoCs available.').appendTo($pocSection);
+	                        }
+
+	                        $('#modalContent').empty().append($card);
+	                        $('#kevModal').modal('show');
+	                    })
                     .catch(error => console.error('Error fetching vulnerability details:', error));
             }
         });
