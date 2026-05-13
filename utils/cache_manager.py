@@ -33,15 +33,14 @@ def normalize_cache_key_prefix(prefix_value):
 
     return prefix_value
 
-def build_cache_key(
-    prefix_value,
-    func_identity,
-    method_args=None,
-    kwargs=None,
-    query_items=None,
-    path=None,
-):
+def build_cache_key(prefix_value, func_identity, cache_context=None):
     """Build a route-aware cache key for cached Flask handlers."""
+    cache_context = cache_context or {}
+    method_args = cache_context.get("method_args")
+    kwargs = cache_context.get("kwargs")
+    query_items = cache_context.get("query_items")
+    path = cache_context.get("path")
+
     key_parts = [
         normalize_cache_key_prefix(prefix_value),
         f"func_{hash_cache_component(func_identity)}",
@@ -58,7 +57,10 @@ def build_cache_key(
 
     if kwargs:
         kwargs_hash = hashlib.sha256(
-            orjson.dumps(make_orjson_safe(dict(sorted(kwargs.items()))), option=orjson.OPT_SORT_KEYS)
+            orjson.dumps(
+                make_orjson_safe(dict(sorted(kwargs.items()))),
+                option=orjson.OPT_SORT_KEYS,
+            )
         ).hexdigest()
         key_parts.append(f"kwargs_{kwargs_hash}")
 
@@ -175,13 +177,16 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             if query_string and has_request_context():
                 query_items = list(request.args.lists())
 
+            cache_context = {
+                "method_args": method_args,
+                "kwargs": kwargs,
+                "query_items": query_items,
+                "path": path,
+            }
             cache_key = build_cache_key(
                 prefix_value,
                 f"{func.__module__}.{func.__qualname__}",
-                method_args=method_args,
-                kwargs=kwargs,
-                query_items=query_items,
-                path=path,
+                cache_context,
             )
 
             # Debug: print cache key

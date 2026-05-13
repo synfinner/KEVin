@@ -1,8 +1,12 @@
+"""Regression tests for vulnerability mitigations."""
+
 from datetime import datetime
-from pathlib import Path
 import importlib
+from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
+
+from utils.rss_feed import create_rss_feed
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,8 +15,7 @@ if str(ROOT) not in sys.path:
 
 
 def test_rss_feed_escapes_description_html_fields():
-    from utils.rss_feed import create_rss_feed
-
+    """RSS descriptions escape attacker-controlled HTML fragments."""
     entry = {
         "cveID": "CVE-2026-0001",
         "vulnerabilityName": "Name",
@@ -39,6 +42,7 @@ def test_rss_feed_escapes_description_html_fields():
 
 
 def test_cache_keys_include_function_identity_and_path(monkeypatch):
+    """Redis cache keys separate route and function identity."""
     monkeypatch.setenv("REDIS_IP", "localhost")
     cache_manager = importlib.import_module("utils.cache_manager")
 
@@ -46,14 +50,12 @@ def test_cache_keys_include_function_identity_and_path(monkeypatch):
     nvd_key = cache_manager.build_cache_key(
         "cache_",
         "schema.api.cveNVDResource.get",
-        method_args=cve,
-        path="/vuln/CVE-2026-0001/nvd",
+        {"method_args": cve, "path": "/vuln/CVE-2026-0001/nvd"},
     )
     mitre_key = cache_manager.build_cache_key(
         "cache_",
         "schema.api.cveMitreResource.get",
-        method_args=cve,
-        path="/vuln/CVE-2026-0001/mitre",
+        {"method_args": cve, "path": "/vuln/CVE-2026-0001/mitre"},
     )
     assert nvd_key != mitre_key
 
@@ -61,19 +63,18 @@ def test_cache_keys_include_function_identity_and_path(monkeypatch):
     published_key = cache_manager.build_cache_key(
         "recent_days_vulnerabilities",
         "schema.api.RecentVulnerabilitiesByDaysResource.get",
-        query_items=query_items,
-        path="/vuln/published",
+        {"query_items": query_items, "path": "/vuln/published"},
     )
     modified_key = cache_manager.build_cache_key(
         "recent_days_vulnerabilities",
         "schema.api.RecentVulnerabilitiesByDaysResource.get",
-        query_items=query_items,
-        path="/vuln/modified",
+        {"query_items": query_items, "path": "/vuln/modified"},
     )
     assert published_key != modified_key
 
 
 def test_viz_uses_text_safe_rendering_for_untrusted_api_data():
+    """Visualization code avoids unsafe HTML sinks for untrusted API fields."""
     source = (ROOT / "static" / "viz.html").read_text()
 
     assert "function escapeHtml(value)" in source
@@ -85,6 +86,7 @@ def test_viz_uses_text_safe_rendering_for_untrusted_api_data():
 
 
 def test_public_pagination_paths_validate_page_before_skip():
+    """Public pagination paths validate page values before MongoDB skip calls."""
     source = (ROOT / "schema" / "api.py").read_text()
 
     assert "MAX_PAGE" in source

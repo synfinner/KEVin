@@ -27,7 +27,8 @@ def test_sanitize_query():
     assert sanitize_query("<img src='x' onerror='alert(1)'>") == "img srcx onerroralert1"
     assert sanitize_query("1; DROP TABLE users") is None
     assert sanitize_query("admin' --") == "admin --"
-    assert sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom target_blankLinka"
+    link_payload = "<a href='http://example.com' target='_blank'>Link</a>"
+    assert sanitize_query(link_payload) == "a hrefhttpexamplecom target_blankLinka"
 
     # Test for double URL encoded values
     assert sanitize_query("%253Cscript%253E") == "script"
@@ -55,7 +56,8 @@ def test_api_sanitize_query():
     assert api_sanitize_query("<img src='x' onerror='alert(1)'>") == "img srcx onerroralert1"
     assert api_sanitize_query("1; DROP TABLE users") is None
     assert api_sanitize_query("admin' --") == "admin --"
-    assert api_sanitize_query("<a href='http://example.com' target='_blank'>Link</a>") == "a hrefhttpexamplecom target_blankLinka"
+    link_payload = "<a href='http://example.com' target='_blank'>Link</a>"
+    assert api_sanitize_query(link_payload) == "a hrefhttpexamplecom target_blankLinka"
 
     # Test for double URL encoded values
     assert api_sanitize_query("%253Cscript%253E") == "script"
