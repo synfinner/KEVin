@@ -4,7 +4,7 @@ blinker==1.9.0
 Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
 certifi==2026.4.22
 charset-normalizer==3.4.7
-click==8.3.3
+click==8.4.0
 cramjam==2.11.0
 defusedxml==0.7.1
 dnspython==2.8.0
@@ -16,7 +16,7 @@ Flask-RESTful==0.3.10
 gevent==26.4.0
 greenlet==3.5.0
 gunicorn==26.0.0
-idna==3.14
+idna==3.15
 iniconfig==2.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
@@ -31,7 +31,7 @@ python-dotenv==1.2.2
 python-snappy==0.7.3
 pytz==2026.2
 redis==7.4.0
-requests==2.33.1
+requests==2.34.2
 setuptools==82.0.1
 six==1.17.0
 terminaltables==3.1.10
