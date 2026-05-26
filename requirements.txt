@@ -2,9 +2,9 @@ aniso8601==10.0.1
 blinker==1.9.0
 #Brotli==1.2.0
 Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
-certifi==2026.4.22
+certifi==2026.5.20
 charset-normalizer==3.4.7
-click==8.4.0
+click==8.4.1
 cramjam==2.11.0
 defusedxml==0.7.1
 dnspython==2.8.0
@@ -13,10 +13,10 @@ Flask-Compress==1.24
 flask-cors==6.0.2
 flask-orjson==2.0.0
 Flask-RESTful==0.3.10
-gevent==26.4.0
-greenlet==3.5.0
+gevent==26.5.0
+greenlet==3.5.1
 gunicorn==26.0.0
-idna==3.15
+idna==3.16
 iniconfig==2.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
