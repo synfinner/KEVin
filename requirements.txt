@@ -3,7 +3,7 @@ blinker==1.9.0
 #Brotli==1.2.0
 Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
 certifi==2026.6.17
-charset-normalizer==3.4.7
+charset-normalizer==3.4.9
 click==8.4.2
 cramjam==2.11.0
 defusedxml==0.7.1
