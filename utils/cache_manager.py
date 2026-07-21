@@ -2,7 +2,7 @@
 
 import functools
 import hashlib
-from flask import Response, has_request_context, request
+from flask import Response, has_request_context, make_response, request
 from utils.cache_config import redis_client
 import re
 import orjson
@@ -202,7 +202,9 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
 
             # print(f"[kev_cache] Cache miss for key: {cache_key}")
             result = func(*args, **kwargs)
-            cache_manager.set(cache_key, result, timeout=timeout)
+            # Normalize every Flask-supported return form before serialization so
+            # cache hits preserve the original status, body, and essential headers.
+            cache_manager.set(cache_key, make_response(result), timeout=timeout)
             return result
         return wrapper
     return decorator
