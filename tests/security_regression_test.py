@@ -108,11 +108,11 @@ def test_cached_error_tuple_preserves_http_status(monkeypatch):
         handler_calls = 0
         route = f"/cached-error-{status_code}"
 
-        def cached_error():
+        def cached_error(response_status=status_code):
             """Return the tuple shape used by KEVin's cached error routes."""
             nonlocal handler_calls
             handler_calls += 1
-            return {"message": "Vulnerability not found"}, status_code
+            return {"message": "Vulnerability not found"}, response_status
 
         cached_view = cache_module.kev_cache(
             timeout=10,
