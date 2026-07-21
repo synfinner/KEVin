@@ -4,10 +4,10 @@ from datetime import datetime
 import importlib
 from pathlib import Path
 import sys
+import unittest
 import xml.etree.ElementTree as element_tree
 
 from flask import Flask
-import pytest
 
 from utils.rss_feed import create_rss_feed
 
@@ -76,11 +76,11 @@ def test_cache_keys_include_function_identity_and_path(monkeypatch):
     assert published_key != modified_key
 
 
-@pytest.mark.parametrize("status_code", [400, 404])
-def test_cached_error_tuple_preserves_http_status(monkeypatch, status_code):
+def test_cached_error_tuple_preserves_http_status(monkeypatch):
     """Cached Flask error tuples retain their original HTTP status."""
     monkeypatch.setenv("REDIS_IP", "localhost")
     cache_module = importlib.import_module("utils.cache_manager")
+    test_case = unittest.TestCase()
 
     class MemoryRedis:
         """Store serialized cache values without requiring a Redis server."""
@@ -92,36 +92,47 @@ def test_cached_error_tuple_preserves_http_status(monkeypatch, status_code):
             """Return a cached byte payload when present."""
             return self.values.get(key)
 
-        def setex(self, key, timeout, value):
+        def setex(self, key, _timeout, value):
             """Store a byte payload using the Redis setex call shape."""
             self.values[key] = value
 
-    memory_redis = MemoryRedis()
-    monkeypatch.setattr(
-        cache_module,
-        "cache_manager",
-        cache_module.CacheManager(memory_redis),
-    )
+    for status_code in (400, 404):
+        memory_redis = MemoryRedis()
+        monkeypatch.setattr(
+            cache_module,
+            "cache_manager",
+            cache_module.CacheManager(memory_redis),
+        )
 
-    app = Flask(__name__)
-    handler_calls = 0
+        app = Flask(__name__)
+        handler_calls = 0
+        route = f"/cached-error-{status_code}"
 
-    @app.get(f"/cached-error-{status_code}")
-    @cache_module.kev_cache(timeout=10, key_prefix="cached_error")
-    def cached_error():
-        """Return the tuple shape used by KEVin's cached error routes."""
-        nonlocal handler_calls
-        handler_calls += 1
-        return {"message": "Vulnerability not found"}, status_code
+        def cached_error():
+            """Return the tuple shape used by KEVin's cached error routes."""
+            nonlocal handler_calls
+            handler_calls += 1
+            return {"message": "Vulnerability not found"}, status_code
 
-    client = app.test_client()
-    first_response = client.get(f"/cached-error-{status_code}")
-    cached_response = client.get(f"/cached-error-{status_code}")
+        cached_view = cache_module.kev_cache(
+            timeout=10,
+            key_prefix="cached_error",
+        )(cached_error)
+        app.add_url_rule(
+            route,
+            endpoint=f"cached_error_{status_code}",
+            view_func=cached_view,
+            methods=["GET"],
+        )
 
-    assert first_response.status_code == status_code
-    assert cached_response.status_code == status_code
-    assert cached_response.get_json() == first_response.get_json()
-    assert handler_calls == 1
+        client = app.test_client()
+        first_response = client.get(route)
+        cached_response = client.get(route)
+
+        test_case.assertEqual(first_response.status_code, status_code)
+        test_case.assertEqual(cached_response.status_code, status_code)
+        test_case.assertEqual(cached_response.get_json(), first_response.get_json())
+        test_case.assertEqual(handler_calls, 1)
 
 
 def test_viz_uses_text_safe_rendering_for_untrusted_api_data():
