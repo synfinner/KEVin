@@ -33,6 +33,7 @@ def create_client(uri):
     min_pool = int(os.getenv("MONGO_MIN_POOL_SIZE", 0))
     connect_timeout = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", 3000))
     socket_timeout = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", 10000))
+    wait_queue_timeout = int(os.getenv("MONGO_WAIT_QUEUE_TIMEOUT_MS", 500))
     return MongoClient(
         uri,
         maxPoolSize=max_pool,
@@ -41,6 +42,8 @@ def create_client(uri):
         serverSelectionTimeoutMS=3000,
         connectTimeoutMS=connect_timeout,
         socketTimeoutMS=socket_timeout,
+        # Bound pool checkout latency so overload becomes explicit backpressure.
+        waitQueueTimeoutMS=wait_queue_timeout,
     )
 
 def ensure_connection(client, uri, max_retries=3):

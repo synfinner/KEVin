@@ -2,7 +2,16 @@
 
 import functools
 import hashlib
+import hmac
+import logging
+import os
+import threading
+import time
+from contextlib import contextmanager
 from flask import Response, has_request_context, make_response, request
+from gevent.lock import Semaphore
+from pymongo.errors import PyMongoError
+from redis.exceptions import RedisError
 from utils.cache_config import redis_client
 import re
 import orjson
@@ -12,6 +21,22 @@ from datetime import datetime
 
 # Regular expression for safe cache keys
 SAFE_KEY_RE = re.compile(r"^[\w\-:]+$")
+CACHE_ENVELOPE_PREFIX = b"kevin-cache-v2:"
+logger = logging.getLogger(__name__)
+
+
+class CacheBackendUnavailable(RuntimeError):
+    """Signal that Redis is unavailable and origin load must be shed."""
+
+
+class _SingleflightEntry:
+    """Track one keyed fill lock and every request currently referencing it."""
+
+    def __init__(self):
+        """Create an unlocked fill slot with no registered users."""
+        self.lock = Semaphore(1)
+        self.users = 0
+
 
 def sanitize_cache_key(key):
     """Ensure cache keys are safe and valid."""
@@ -100,23 +125,111 @@ def generate_checksum(data):
         data_bytes = orjson.dumps(safe_data, option=orjson.OPT_SORT_KEYS)
     return hashlib.sha256(data_bytes).hexdigest()
 
+
+def serialize_cache_entry(value):
+    """Serialize one integrity-protected value without duplicating its JSON."""
+    safe_value = make_orjson_safe(value)
+    value_bytes = orjson.dumps(safe_value, option=orjson.OPT_SORT_KEYS)
+    checksum = hashlib.sha256(value_bytes).hexdigest().encode("ascii")
+    return CACHE_ENVELOPE_PREFIX + checksum + b":" + value_bytes
+
+
+def deserialize_cache_entry(cached_data):
+    """Verify and decode current or legacy cache payloads."""
+    if cached_data.startswith(CACHE_ENVELOPE_PREFIX):
+        envelope = cached_data[len(CACHE_ENVELOPE_PREFIX):]
+        stored_checksum, separator, value_bytes = envelope.partition(b":")
+        if not separator:
+            raise ValueError("Cache envelope is missing its value separator.")
+
+        generated_checksum = hashlib.sha256(value_bytes).hexdigest().encode("ascii")
+        if not hmac.compare_digest(generated_checksum, stored_checksum):
+            raise ValueError("Cache integrity check failed.")
+        return orjson.loads(value_bytes)
+
+    # Legacy entries remain readable during rolling deployments and naturally
+    # disappear when their existing TTL expires.
+    legacy_entry = orjson.loads(cached_data)
+    value = legacy_entry.get("value")
+    stored_checksum = legacy_entry.get("checksum")
+    if generate_checksum(value) != stored_checksum:
+        raise ValueError("Cache integrity check failed.")
+    return value
+
+
 class CacheManager:
-    def __init__(self, redis_client):
+    def __init__(
+        self,
+        redis_client,
+        circuit_breaker_seconds=None,
+        singleflight_wait_seconds=None,
+        time_func=None,
+    ):
+        """Initialize Redis access with a short per-worker failure circuit."""
         self.redis_client = redis_client
+        self.circuit_breaker_seconds = (
+            float(os.getenv("CACHE_CIRCUIT_BREAKER_SECONDS", "1"))
+            if circuit_breaker_seconds is None
+            else max(0.0, float(circuit_breaker_seconds))
+        )
+        self.singleflight_wait_seconds = (
+            float(os.getenv("CACHE_SINGLEFLIGHT_WAIT_SECONDS", "0.25"))
+            if singleflight_wait_seconds is None
+            else max(0.0, float(singleflight_wait_seconds))
+        )
+        self._time = time.monotonic if time_func is None else time_func
+        self._unavailable_until = 0.0
+        self._singleflight_entries = {}
+        self._singleflight_guard = threading.Lock()
+
+    def _ensure_backend_available(self):
+        """Fail fast while the Redis failure circuit remains open."""
+        if self._time() < self._unavailable_until:
+            raise CacheBackendUnavailable("Redis failure circuit is open")
+
+    def _mark_backend_unavailable(self):
+        """Open the Redis failure circuit for the configured cooldown."""
+        self._unavailable_until = self._time() + self.circuit_breaker_seconds
+
+    def _mark_backend_available(self):
+        """Close the Redis failure circuit after a successful command."""
+        self._unavailable_until = 0.0
+
+    @contextmanager
+    def singleflight(self, key):
+        """Yield whether this request acquired the bounded fill slot for key."""
+        with self._singleflight_guard:
+            entry = self._singleflight_entries.get(key)
+            if entry is None:
+                entry = _SingleflightEntry()
+                self._singleflight_entries[key] = entry
+            entry.users += 1
+
+        acquired = entry.lock.acquire(timeout=self.singleflight_wait_seconds)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                entry.lock.release()
+            with self._singleflight_guard:
+                entry.users -= 1
+                if entry.users == 0:
+                    self._singleflight_entries.pop(key, None)
 
     def get(self, key):
         """Retrieve data from the cache by key."""
-        cached_data = self.redis_client.get(key)
+        self._ensure_backend_available()
+        try:
+            cached_data = self.redis_client.get(key)
+        except RedisError as exc:
+            self._mark_backend_unavailable()
+            raise CacheBackendUnavailable("Redis cache read failed") from exc
+
+        self._mark_backend_available()
         if not cached_data:
             return None
         try:
-            # orjson.loads expects bytes
-            cached_data = orjson.loads(cached_data)
-            value = cached_data.get("value")
-            stored_checksum = cached_data.get("checksum")
-            generated_checksum = generate_checksum(value)
-            if generated_checksum != stored_checksum:
-                raise ValueError("Cache integrity check failed.")
+            value = deserialize_cache_entry(cached_data)
             if isinstance(value, dict) and "response_data" in value:
                 return Response(
                     response=value["response_data"],
@@ -124,13 +237,18 @@ class CacheManager:
                     headers=value["headers"],
                 )
             return value
-        except Exception as e:
+        except Exception:
             # Optionally, log the error for debugging
             # print(f"Cache get error: {e}")
             return None
 
     def set(self, key, value, timeout=120):
         """Set data in the cache with a checksum for integrity."""
+        try:
+            self._ensure_backend_available()
+        except CacheBackendUnavailable:
+            return
+
         try:
             if isinstance(value, Response):
                 # Streaming responses should not be cached; forcing them through
@@ -145,20 +263,24 @@ class CacheManager:
                     "status": value.status_code,
                     "headers": minimal_headers,
                 }
-            checksum = generate_checksum(value)
             key = sanitize_cache_key(key)
-            cache_payload = {"value": value, "checksum": checksum}
-            safe_payload = make_orjson_safe(cache_payload)
-            serialized_payload = orjson.dumps(safe_payload, option=orjson.OPT_SORT_KEYS)
+            serialized_payload = serialize_cache_entry(value)
             self.redis_client.setex(key, timeout, serialized_payload)
-        except Exception as e:
-            # Optionally, log the error for debugging
-            # print(f"Cache set error: {e}")
-            pass
+        except RedisError as exc:
+            self._mark_backend_unavailable()
+            logger.warning("Redis cache write failed: %s", exc)
+        except Exception:
+            logger.exception("Cache value serialization failed")
 
     def delete(self, key):
         """Delete data from the cache by key."""
-        self.redis_client.delete(key)
+        self._ensure_backend_available()
+        try:
+            self.redis_client.delete(key)
+        except RedisError as exc:
+            self._mark_backend_unavailable()
+            raise CacheBackendUnavailable("Redis cache delete failed") from exc
+        self._mark_backend_available()
 
 # Initialize a global cache manager
 cache_manager = CacheManager(redis_client)
@@ -195,19 +317,50 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             # Debug: print cache key
             # print(f"[kev_cache] Cache key: {cache_key}")
 
-            cached_data = cache_manager.get(cache_key)
-            if cached_data:
+            try:
+                cached_data = cache_manager.get(cache_key)
+            except CacheBackendUnavailable:
+                # Redis pressure must not become an unbounded MongoDB fallback.
+                return make_response(
+                    {"error": "Cache temporarily unavailable"},
+                    503,
+                )
+            if cached_data is not None:
                 # print(f"[kev_cache] Cache hit for key: {cache_key}")
                 return cached_data
 
-            # print(f"[kev_cache] Cache miss for key: {cache_key}")
-            result = func(*args, **kwargs)
-            # Normalize every Flask-supported return form before serialization so
-            # cache hits preserve the original status, body, and essential headers.
-            response = make_response(result)
-            # Server errors are transient and must not outlive backend recovery.
-            if response.status_code < 500:
-                cache_manager.set(cache_key, response, timeout=timeout)
-            return result
+            with cache_manager.singleflight(cache_key) as acquired:
+                if not acquired:
+                    return make_response(
+                        {"error": "Origin temporarily busy"},
+                        503,
+                    )
+
+                # A concurrent leader may have filled the key while this
+                # request waited, so recheck before calling the origin.
+                try:
+                    cached_data = cache_manager.get(cache_key)
+                except CacheBackendUnavailable:
+                    return make_response(
+                        {"error": "Cache temporarily unavailable"},
+                        503,
+                    )
+                if cached_data is not None:
+                    return cached_data
+
+                try:
+                    result = func(*args, **kwargs)
+                except PyMongoError:
+                    return make_response(
+                        {"error": "Backend temporarily unavailable"},
+                        503,
+                    )
+                # Normalize every Flask-supported return form before serialization
+                # so cache hits preserve status, body, and essential headers.
+                response = make_response(result)
+                # Server errors are transient and must not outlive recovery.
+                if response.status_code < 500:
+                    cache_manager.set(cache_key, response, timeout=timeout)
+                return result
         return wrapper
     return decorator

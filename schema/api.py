@@ -1,18 +1,27 @@
 # schema/api.py
 
 from utils.database import all_vulns_collection, collection
-from utils.cache_manager import cache_manager, kev_cache as cache
+from utils.backend_capacity import (
+    BackendBusyError,
+    BackendTimeoutError,
+    MAX_BACKEND_CONCURRENCY,
+    run_backend_tasks,
+)
+from utils.cache_manager import (
+    CacheBackendUnavailable,
+    cache_manager,
+    kev_cache as cache,
+)
 from utils.sanitizer import sanitize_query
 from functools import partial
 from flask_restful import Resource
 from flask import request, Response, json, jsonify, make_response, stream_with_context
 from pymongo import ASCENDING, DESCENDING
-from datetime import datetime, timedelta
+from pymongo.errors import PyMongoError
+from datetime import datetime, timedelta, timezone
 import math
 import os
 from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
-from gevent import joinall
-from gevent.pool import Pool
 import re
 
 # Load env using python-dotenv
@@ -23,35 +32,13 @@ load_dotenv()
 # Mongo indexes so we never trigger an expensive collection scan.
 ALLOWED_KEV_SORT_FIELDS = {"dateAdded", "dueDate", "cveID"}
 MAX_PAGE = max(1, int(os.environ.get("MAX_PAGE", 1000)))
+RECENT_KEV_MAX_RESULTS = max(
+    1,
+    int(os.environ.get("RECENT_KEV_MAX_RESULTS", 500)),
+)
 
-# Configure the maximum number of concurrent greenlets
-# This helps prevent server overload from too many concurrent operations
-# Ensure we have at least 1 greenlet to prevent crashes
-MAX_GREENLETS = max(1, int(os.environ.get('MAX_GREENLETS', 100)))
-# Timeout (seconds) for joinall to avoid request hangs
+# Timeout in seconds for admitted backend work to finish.
 GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', 10)))
-# Create a global pool to limit concurrent greenlets
-GREENLET_POOL = Pool(MAX_GREENLETS)
-
-
-def greenlet_value_or_raise(greenlet):
-    """Return a greenlet's value or re-raise its stored exception."""
-    if not greenlet.ready():
-        return None
-    exc = getattr(greenlet, "exception", None)
-    if exc:
-        raise exc
-    return greenlet.value
-
-
-def kill_unfinished_greenlets(greenlets):
-    """Kill any unfinished greenlets from the provided iterable."""
-    for greenlet in greenlets or []:
-        if not getattr(greenlet, "ready", lambda: True)():
-            try:
-                greenlet.kill(block=False)
-            except Exception:
-                pass
 
 def validate_page(page):
     """Reject non-positive and unbounded pages before MongoDB skip() calls."""
@@ -95,38 +82,42 @@ class cveLandResource(BaseResource):
         # Use partial to create a new function that includes the cve_id in the key prefix
         cache_key_func = partial(self.make_cache_key, cve_id=sanitized_cve_id)
 
-        # Spawn greenlets for concurrent execution using the pool
-        greenlets = []
-        greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, cache_key_func))
-        greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
-
-        # Wait for all greenlets to complete with a timeout
-        joinall(greenlets, timeout=GREENLET_TIMEOUT)
-
-        cached_data = greenlet_value_or_raise(greenlets[0])
-        vulnerability = greenlet_value_or_raise(greenlets[1])
-
-        # Prefer any ready result
-        if cached_data:
-            kill_unfinished_greenlets(greenlets)
+        try:
+            cached_data = self.get_cached_data(cache_key_func)
+        except CacheBackendUnavailable:
+            return self.handle_error("Cache temporarily unavailable", 503)
+        if cached_data is not None:
             return self.make_json_response(cached_data)
-        if vulnerability:
-            data = serialize_all_vulnerability(vulnerability)
-            cache_manager.set(cache_key_func(), data, timeout=180)  # Manually cache ready DB results
-            kill_unfinished_greenlets(greenlets)
-            return self.make_json_response(data)
 
-        # If nothing has finished yet, treat as timeout
-        if not all(g.ready() for g in greenlets):
-            for g in greenlets:
-                if not g.ready():
-                    try:
-                        g.kill(block=False)
-                    except Exception:
-                        pass
-            return self.handle_error("Upstream timeout", 504)
+        cache_key = cache_key_func()
+        with cache_manager.singleflight(cache_key) as acquired:
+            if not acquired:
+                return self.handle_error("Backend busy", 503)
 
-        # Both completed without data
+            try:
+                cached_data = cache_manager.get(cache_key)
+            except CacheBackendUnavailable:
+                return self.handle_error("Cache temporarily unavailable", 503)
+            if cached_data is not None:
+                return self.make_json_response(cached_data)
+
+            try:
+                vulnerability = run_backend_tasks(
+                    [partial(self.query_vulnerability, sanitized_cve_id)],
+                    timeout=GREENLET_TIMEOUT,
+                )[0]
+            except BackendBusyError:
+                return self.handle_error("Backend busy", 503)
+            except BackendTimeoutError:
+                return self.handle_error("Upstream timeout", 504)
+            except PyMongoError:
+                return self.handle_error("Backend unavailable", 503)
+
+            if vulnerability:
+                data = serialize_all_vulnerability(vulnerability)
+                cache_manager.set(cache_key, data, timeout=180)
+                return self.make_json_response(data)
+
         return self.handle_error("Vulnerability not found")
 
     def get_cached_data(self, cache_key_func):
@@ -249,34 +240,45 @@ class VulnerabilityResource(BaseResource):
         elif references_arg != "pocs" and references_arg is not None:
             return self.handle_error("Invalid value for references parameter", 400)
         else:
-            # Spawn greenlets for cache check and database query using the pool
-            greenlets = []
-            greenlets.append(GREENLET_POOL.spawn(self.get_cached_data, sanitized_cve_id))
-            greenlets.append(GREENLET_POOL.spawn(self.query_vulnerability, sanitized_cve_id))
-
-            # Wait for all greenlets to complete with a timeout
-            joinall(greenlets, timeout=GREENLET_TIMEOUT)
-
-            cached_data = greenlet_value_or_raise(greenlets[0])
-            vulnerability = greenlet_value_or_raise(greenlets[1])
-
-            if cached_data:
+            try:
+                cached_data = self.get_cached_data(sanitized_cve_id)
+            except CacheBackendUnavailable:
+                return self.handle_error("Cache temporarily unavailable", 503)
+            if cached_data is not None:
                 data = serialize_vulnerability(cached_data)
-            elif vulnerability:
-                cache_manager.set(sanitized_cve_id, vulnerability)
-                data = serialize_vulnerability(vulnerability)
             else:
-                if not all(g.ready() for g in greenlets):
-                    for g in greenlets:
-                        if not g.ready():
-                            try:
-                                g.kill(block=False)
-                            except Exception:
-                                pass
-                    return self.handle_error("Upstream timeout", 504)
-                return self.handle_error("Vulnerability not found")
+                with cache_manager.singleflight(sanitized_cve_id) as acquired:
+                    if not acquired:
+                        return self.handle_error("Backend busy", 503)
 
-            kill_unfinished_greenlets(greenlets)
+                    try:
+                        cached_data = cache_manager.get(sanitized_cve_id)
+                    except CacheBackendUnavailable:
+                        return self.handle_error("Cache temporarily unavailable", 503)
+                    if cached_data is not None:
+                        data = serialize_vulnerability(cached_data)
+                    else:
+                        try:
+                            vulnerability = run_backend_tasks(
+                                [
+                                    partial(
+                                        self.query_vulnerability,
+                                        sanitized_cve_id,
+                                    )
+                                ],
+                                timeout=GREENLET_TIMEOUT,
+                            )[0]
+                        except BackendBusyError:
+                            return self.handle_error("Backend busy", 503)
+                        except BackendTimeoutError:
+                            return self.handle_error("Upstream timeout", 504)
+                        except PyMongoError:
+                            return self.handle_error("Backend unavailable", 503)
+
+                        if not vulnerability:
+                            return self.handle_error("Vulnerability not found")
+                        cache_manager.set(sanitized_cve_id, vulnerability)
+                        data = serialize_vulnerability(vulnerability)
         return self.make_json_response(data)
 
     def get_cached_data(self, sanitized_cve_id):
@@ -375,7 +377,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
                 "total_pages": total_pages,
                 "vulnerabilities": [serialize_vulnerability(v) for v in vulnerabilities]
             })
-        except Exception as e:
+        except Exception:
             return self.handle_error("An internal server error occurred! ", 500)
 
     def count_documents(self, query):
@@ -406,6 +408,7 @@ class RecentKevVulnerabilitiesResource(BaseResource):
 
         Query Parameters:
         - days (int): The number of days to look back for recent vulnerabilities.
+        - limit (int): Maximum records to stream, capped by server configuration.
 
         Returns:
         Response: A JSON response containing a list of recent vulnerabilities
@@ -419,16 +422,30 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         # Limit days to a maximum of 100
         if days > 100:
             return self.handle_error("Exceeded the maximum limit of 100 days", 400)
+        result_limit = request.args.get(
+            "limit",
+            default=RECENT_KEV_MAX_RESULTS,
+            type=int,
+        )
+        if result_limit is None or result_limit < 1:
+            return self.handle_error("Invalid value for limit", 400)
+        if result_limit > RECENT_KEV_MAX_RESULTS:
+            return self.handle_error(
+                f"Exceeded the maximum limit of {RECENT_KEV_MAX_RESULTS} results",
+                400,
+            )
         # Calculate the cutoff date based on the 'days' parameter
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
         
         # Use server-side filtering - only fetch vulnerabilities with dateAdded >= cutoff_date
-        cursor = collection.find({"dateAdded": {"$gte": cutoff_date_str}})
+        cursor = collection.find(
+            {"dateAdded": {"$gte": cutoff_date_str}}
+        ).limit(result_limit)
 
         # Stream the cursor in manageable batches to avoid loading every
         # vulnerability into memory at once.
-        batch_size = max(1, min(MAX_GREENLETS, 200))
+        batch_size = max(1, min(MAX_BACKEND_CONCURRENCY, 200))
         cursor = cursor.batch_size(batch_size)
 
         def stream_vulnerabilities():
@@ -524,32 +541,27 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
             else "namespaces.nvd_nist_gov.cve.lastModified"
         )
 
-        # Create a list of greenlets for concurrent execution using the pool
-        greenlets = []
-
-        # Spawn a greenlet for counting total entries
-        greenlets.append(GREENLET_POOL.spawn(self.count_total_entries, field, cutoff_date))
-        # Spawn a greenlet for querying the database with the correct parameters
-        greenlets.append(GREENLET_POOL.spawn(self.query_database, field, cutoff_date, page, per_page, sort_order=-1))  # -1 for descending order
-
-        # Wait for all greenlets to complete with a timeout
-        joinall(greenlets, timeout=GREENLET_TIMEOUT)
-
-        # Get the total entries and recent vulnerabilities list if ready
-        total_entries_ready = greenlets[0].ready()
-        list_ready = greenlets[1].ready()
-
-        if not (total_entries_ready and list_ready):
-            for g in greenlets:
-                if not g.ready():
-                    try:
-                        g.kill(block=False)
-                    except Exception:
-                        pass
+        try:
+            total_entries, recent_vulnerabilities_list = run_backend_tasks(
+                [
+                    partial(self.count_total_entries, field, cutoff_date),
+                    partial(
+                        self.query_database,
+                        field,
+                        cutoff_date,
+                        page,
+                        per_page,
+                        sort_order=-1,
+                    ),
+                ],
+                timeout=GREENLET_TIMEOUT,
+            )
+        except BackendBusyError:
+            return self.handle_error("Backend busy", 503)
+        except BackendTimeoutError:
             return self.handle_error("Upstream timeout", 504)
-
-        total_entries = greenlet_value_or_raise(greenlets[0])
-        recent_vulnerabilities_list = greenlet_value_or_raise(greenlets[1])
+        except PyMongoError:
+            return self.handle_error("Backend unavailable", 503)
 
         # Check if recent_vulnerabilities_list is None
         if recent_vulnerabilities_list is None:

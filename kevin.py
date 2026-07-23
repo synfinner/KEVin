@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from gevent import spawn, joinall, monkey
+from gevent import monkey
 monkey.patch_all()
 
 
@@ -10,13 +10,19 @@ import logging
 
 # Third-Party Library Imports
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request, make_response, Response, send_from_directory
+from flask import Flask, jsonify, render_template, request, Response, send_from_directory
 from flask_restful import Api
 from flask_compress import Compress
 from flask_cors import CORS
+from pymongo.errors import PyMongoError
 
 # Project-Specific Imports
 from utils.database import collection, all_vulns_collection
+from utils.backend_capacity import (
+    BackendBusyError,
+    BackendTimeoutError,
+    run_backend_tasks,
+)
 from utils.cache_manager import kev_cache as cache 
 from utils.sanitizer import sanitize_query
 from utils.rss_feed import create_rss_feed
@@ -222,27 +228,17 @@ def get_metrics():
     def count_cves():
         return all_vulns_collection.estimated_document_count()
 
-    # Spawn the greenlets
-    kevs_greenlet = spawn(count_kevs)
-    cves_greenlet = spawn(count_cves)
-
-    greenlets = [kevs_greenlet, cves_greenlet]
-    # Wait for the greenlets to finish with a timeout to prevent hangs
-    joinall(greenlets, timeout=GREENLET_TIMEOUT)
-
-    # If any greenlet is not ready, kill it and return a timeout response
-    if not all(g.ready() for g in greenlets):
-        for g in greenlets:
-            if not g.ready():
-                try:
-                    g.kill(block=False)
-                except Exception:
-                    pass
+    try:
+        kevs_count, cves_count = run_backend_tasks(
+            [count_kevs, count_cves],
+            timeout=GREENLET_TIMEOUT,
+        )
+    except BackendBusyError:
+        return jsonify({"error": "Backend busy"}), 503
+    except BackendTimeoutError:
         return jsonify({"error": "Backend timeout"}), 504
-
-    # Get the results from the greenlets
-    kevs_count = kevs_greenlet.value
-    cves_count = cves_greenlet.value
+    except PyMongoError:
+        return jsonify({"error": "Backend unavailable"}), 503
 
     # Create a dictionary to hold the metrics
     metrics = {
@@ -284,21 +280,17 @@ def cve_exist():
     def fetch_vulnerability():
         return collection.find_one({"cveID": sanitized_cve_id})
 
-    # Spawn the greenlet
-    greenlet = spawn(fetch_vulnerability)
-    # Wait for the greenlet to finish with a timeout
-    joinall([greenlet], timeout=GREENLET_TIMEOUT)
-
-    # Handle timeout
-    if not greenlet.ready():
-        try:
-            greenlet.kill(block=False)
-        except Exception:
-            pass
+    try:
+        vulnerability = run_backend_tasks(
+            [fetch_vulnerability],
+            timeout=GREENLET_TIMEOUT,
+        )[0]
+    except BackendBusyError:
+        return jsonify({"error": "Backend busy"}), 503
+    except BackendTimeoutError:
         return jsonify({"error": "Backend timeout"}), 504
-
-    # Get the result from the greenlet
-    vulnerability = greenlet.value
+    except PyMongoError:
+        return jsonify({"error": "Backend unavailable"}), 503
 
     # If the vulnerability is found, return a JSON response indicating that the CVE ID exists in the KEV database
     if vulnerability:
