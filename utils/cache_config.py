@@ -1,16 +1,17 @@
 import os
-from redis import BlockingConnectionPool, StrictRedis
+
 from dotenv import load_dotenv
+from redis import BlockingConnectionPool, StrictRedis
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Constants for Redis configuration
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-CACHE_DEFAULT_TIMEOUT = int(os.getenv("CACHE_DEFAULT_TIMEOUT", 600))  # Default cache timeout
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+CACHE_DEFAULT_TIMEOUT = int(os.getenv("CACHE_DEFAULT_TIMEOUT", "600"))  # Default cache timeout
 CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "kev_")
 MAX_CONNECTIONS = int(
-    os.getenv("REDIS_MAX_CONNECTIONS", os.getenv("MAX_CONNECTIONS", 100))
+    os.getenv("REDIS_MAX_CONNECTIONS", os.getenv("MAX_CONNECTIONS", "100"))
 )
 POOL_WAIT_TIMEOUT = float(os.getenv("REDIS_POOL_WAIT_TIMEOUT", "0.05"))
 SOCKET_TIMEOUT = float(os.getenv("SOCKET_TIMEOUT", "1"))

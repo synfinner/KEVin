@@ -1,6 +1,24 @@
 # schema/api.py
 
-from utils.database import all_vulns_collection, collection
+from datetime import datetime, timedelta, timezone
+from functools import partial
+import math
+import os
+import re
+
+from dotenv import load_dotenv
+from flask import Response, json, jsonify, make_response, request, stream_with_context
+from flask_restful import Resource
+from pymongo import ASCENDING, DESCENDING
+from pymongo.errors import PyMongoError
+
+from schema.serializers import (
+    mitre_serializer,
+    nvd_serializer,
+    serialize_all_vulnerability,
+    serialize_githubpocs,
+    serialize_vulnerability,
+)
 from utils.backend_capacity import (
     BackendBusyError,
     BackendTimeoutError,
@@ -12,33 +30,23 @@ from utils.cache_manager import (
     cache_manager,
     kev_cache as cache,
 )
+from utils.database import all_vulns_collection, collection
 from utils.sanitizer import sanitize_query
-from functools import partial
-from flask_restful import Resource
-from flask import request, Response, json, jsonify, make_response, stream_with_context
-from pymongo import ASCENDING, DESCENDING
-from pymongo.errors import PyMongoError
-from datetime import datetime, timedelta, timezone
-import math
-import os
-from schema.serializers import serialize_vulnerability, serialize_all_vulnerability, nvd_serializer, mitre_serializer, serialize_githubpocs
-import re
 
 # Load env using python-dotenv
-from dotenv import load_dotenv
 load_dotenv()
 
 # Fields clients are allowed to sort on for KEV listings. Keep in sync with
 # Mongo indexes so we never trigger an expensive collection scan.
 ALLOWED_KEV_SORT_FIELDS = {"dateAdded", "dueDate", "cveID"}
-MAX_PAGE = max(1, int(os.environ.get("MAX_PAGE", 1000)))
+MAX_PAGE = max(1, int(os.environ.get("MAX_PAGE", "1000")))
 RECENT_KEV_MAX_RESULTS = max(
     1,
-    int(os.environ.get("RECENT_KEV_MAX_RESULTS", 500)),
+    int(os.environ.get("RECENT_KEV_MAX_RESULTS", "500")),
 )
 
 # Timeout in seconds for admitted backend work to finish.
-GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', 10)))
+GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', "10")))
 
 def validate_page(page):
     """Reject non-positive and unbounded pages before MongoDB skip() calls."""

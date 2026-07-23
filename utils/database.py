@@ -29,11 +29,11 @@ logging_thread.start()
 
 def create_client(uri):
     # Create a new MongoClient object with snappy compression and bounded timeouts
-    max_pool = int(os.getenv("MONGO_MAX_POOL_SIZE", 20))
-    min_pool = int(os.getenv("MONGO_MIN_POOL_SIZE", 0))
-    connect_timeout = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", 3000))
-    socket_timeout = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", 10000))
-    wait_queue_timeout = int(os.getenv("MONGO_WAIT_QUEUE_TIMEOUT_MS", 500))
+    max_pool = int(os.getenv("MONGO_MAX_POOL_SIZE", "20"))
+    min_pool = int(os.getenv("MONGO_MIN_POOL_SIZE", "0"))
+    connect_timeout = int(os.getenv("MONGO_CONNECT_TIMEOUT_MS", "3000"))
+    socket_timeout = int(os.getenv("MONGO_SOCKET_TIMEOUT_MS", "10000"))
+    wait_queue_timeout = int(os.getenv("MONGO_WAIT_QUEUE_TIMEOUT_MS", "500"))
     return MongoClient(
         uri,
         maxPoolSize=max_pool,

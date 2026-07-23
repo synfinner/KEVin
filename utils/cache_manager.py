@@ -160,13 +160,13 @@ def deserialize_cache_entry(cached_data):
 class CacheManager:
     def __init__(
         self,
-        redis_client,
+        redis_connection,
         circuit_breaker_seconds=None,
         singleflight_wait_seconds=None,
         time_func=None,
     ):
         """Initialize Redis access with a short per-worker failure circuit."""
-        self.redis_client = redis_client
+        self.redis_client = redis_connection
         self.circuit_breaker_seconds = (
             float(os.getenv("CACHE_CIRCUIT_BREAKER_SECONDS", "1"))
             if circuit_breaker_seconds is None

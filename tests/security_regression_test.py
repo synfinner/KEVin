@@ -440,7 +440,7 @@ def test_mongo_checkout_wait_has_a_bounded_timeout():
     """MongoClient checkout cannot wait indefinitely behind a full pool."""
     source = (ROOT / "utils" / "database.py").read_text()
 
-    assert 'MONGO_WAIT_QUEUE_TIMEOUT_MS", 500' in source
+    assert 'MONGO_WAIT_QUEUE_TIMEOUT_MS", "500"' in source
     assert "waitQueueTimeoutMS=wait_queue_timeout" in source
 
 
