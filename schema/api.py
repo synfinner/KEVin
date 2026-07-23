@@ -449,7 +449,7 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         # Use server-side filtering - only fetch vulnerabilities with dateAdded >= cutoff_date
         cursor = collection.find(
             {"dateAdded": {"$gte": cutoff_date_str}}
-        ).limit(result_limit)
+        ).sort("dateAdded", DESCENDING).limit(result_limit)
 
         # Stream the cursor in manageable batches to avoid loading every
         # vulnerability into memory at once.

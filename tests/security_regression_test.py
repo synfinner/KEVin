@@ -436,6 +436,28 @@ def test_backend_capacity_rejects_work_instead_of_waiting_for_a_slot():
     assert first_request.value == ["first"]
 
 
+def test_backend_capacity_runs_request_tasks_sequentially_with_one_slot():
+    """One admitted request can complete multiple tasks with one backend slot."""
+    backend_module = importlib.import_module("utils.backend_capacity")
+    limiter = backend_module.BackendCapacity(max_concurrency=1)
+    execution_order = []
+
+    def first_task():
+        """Record and return the first sequential result."""
+        execution_order.append("first")
+        return 1
+
+    def second_task():
+        """Record and return the second sequential result."""
+        execution_order.append("second")
+        return 2
+
+    results = limiter.run_tasks([first_task, second_task], timeout=1)
+
+    assert results == [1, 2]
+    assert execution_order == ["first", "second"]
+
+
 def test_mongo_checkout_wait_has_a_bounded_timeout():
     """MongoClient checkout cannot wait indefinitely behind a full pool."""
     source = (ROOT / "utils" / "database.py").read_text()
@@ -544,10 +566,17 @@ def test_recent_kev_stream_applies_requested_bounded_limit(monkeypatch):
         def __init__(self):
             """Initialize a cursor with no configured bound."""
             self.limit_value = None
+            self.operations = []
+
+        def sort(self, key, direction):
+            """Record the deterministic sort applied before the result cap."""
+            self.operations.append(("sort", key, direction))
+            return self
 
         def limit(self, value):
             """Record and return the maximum number of streamed records."""
             self.limit_value = value
+            self.operations.append(("limit", value))
             return self
 
         def batch_size(self, _value):
@@ -590,6 +619,10 @@ def test_recent_kev_stream_applies_requested_bounded_limit(monkeypatch):
 
     assert response.status_code == 200
     assert recent_collection.cursor.limit_value == 25
+    assert recent_collection.cursor.operations == [
+        ("sort", "dateAdded", api_module.DESCENDING),
+        ("limit", 25),
+    ]
 
 
 def test_viz_uses_text_safe_rendering_for_untrusted_api_data():

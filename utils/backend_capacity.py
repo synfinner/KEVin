@@ -44,25 +44,34 @@ class BackendCapacity:
                 raise BackendBusyError("Database concurrency limit reached")
             reserved += 1
 
-    def _run_reserved_task(self, task):
-        """Run one admitted task and release its slot only after it stops."""
+    def _run_reserved_tasks(self, indexed_tasks, results):
+        """Run one sequential task lane and release its reserved slot."""
         try:
-            return task()
+            for index, task in indexed_tasks:
+                results[index] = task()
         finally:
             self._slots.release()
 
     def run_tasks(self, tasks, timeout=BACKEND_TIMEOUT):
-        """Run admitted callables concurrently or fail before spawning any."""
+        """Run callables with bounded parallelism or fail before spawning any."""
         tasks = list(tasks)
         if not tasks:
             return []
 
-        self._reserve(len(tasks))
+        worker_count = min(len(tasks), self.max_concurrency)
+        self._reserve(worker_count)
+        task_lanes = [[] for _index in range(worker_count)]
+        results = [None] * len(tasks)
+        for index, task in enumerate(tasks):
+            task_lanes[index % worker_count].append((index, task))
+
         greenlets = []
-        unassigned_slots = len(tasks)
+        unassigned_slots = worker_count
         try:
-            for task in tasks:
-                greenlets.append(spawn(self._run_reserved_task, task))
+            for task_lane in task_lanes:
+                greenlets.append(
+                    spawn(self._run_reserved_tasks, task_lane, results)
+                )
                 unassigned_slots -= 1
         except Exception:
             # Slots already assigned to greenlets are released by their
@@ -83,7 +92,7 @@ class BackendCapacity:
         for greenlet in greenlets:
             if greenlet.exception is not None:
                 raise greenlet.exception
-        return [greenlet.value for greenlet in greenlets]
+        return results
 
 
 BACKEND_CAPACITY = BackendCapacity(MAX_BACKEND_CONCURRENCY)
