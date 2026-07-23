@@ -204,7 +204,10 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             result = func(*args, **kwargs)
             # Normalize every Flask-supported return form before serialization so
             # cache hits preserve the original status, body, and essential headers.
-            cache_manager.set(cache_key, make_response(result), timeout=timeout)
+            response = make_response(result)
+            # Server errors are transient and must not outlive backend recovery.
+            if response.status_code < 500:
+                cache_manager.set(cache_key, response, timeout=timeout)
             return result
         return wrapper
     return decorator

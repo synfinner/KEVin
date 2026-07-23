@@ -17,6 +17,22 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
+class MemoryRedis:
+    """Store serialized cache values without requiring a Redis server."""
+
+    def __init__(self):
+        """Initialize an empty in-memory Redis value store."""
+        self.values = {}
+
+    def get(self, key):
+        """Return a cached byte payload when present."""
+        return self.values.get(key)
+
+    def setex(self, key, _timeout, value):
+        """Store a byte payload using the Redis setex call shape."""
+        self.values[key] = value
+
+
 def test_rss_feed_escapes_description_html_fields():
     """RSS descriptions escape attacker-controlled HTML fragments."""
     entry = {
@@ -82,20 +98,6 @@ def test_cached_error_tuple_preserves_http_status(monkeypatch):
     cache_module = importlib.import_module("utils.cache_manager")
     test_case = unittest.TestCase()
 
-    class MemoryRedis:
-        """Store serialized cache values without requiring a Redis server."""
-
-        def __init__(self):
-            self.values = {}
-
-        def get(self, key):
-            """Return a cached byte payload when present."""
-            return self.values.get(key)
-
-        def setex(self, key, _timeout, value):
-            """Store a byte payload using the Redis setex call shape."""
-            self.values[key] = value
-
     for status_code in (400, 404):
         memory_redis = MemoryRedis()
         monkeypatch.setattr(
@@ -133,6 +135,52 @@ def test_cached_error_tuple_preserves_http_status(monkeypatch):
         test_case.assertEqual(cached_response.status_code, status_code)
         test_case.assertEqual(cached_response.get_json(), first_response.get_json())
         test_case.assertEqual(handler_calls, 1)
+
+
+def test_server_error_response_is_not_cached(monkeypatch):
+    """A transient server error does not hide a recovered handler response."""
+    monkeypatch.setenv("REDIS_IP", "localhost")
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    test_case = unittest.TestCase()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+
+    app = Flask(__name__)
+    handler_calls = 0
+
+    def recovering_handler():
+        """Fail once, then return the healthy response clients should observe."""
+        nonlocal handler_calls
+        handler_calls += 1
+        if handler_calls == 1:
+            return {"message": "Temporary backend failure"}, 500
+        return {"message": "Recovered"}, 200
+
+    cached_view = cache_module.kev_cache(
+        timeout=120,
+        key_prefix="recovering_handler",
+    )(recovering_handler)
+    app.add_url_rule(
+        "/recovering-handler",
+        endpoint="recovering_handler",
+        view_func=cached_view,
+        methods=["GET"],
+    )
+
+    client = app.test_client()
+    failed_response = client.get("/recovering-handler")
+    recovered_response = client.get("/recovering-handler")
+    cached_recovery_response = client.get("/recovering-handler")
+
+    test_case.assertEqual(failed_response.status_code, 500)
+    test_case.assertEqual(recovered_response.status_code, 200)
+    test_case.assertEqual(recovered_response.get_json(), {"message": "Recovered"})
+    test_case.assertEqual(cached_recovery_response.status_code, 200)
+    test_case.assertEqual(handler_calls, 2)
 
 
 def test_viz_uses_text_safe_rendering_for_untrusted_api_data():
