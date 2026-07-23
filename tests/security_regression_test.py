@@ -142,6 +142,7 @@ def test_server_error_response_is_not_cached(monkeypatch):
     monkeypatch.setenv("REDIS_IP", "localhost")
     cache_module = importlib.import_module("utils.cache_manager")
     memory_redis = MemoryRedis()
+    test_case = unittest.TestCase()
     monkeypatch.setattr(
         cache_module,
         "cache_manager",
@@ -175,11 +176,11 @@ def test_server_error_response_is_not_cached(monkeypatch):
     recovered_response = client.get("/recovering-handler")
     cached_recovery_response = client.get("/recovering-handler")
 
-    assert failed_response.status_code == 500
-    assert recovered_response.status_code == 200
-    assert recovered_response.get_json() == {"message": "Recovered"}
-    assert cached_recovery_response.status_code == 200
-    assert handler_calls == 2
+    test_case.assertEqual(failed_response.status_code, 500)
+    test_case.assertEqual(recovered_response.status_code, 200)
+    test_case.assertEqual(recovered_response.get_json(), {"message": "Recovered"})
+    test_case.assertEqual(cached_recovery_response.status_code, 200)
+    test_case.assertEqual(handler_calls, 2)
 
 
 def test_viz_uses_text_safe_rendering_for_untrusted_api_data():
