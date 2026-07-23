@@ -1,17 +1,21 @@
 import os
-from redis import StrictRedis, ConnectionPool
+
 from dotenv import load_dotenv
+from redis import BlockingConnectionPool, StrictRedis
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Constants for Redis configuration
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-CACHE_DEFAULT_TIMEOUT = int(os.getenv("CACHE_DEFAULT_TIMEOUT", 600))  # Default cache timeout
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+CACHE_DEFAULT_TIMEOUT = int(os.getenv("CACHE_DEFAULT_TIMEOUT", "600"))  # Default cache timeout
 CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "kev_")
-MAX_CONNECTIONS = int(os.getenv("MAX_CONNECTIONS", 20))
-SOCKET_TIMEOUT = int(os.getenv("SOCKET_TIMEOUT", 10))  # Socket timeout for Redis connections in seconds
-SOCKET_CONNECT_TIMEOUT = int(os.getenv("SOCKET_CONNECT_TIMEOUT", 10))  # Timeout for establishing a connection
+MAX_CONNECTIONS = int(
+    os.getenv("REDIS_MAX_CONNECTIONS", os.getenv("MAX_CONNECTIONS", "100"))
+)
+POOL_WAIT_TIMEOUT = float(os.getenv("REDIS_POOL_WAIT_TIMEOUT", "0.05"))
+SOCKET_TIMEOUT = float(os.getenv("SOCKET_TIMEOUT", "1"))
+SOCKET_CONNECT_TIMEOUT = float(os.getenv("SOCKET_CONNECT_TIMEOUT", "1"))
 
 def setup_cache_config(redis_host):
     """
@@ -21,14 +25,16 @@ def setup_cache_config(redis_host):
     if not redis_host:
         raise ValueError("Redis host must be specified")
 
-    # Create a connection pool for Redis with proper timeouts
-    pool = ConnectionPool(
+    # Wait briefly for a reusable connection instead of failing immediately or
+    # blocking a request indefinitely when the pool reaches its limit.
+    pool = BlockingConnectionPool(
         host=redis_host,
         port=REDIS_PORT,
         db=0,  # Default Redis DB
         max_connections=MAX_CONNECTIONS,
+        timeout=POOL_WAIT_TIMEOUT,
         socket_timeout=SOCKET_TIMEOUT,  # Timeout for socket operations
-        socket_connect_timeout=SOCKET_CONNECT_TIMEOUT  # Timeout for connection establishment
+        socket_connect_timeout=SOCKET_CONNECT_TIMEOUT,  # Timeout for connection establishment
     )
 
     # Create a Redis client using the connection pool
