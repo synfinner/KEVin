@@ -76,6 +76,123 @@ def _is_test_only_result(result: dict[str, Any]) -> bool:
     return all(_is_test_path(path) for path in paths if path is not None)
 
 
+def _shift_artifact_indices(value: Any, offset: int) -> None:
+    """Shift artifact references recursively after two run tables are joined."""
+    if isinstance(value, dict):
+        artifact_location = value.get("artifactLocation")
+        if isinstance(artifact_location, dict):
+            artifact_index = artifact_location.get("index")
+            if isinstance(artifact_index, int):
+                artifact_location["index"] = artifact_index + offset
+        for nested_value in value.values():
+            _shift_artifact_indices(nested_value, offset)
+    elif isinstance(value, list):
+        for nested_value in value:
+            _shift_artifact_indices(nested_value, offset)
+
+
+def _merge_driver_rules(
+    target_driver: dict[str, Any],
+    source_driver: dict[str, Any],
+) -> dict[str, int]:
+    """Merge rule metadata and return each rule ID's target index."""
+    target_rules = target_driver.setdefault("rules", [])
+    source_rules = source_driver.get("rules", [])
+    if not isinstance(target_rules, list) or not isinstance(source_rules, list):
+        raise ValueError("SARIF tool driver rules must be lists.")
+
+    rule_indices = {
+        rule["id"]: index
+        for index, rule in enumerate(target_rules)
+        if isinstance(rule, dict) and isinstance(rule.get("id"), str)
+    }
+    for rule in source_rules:
+        rule_id = rule.get("id") if isinstance(rule, dict) else None
+        if not isinstance(rule_id, str) or rule_id in rule_indices:
+            continue
+        rule_indices[rule_id] = len(target_rules)
+        target_rules.append(rule)
+    return rule_indices
+
+
+def _result_rule_id(
+    result: dict[str, Any],
+    source_rules: list[Any],
+) -> str | None:
+    """Resolve a result's rule ID from its explicit or indexed reference."""
+    rule_id = result.get("ruleId")
+    if isinstance(rule_id, str):
+        return rule_id
+
+    rule_reference = result.get("rule")
+    if not isinstance(rule_reference, dict):
+        return None
+    if isinstance(rule_reference.get("id"), str):
+        return rule_reference["id"]
+
+    source_index = rule_reference.get("index")
+    if not isinstance(source_index, int) or not 0 <= source_index < len(source_rules):
+        return None
+    source_rule = source_rules[source_index]
+    if not isinstance(source_rule, dict) or not isinstance(source_rule.get("id"), str):
+        return None
+    return source_rule["id"]
+
+
+def _merge_run(target_run: dict[str, Any], source_run: dict[str, Any]) -> None:
+    """Merge one duplicate tool run into its first occurrence."""
+    target_driver = target_run["tool"]["driver"]
+    source_driver = source_run["tool"]["driver"]
+    source_rules = source_driver.get("rules", [])
+    if not isinstance(source_rules, list):
+        raise ValueError("SARIF tool driver rules must be lists.")
+    rule_indices = _merge_driver_rules(target_driver, source_driver)
+
+    target_artifacts = target_run.setdefault("artifacts", [])
+    source_artifacts = source_run.get("artifacts", [])
+    if not isinstance(target_artifacts, list) or not isinstance(source_artifacts, list):
+        raise ValueError("SARIF run artifacts must be lists.")
+    artifact_offset = len(target_artifacts)
+    target_artifacts.extend(source_artifacts)
+
+    # Results from the appended run must point at the newly combined metadata
+    # tables rather than retaining their original zero-based indices.
+    for result in source_run["results"]:
+        _shift_artifact_indices(result, artifact_offset)
+        rule_id = _result_rule_id(result, source_rules)
+        if rule_id in rule_indices:
+            rule_reference = result.setdefault("rule", {})
+            rule_reference["id"] = rule_id
+            rule_reference["index"] = rule_indices[rule_id]
+        target_run["results"].append(result)
+
+
+def _run_category(run: dict[str, Any]) -> str:
+    """Return the analysis category encoded in runAutomationDetails.id."""
+    automation_id = run.get("automationDetails", {}).get("id", "")
+    if not isinstance(automation_id, str) or "/" not in automation_id:
+        return ""
+    return automation_id.rsplit("/", 1)[0]
+
+
+def _coalesce_duplicate_tool_runs(
+    runs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return one run per tool and category while preserving input order."""
+    coalesced_runs = []
+    runs_by_tool = {}
+    for run in runs:
+        tool_name = run["tool"]["driver"]["name"]
+        tool_key = (tool_name.strip().casefold(), _run_category(run))
+        existing_run = runs_by_tool.get(tool_key)
+        if existing_run is None:
+            runs_by_tool[tool_key] = run
+            coalesced_runs.append(run)
+            continue
+        _merge_run(existing_run, run)
+    return coalesced_runs
+
+
 def filter_security_sarif(
     document: dict[str, Any],
 ) -> tuple[dict[str, Any], FilterSummary]:
@@ -113,6 +230,9 @@ def filter_security_sarif(
         run["results"] = production_results
         retained_results += len(production_results)
 
+    filtered_document["runs"] = _coalesce_duplicate_tool_runs(
+        filtered_document["runs"]
+    )
     return filtered_document, FilterSummary(
         retained_results=retained_results,
         removed_test_results=removed_test_results,
