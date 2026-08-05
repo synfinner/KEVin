@@ -159,13 +159,17 @@ def parse_all_kev_query():
     if order_param not in {"asc", "desc"}:
         order_param = "desc"
 
-    search_query = (sanitize_query(request.args.get("search", "")) or "").strip()
+    search_query = (
+        sanitize_query(request.args.get("search", "")) or ""
+    ).strip().lower()
     filter_ransomware = sanitize_query(request.args.get("filter", "")) or ""
     if filter_ransomware:
         filter_ransomware = filter_ransomware.lower()
         if filter_ransomware != "ransomware":
             raise ValueError("Invalid filter parameter. Must be 'ransomware'.")
-    actor_query = (sanitize_query(request.args.get("actor", "")) or "").strip()
+    actor_query = (
+        sanitize_query(request.args.get("actor", "")) or ""
+    ).strip().lower()
 
     return (
         page,

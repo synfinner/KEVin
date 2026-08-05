@@ -337,13 +337,13 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
             (
                 "/kev?page=01&per_page=0100&sort=dateAdded&order=DESC"
                 "&search=Acme@&filter=&actor=APT@1",
-                "/kev?actor=APT1&search=Acme&order=desc&sort=dateAdded"
+                "/kev?actor=apt1&search=ACME&order=desc&sort=dateAdded"
                 "&per_page=100&page=1",
             ),
             (
                 "/api/kev?page=01&per_page=0100&sort=dateAdded&order=DESC"
                 "&search=Acme@&filter=&actor=APT@1",
-                "/api/kev?actor=APT1&search=Acme&order=desc&sort=dateAdded"
+                "/api/kev?actor=apt1&search=ACME&order=desc&sort=dateAdded"
                 "&per_page=100&page=1",
             ),
         )
