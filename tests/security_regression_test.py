@@ -202,19 +202,40 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
         modified = api_module.RecentVulnerabilitiesByDaysResource("modified")
         app = Flask(__name__)
 
-        valid_urls = (
-            "/vuln/published?days=030",
-            "/vuln/published?per_page=25&page=1&days=30",
+        valid_request_groups = (
+            (
+                published,
+                "/vuln/published?days=030",
+                "/vuln/published?per_page=25&page=1&days=30",
+            ),
+            (
+                published,
+                "/api/vuln/published?days=030",
+                "/api/vuln/published?page=1&days=30&per_page=25",
+            ),
+            (
+                modified,
+                "/vuln/modified?days=030",
+                "/vuln/modified?days=30&per_page=25&page=1",
+            ),
+            (
+                modified,
+                "/api/vuln/modified?days=030",
+                "/api/vuln/modified?per_page=25&days=30&page=1",
+            ),
         )
-        for url in valid_urls:
-            with app.test_request_context(url):
-                response = published.get()
-            assert response.status_code == 200
+        for resource, *urls in valid_request_groups:
+            for url in urls:
+                with app.test_request_context(url):
+                    response = resource.get()
+                assert response.status_code == 200
         valid_cache_get_calls = memory_redis.get_calls
 
         invalid_requests = (
             (published, "/vuln/published?days=30&nonce=1"),
             (published, "/api/vuln/published?days=30&days=30"),
+            (published, "/vuln/published?days=30&page=1&page=2"),
+            (modified, "/api/vuln/modified?days=30&per_page=25&per_page=25"),
             (modified, "/vuln/modified?days=30!"),
             (modified, "/api/vuln/modified?days=30@"),
         )
@@ -225,12 +246,136 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
     finally:
         sys.modules.pop("schema.api", None)
 
-    assert len(recent_collection.count_calls) == 1
-    assert len(recent_collection.find_calls) == 1
+    assert len(recent_collection.count_calls) == 4
+    assert len(recent_collection.find_calls) == 4
     assert memory_redis.get_calls == valid_cache_get_calls
-    count_options = recent_collection.count_calls[0][1]
-    assert count_options == {"maxTimeMS": 5000}
-    assert ("max_time_ms", 5000) in recent_collection.cursors[0].operations
+    assert all(
+        options == {"maxTimeMS": 5000}
+        for _query, options in recent_collection.count_calls
+    )
+    assert all(
+        ("max_time_ms", 5000) in cursor.operations
+        for cursor in recent_collection.cursors
+    )
+
+
+def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
+    """Equivalent KEV requests share a fill and invalid keys stop pre-cache."""
+
+    class RecordingCursor:
+        """Record pagination and execution limits for a KEV query."""
+
+        def __init__(self):
+            """Initialize an empty operation log."""
+            self.operations = []
+
+        def sort(self, criteria):
+            """Record the validated sort criteria."""
+            self.operations.append(("sort", criteria))
+            return self
+
+        def skip(self, value):
+            """Record the page offset."""
+            self.operations.append(("skip", value))
+            return self
+
+        def limit(self, value):
+            """Record the canonical page size."""
+            self.operations.append(("limit", value))
+            return self
+
+        def max_time_ms(self, value):
+            """Record the server-side execution limit."""
+            self.operations.append(("max_time_ms", value))
+            return self
+
+        def __iter__(self):
+            """Return an empty result set."""
+            return iter(())
+
+    class RecordingCollection:
+        """Count origin operations triggered by KEV list requests."""
+
+        def __init__(self):
+            """Initialize count, find, and cursor logs."""
+            self.count_calls = []
+            self.find_calls = []
+            self.cursors = []
+
+        def count_documents(self, query, **kwargs):
+            """Record a bounded count and return no matching records."""
+            self.count_calls.append((query, kwargs))
+            return 0
+
+        def find(self, query):
+            """Record the filter and return a controllable cursor."""
+            cursor = RecordingCursor()
+            self.find_calls.append(query)
+            self.cursors.append(cursor)
+            return cursor
+
+    kev_collection = RecordingCollection()
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = kev_collection
+    fake_database.all_vulns_collection = kev_collection
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    sys.modules.pop("schema.api", None)
+
+    try:
+        api_module = importlib.import_module("schema.api")
+        resource = api_module.AllKevVulnerabilitiesResource()
+        app = Flask(__name__)
+
+        valid_request_groups = (
+            (
+                "/kev?page=01&per_page=0100&sort=dateAdded&order=DESC"
+                "&search=Acme@&filter=&actor=APT@1",
+                "/kev?actor=APT1&search=Acme&order=desc&sort=dateAdded"
+                "&per_page=100&page=1",
+            ),
+            (
+                "/api/kev?page=01&per_page=0100&sort=dateAdded&order=DESC"
+                "&search=Acme@&filter=&actor=APT@1",
+                "/api/kev?actor=APT1&search=Acme&order=desc&sort=dateAdded"
+                "&per_page=100&page=1",
+            ),
+        )
+        for urls in valid_request_groups:
+            for url in urls:
+                with app.test_request_context(url):
+                    response = resource.get()
+                assert response.status_code == 200
+        valid_cache_get_calls = memory_redis.get_calls
+
+        invalid_urls = (
+            "/kev?page=1&nonce=1",
+            "/api/kev?page=1&page=1",
+        )
+        for url in invalid_urls:
+            with app.test_request_context(url):
+                response = resource.get()
+            assert response.status_code == 400
+    finally:
+        sys.modules.pop("schema.api", None)
+
+    assert len(kev_collection.count_calls) == 2
+    assert len(kev_collection.find_calls) == 2
+    assert memory_redis.get_calls == valid_cache_get_calls
+    assert all(
+        options == {"maxTimeMS": 5000}
+        for _query, options in kev_collection.count_calls
+    )
+    assert all(
+        ("max_time_ms", 5000) in cursor.operations
+        for cursor in kev_collection.cursors
+    )
 
 
 def test_all_vulnerability_indexes_cover_recent_query_fields(monkeypatch):

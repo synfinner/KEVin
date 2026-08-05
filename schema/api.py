@@ -49,6 +49,15 @@ MONGO_QUERY_MAX_TIME_MS = max(
     int(os.environ.get("MONGO_QUERY_MAX_TIME_MS", "5000")),
 )
 RECENT_VULNERABILITY_QUERY_PARAMETERS = {"days", "page", "per_page"}
+ALL_KEV_QUERY_PARAMETERS = {
+    "actor",
+    "filter",
+    "order",
+    "page",
+    "per_page",
+    "search",
+    "sort",
+}
 
 # Timeout in seconds for admitted backend work to finish.
 GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', "10")))
@@ -107,6 +116,83 @@ def canonical_recent_vulnerability_query_items():
         ("days", [str(days)]),
         ("page", [str(page)]),
         ("per_page", [str(per_page)]),
+    ]
+
+
+def parse_all_kev_query():
+    """Validate and canonicalize pagination, filtering, and sort parameters."""
+    supplied_parameters = set(request.args.keys())
+    unknown_parameters = sorted(supplied_parameters - ALL_KEV_QUERY_PARAMETERS)
+    if unknown_parameters:
+        names = ", ".join(unknown_parameters)
+        raise ValueError(f"Unsupported query parameter(s): {names}")
+
+    duplicate_parameters = sorted(
+        name for name in supplied_parameters if len(request.args.getlist(name)) != 1
+    )
+    if duplicate_parameters:
+        names = ", ".join(duplicate_parameters)
+        raise ValueError(f"Duplicate query parameter(s) are not allowed: {names}")
+
+    try:
+        page = int(request.args.get("page", 1))
+        per_page = int(request.args.get("per_page", 25))
+    except ValueError as exc:
+        raise ValueError(
+            "Invalid page or per_page parameter. Must be integers."
+        ) from exc
+
+    page = validate_page(page)
+    if page is None:
+        raise ValueError("Invalid page parameter. Must be a positive integer.")
+    per_page = max(1, min(100, per_page))
+
+    sort_param = (
+        sanitize_query(request.args.get("sort", "dateAdded")) or ""
+    ).strip()
+    if sort_param not in ALLOWED_KEV_SORT_FIELDS:
+        raise ValueError("Unsupported sort parameter")
+
+    order_param = (
+        sanitize_query(request.args.get("order", "desc")) or "desc"
+    ).lower()
+    if order_param not in {"asc", "desc"}:
+        order_param = "desc"
+
+    search_query = (sanitize_query(request.args.get("search", "")) or "").strip()
+    filter_ransomware = sanitize_query(request.args.get("filter", "")) or ""
+    if filter_ransomware:
+        filter_ransomware = filter_ransomware.lower()
+        if filter_ransomware != "ransomware":
+            raise ValueError("Invalid filter parameter. Must be 'ransomware'.")
+    actor_query = (sanitize_query(request.args.get("actor", "")) or "").strip()
+
+    return (
+        page,
+        per_page,
+        sort_param,
+        order_param,
+        search_query,
+        filter_ransomware,
+        actor_query,
+    )
+
+
+def canonical_all_kev_query_items():
+    """Return stable cache-key items for one validated KEV list query."""
+    query_values = parse_all_kev_query()
+    parameter_names = (
+        "page",
+        "per_page",
+        "sort",
+        "order",
+        "search",
+        "filter",
+        "actor",
+    )
+    return [
+        (name, [str(value)])
+        for name, value in zip(parameter_names, query_values, strict=True)
     ]
 
 class BaseResource(Resource):
@@ -354,7 +440,11 @@ class VulnerabilityResource(BaseResource):
 
 # This class defines a resource for fetching all KEV vulnerabilities
 class AllKevVulnerabilitiesResource(BaseResource):
-    @cache(timeout=120, key_prefix="all_kev_vulns", query_string=True)
+    @cache(
+        timeout=120,
+        key_prefix="all_kev_vulns",
+        query_string=canonical_all_kev_query_items,
+    )
     def get(self):
         """
         Retrieve all KEV vulnerabilities with optional filtering, sorting, and pagination.
@@ -378,49 +468,29 @@ class AllKevVulnerabilitiesResource(BaseResource):
                   vulnerabilities, or an error message if an internal error occurs.
         """
         try:
-            try:
-                page = int(request.args.get("page", 1))
-                per_page = max(1, min(100, int(request.args.get("per_page", 25))))
-            except ValueError:
-                return self.handle_error("Invalid page or per_page parameter. Must be integers.", 400)
-            page = validate_page(page)
-            if page is None:
-                return self.handle_error("Invalid page parameter. Must be a positive integer.", 400)
-
-            sort_input = request.args.get("sort", "dateAdded")
-            sort_param = sanitize_query(sort_input)
-            if not sort_param:
-                return self.handle_error("Invalid sort parameter", 400)
-            sort_param = sort_param.strip()
-            if sort_param not in ALLOWED_KEV_SORT_FIELDS:
-                return self.handle_error("Unsupported sort parameter", 400)
-
-            order_raw = request.args.get("order", "desc")
-            order_param = sanitize_query(order_raw)
-            order_param = (order_param or "desc").lower()
-            if order_param not in {"asc", "desc"}:
-                order_param = "desc"
-            search_query = sanitize_query(request.args.get("search", ''))
-            filter_ransomware = sanitize_query(request.args.get("filter", ''))
-            actor_query = sanitize_query(request.args.get("actor", ''))
+            (
+                page,
+                per_page,
+                sort_param,
+                order_param,
+                search_query,
+                filter_ransomware,
+                actor_query,
+            ) = parse_all_kev_query()
 
             query = {}
             if search_query:
                 # Escape special characters in the search term even if it's already sanitized.
-                search_term = re.escape(search_query.strip())
+                search_term = re.escape(search_query)
                 # Only search in the vendorProject field
                 query["vendorProject"] = {"$regex": search_term, "$options": "i"}
             if filter_ransomware:
-                filter_ransomware_lower = filter_ransomware.lower()
-                if filter_ransomware_lower == "ransomware":
-                    query["knownRansomwareCampaignUse"] = "Known"
-                else:
-                    return self.handle_error("Invalid filter parameter. Must be 'ransomware'.", 400)
-            if actor_query and actor_query.strip():  # Ensure actor_query is not empty or just whitespace
+                query["knownRansomwareCampaignUse"] = "Known"
+            if actor_query:
                 # Fuzzy match for actor search
                 actor_query = {"$or": [
-                    {"openThreatData.communityAdversaries": {"$regex": actor_query.strip(), "$options": "i"}},
-                    {"openThreatData.adversaries": {"$regex": actor_query.strip(), "$options": "i"}}
+                    {"openThreatData.communityAdversaries": {"$regex": actor_query, "$options": "i"}},
+                    {"openThreatData.adversaries": {"$regex": actor_query, "$options": "i"}}
                 ]}
                 query.update(actor_query)  # Merge actor query into the main query
 
@@ -446,14 +516,23 @@ class AllKevVulnerabilitiesResource(BaseResource):
     def count_documents(self, query):
         """Count the total number of vulnerabilities matching the query."""
         try:
-            return collection.count_documents(query)
+            return collection.count_documents(
+                query,
+                maxTimeMS=MONGO_QUERY_MAX_TIME_MS,
+            )
         except Exception as e:
             raise e
 
     def fetch_vulnerabilities(self, query, sort_criteria, page, per_page):
         """Fetch vulnerabilities from the database."""
         try:
-            cursor = collection.find(query).sort(sort_criteria).skip((page - 1) * per_page).limit(per_page)
+            cursor = (
+                collection.find(query)
+                .sort(sort_criteria)
+                .skip((page - 1) * per_page)
+                .limit(per_page)
+                .max_time_ms(MONGO_QUERY_MAX_TIME_MS)
+            )
             return list(cursor)  # Return cursor as a list
         except Exception as e:
             raise e
