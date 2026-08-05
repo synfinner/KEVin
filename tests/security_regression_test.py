@@ -30,9 +30,11 @@ class MemoryRedis:
     def __init__(self):
         """Initialize an empty in-memory Redis value store."""
         self.values = {}
+        self.get_calls = 0
 
     def get(self, key):
         """Return a cached byte payload when present."""
+        self.get_calls += 1
         return self.values.get(key)
 
     def setex(self, key, _timeout, value):
@@ -123,6 +125,190 @@ def test_cache_keys_include_function_identity_and_path(monkeypatch):
         {"query_items": query_items, "path": "/vuln/modified"},
     )
     assert published_key != modified_key
+
+
+def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
+    """Equivalent requests share one fill and invalid keys never reach MongoDB."""
+
+    class RecordingCursor:
+        """Record the query controls applied before returning no documents."""
+
+        def __init__(self):
+            """Initialize an empty operation log."""
+            self.operations = []
+
+        def sort(self, field, direction):
+            """Record the requested index-backed ordering."""
+            self.operations.append(("sort", field, direction))
+            return self
+
+        def skip(self, value):
+            """Record the requested pagination offset."""
+            self.operations.append(("skip", value))
+            return self
+
+        def limit(self, value):
+            """Record the requested page size."""
+            self.operations.append(("limit", value))
+            return self
+
+        def max_time_ms(self, value):
+            """Record the server-side MongoDB execution limit."""
+            self.operations.append(("max_time_ms", value))
+            return self
+
+        def __iter__(self):
+            """Return an empty result set."""
+            return iter(())
+
+    class RecordingCollection:
+        """Count the MongoDB work caused by recent-vulnerability requests."""
+
+        def __init__(self):
+            """Initialize call logs for count and find operations."""
+            self.count_calls = []
+            self.find_calls = []
+            self.cursors = []
+
+        def count_documents(self, query, **kwargs):
+            """Record a bounded count operation and return an empty count."""
+            self.count_calls.append((query, kwargs))
+            return 0
+
+        def find(self, query):
+            """Record a find operation and return a controllable cursor."""
+            cursor = RecordingCursor()
+            self.find_calls.append(query)
+            self.cursors.append(cursor)
+            return cursor
+
+    recent_collection = RecordingCollection()
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = recent_collection
+    fake_database.all_vulns_collection = recent_collection
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    sys.modules.pop("schema.api", None)
+
+    try:
+        api_module = importlib.import_module("schema.api")
+        published = api_module.RecentVulnerabilitiesByDaysResource("published")
+        modified = api_module.RecentVulnerabilitiesByDaysResource("modified")
+        app = Flask(__name__)
+
+        valid_urls = (
+            "/vuln/published?days=030",
+            "/vuln/published?per_page=25&page=1&days=30",
+        )
+        for url in valid_urls:
+            with app.test_request_context(url):
+                response = published.get()
+            assert response.status_code == 200
+        valid_cache_get_calls = memory_redis.get_calls
+
+        invalid_requests = (
+            (published, "/vuln/published?days=30&nonce=1"),
+            (published, "/api/vuln/published?days=30&days=30"),
+            (modified, "/vuln/modified?days=30!"),
+            (modified, "/api/vuln/modified?days=30@"),
+        )
+        for resource, url in invalid_requests:
+            with app.test_request_context(url):
+                response = resource.get()
+            assert response.status_code == 400
+    finally:
+        sys.modules.pop("schema.api", None)
+
+    assert len(recent_collection.count_calls) == 1
+    assert len(recent_collection.find_calls) == 1
+    assert memory_redis.get_calls == valid_cache_get_calls
+    count_options = recent_collection.count_calls[0][1]
+    assert count_options == {"maxTimeMS": 5000}
+    assert ("max_time_ms", 5000) in recent_collection.cursors[0].operations
+
+
+def test_all_vulnerability_indexes_cover_recent_query_fields(monkeypatch):
+    """Startup index setup covers both recent-vulnerability sort fields."""
+
+    class IndexCollection:
+        """Record indexes created by the repository index helper."""
+
+        def __init__(self):
+            """Initialize with only MongoDB's built-in identifier index."""
+            self.indexes = [{"name": "_id_"}]
+            self.created = []
+
+        def list_indexes(self):
+            """Return the currently known index descriptions."""
+            return list(self.indexes)
+
+        def create_index(self, keys, name, background):
+            """Record and expose a newly created index."""
+            self.created.append((keys, name, background))
+            self.indexes.append({"name": name})
+
+    class FakeDatabase:
+        """Return stable recording collections by collection name."""
+
+        def __init__(self):
+            """Initialize an empty collection registry."""
+            self.collections = {}
+
+        def __getitem__(self, name):
+            """Return the named recording collection."""
+            return self.collections.setdefault(name, IndexCollection())
+
+    class FakeAdmin:
+        """Provide the connectivity probe used during module startup."""
+
+        def command(self, name):
+            """Accept only the expected MongoDB ping command."""
+            assert name == "ping"
+            return {"ok": 1}
+
+    class FakeMongoClient:
+        """Provide database access without a running MongoDB server."""
+
+        def __init__(self, *_args, **_kwargs):
+            """Initialize database and administration facades."""
+            self.databases = {}
+            self.admin = FakeAdmin()
+
+        def __getitem__(self, name):
+            """Return the named fake database."""
+            return self.databases.setdefault(name, FakeDatabase())
+
+    fake_client = FakeMongoClient()
+    monkeypatch.setattr(
+        "pymongo.MongoClient",
+        lambda *_args, **_kwargs: fake_client,
+    )
+    sys.modules.pop("utils.database", None)
+
+    try:
+        importlib.import_module("utils.database")
+    finally:
+        sys.modules.pop("utils.database", None)
+
+    all_vulnerabilities = fake_client.databases["cveland"].collections["cves"]
+    assert all_vulnerabilities.created == [
+        (
+            [("namespaces.nvd_nist_gov.cve.published", 1)],
+            "idx_nvd_published",
+            True,
+        ),
+        (
+            [("namespaces.nvd_nist_gov.cve.lastModified", 1)],
+            "idx_nvd_last_modified",
+            True,
+        ),
+    ]
 
 
 def test_cached_error_tuple_preserves_http_status(monkeypatch):

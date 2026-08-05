@@ -129,6 +129,26 @@ ALL_VULNS_COLLECTION_NAME = "cves"
 all_vulns_db = client[ALL_VULNS_DB_NAME]
 all_vulns_collection = all_vulns_db[ALL_VULNS_COLLECTION_NAME]
 
+# These fields back the public recent published/modified routes. Creating the
+# indexes at startup keeps their range filters and sorts from scanning the full
+# all-vulnerabilities collection.
+REQUIRED_ALL_VULNS_INDEXES = [
+    (
+        "namespaces.nvd_nist_gov.cve.published",
+        ASCENDING,
+        "idx_nvd_published",
+    ),
+    (
+        "namespaces.nvd_nist_gov.cve.lastModified",
+        ASCENDING,
+        "idx_nvd_last_modified",
+    ),
+]
+ALL_VULNS_INDEXES_ON_STARTUP = ensure_collection_indexes(
+    all_vulns_collection,
+    REQUIRED_ALL_VULNS_INDEXES,
+)
+
 import threading
 
 stop_event = threading.Event()

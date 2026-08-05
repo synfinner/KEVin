@@ -44,6 +44,11 @@ RECENT_KEV_MAX_RESULTS = max(
     1,
     int(os.environ.get("RECENT_KEV_MAX_RESULTS", "500")),
 )
+MONGO_QUERY_MAX_TIME_MS = max(
+    100,
+    int(os.environ.get("MONGO_QUERY_MAX_TIME_MS", "5000")),
+)
+RECENT_VULNERABILITY_QUERY_PARAMETERS = {"days", "page", "per_page"}
 
 # Timeout in seconds for admitted backend work to finish.
 GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', "10")))
@@ -53,6 +58,56 @@ def validate_page(page):
     if page < 1:
         return None
     return min(page, MAX_PAGE)
+
+
+def _strict_query_integer(name, default=None):
+    """Return one ASCII-decimal query value or raise a client-safe error."""
+    values = request.args.getlist(name)
+    if not values:
+        if default is not None:
+            return default
+        raise ValueError(f"You must provide '{name}' parameter")
+    if len(values) != 1:
+        raise ValueError(f"Duplicate '{name}' query parameters are not allowed")
+
+    value = values[0]
+    if not re.fullmatch(r"[0-9]+", value):
+        raise ValueError(f"Invalid {name} parameter. Must be an integer.")
+    return int(value)
+
+
+def parse_recent_vulnerability_query():
+    """Validate and canonicalize recent published/modified query parameters."""
+    unknown_parameters = sorted(
+        set(request.args.keys()) - RECENT_VULNERABILITY_QUERY_PARAMETERS
+    )
+    if unknown_parameters:
+        names = ", ".join(unknown_parameters)
+        raise ValueError(f"Unsupported query parameter(s): {names}")
+
+    days = _strict_query_integer("days")
+    page = _strict_query_integer("page", default=1)
+    page = validate_page(page)
+    per_page = _strict_query_integer("per_page", default=25)
+
+    if days > 30:
+        raise ValueError("Exceeded the maximum limit of 30 days")
+    if page is None:
+        raise ValueError("Invalid page parameter. Must be a positive integer.")
+    if per_page > 100:
+        raise ValueError("The 'per_page' parameter cannot exceed 100.")
+
+    return days, page, max(1, per_page)
+
+
+def canonical_recent_vulnerability_query_items():
+    """Return stable cache-key items for one validated recent query."""
+    days, page, per_page = parse_recent_vulnerability_query()
+    return [
+        ("days", [str(days)]),
+        ("page", [str(page)]),
+        ("per_page", [str(per_page)]),
+    ]
 
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
@@ -496,7 +551,11 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
     def __init__(self, query_type=None):
         self.query_type = query_type  # Store the query_type for use in the get method
 
-    @cache(timeout=600, key_prefix="recent_days_vulnerabilities", query_string=True) # Cache for 10 minutes
+    @cache(
+        timeout=600,
+        key_prefix="recent_days_vulnerabilities",
+        query_string=canonical_recent_vulnerability_query_items,
+    )
     def get(self):
         """
         Retrieve recent vulnerabilities based on the specified number of days.
@@ -516,33 +575,14 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
                   and pagination information, or an error message if the input
                   parameters are invalid.
         """
-        # Get the query parameters
-        days = request.args.get("days")
-        page = request.args.get("page", default=1, type=int)  # Default to page 1 if not provided
-        per_page = request.args.get("per_page", default=25, type=int)
-        if page is None:
-            return self.handle_error("Invalid page parameter. Must be an integer.", 400)
-        if per_page is None:
-            return self.handle_error("Invalid per_page parameter. Must be an integer.", 400)
-        page = validate_page(page)
-        if page is None:
-            return self.handle_error("Invalid page parameter. Must be a positive integer.", 400)
-        if per_page > 100:
-            return self.handle_error("The 'per_page' parameter cannot exceed 100.", 400)
-        per_page = max(1, per_page)  # Ensure per_page is at least 1
-        # Check if 'days' parameter is provided
-        if days is None:
-            return self.handle_error("You must provide 'days' parameter", 400)
-        # Sanitize the 'days' parameter
-        days = sanitize_query(days)
-        # fix/vuln_days_dos - Check if days is none after sanitization to prevent dos via large inputs
-        if days is None or not days.isdigit():
-            return self.handle_error("Invalid value for days parameter. Please provide a non-negative integer no greater than 30.", 400)
-        if int(days) > 30:  # Limit the 'days' parameter to a maximum of 30
-            return self.handle_error("Exceeded the maximum limit of 30 days", 400)
+        # Reuse the cache-key parser so accepted behavior cannot drift from
+        # cache and singleflight identity.
+        days, page, per_page = parse_recent_vulnerability_query()
 
         # Process the request directly - caching is handled at the method level now
-        cutoff_date = (datetime.utcnow() - timedelta(days=int(days))).strftime("%Y-%m-%d")
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
+            "%Y-%m-%d"
+        )
         field = (
             "namespaces.nvd_nist_gov.cve.published" 
             if self.query_type == "published" 
@@ -593,14 +633,19 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
  
     def count_total_entries(self, field, cutoff_date):
         """Count the total number of vulnerabilities matching the query."""
-        return all_vulns_collection.count_documents({field: {"$gt": cutoff_date}})
+        return all_vulns_collection.count_documents(
+            {field: {"$gt": cutoff_date}},
+            maxTimeMS=MONGO_QUERY_MAX_TIME_MS,
+        )
 
     def query_database(self, field, cutoff_date, page, per_page, sort_order=1):
         """Query the database for recent vulnerabilities with pagination."""
         skip = (page - 1) * per_page  # Calculate how many documents to skip
         recent_vulnerabilities = all_vulns_collection.find(
             {field: {"$gt": cutoff_date}}
-        ).sort(field, sort_order).skip(skip).limit(per_page)  # Apply sorting and pagination
+        ).sort(field, sort_order).skip(skip).limit(per_page).max_time_ms(
+            MONGO_QUERY_MAX_TIME_MS
+        )
         return [v for v in recent_vulnerabilities]  # Convert cursor to list
 
     def add_id_first(self, vulnerabilities):
