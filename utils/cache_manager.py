@@ -286,7 +286,13 @@ class CacheManager:
 cache_manager = CacheManager(redis_client)
 
 def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
-    """Cache Flask handler responses using route-aware Redis cache keys."""
+    """Cache Flask responses using route-aware, optionally canonical query keys.
+
+    ``query_string`` may be ``True`` to preserve the raw query string or a
+    callable that returns validated canonical query items. A canonicalizer may
+    raise ``ValueError`` to reject a request with a fixed client-safe message
+    before cache or origin access.
+    """
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -299,7 +305,15 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
 
             path = request.path if has_request_context() else None
             query_items = None
-            if query_string and has_request_context():
+            if has_request_context() and callable(query_string):
+                try:
+                    query_items = query_string()
+                except ValueError:
+                    return make_response(
+                        {"message": "Invalid query parameters"},
+                        400,
+                    )
+            elif query_string and has_request_context():
                 query_items = list(request.args.lists())
 
             cache_context = {
