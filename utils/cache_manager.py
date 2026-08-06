@@ -290,7 +290,8 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
 
     ``query_string`` may be ``True`` to preserve the raw query string or a
     callable that returns validated canonical query items. A canonicalizer may
-    raise ``ValueError`` to reject a request before cache or origin access.
+    raise ``ValueError`` to reject a request with a fixed client-safe message
+    before cache or origin access.
     """
     def decorator(func):
         @functools.wraps(func)
@@ -307,8 +308,11 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             if has_request_context() and callable(query_string):
                 try:
                     query_items = query_string()
-                except ValueError as exc:
-                    return make_response({"message": str(exc)}, 400)
+                except ValueError:
+                    return make_response(
+                        {"message": "Invalid query parameters"},
+                        400,
+                    )
             elif query_string and has_request_context():
                 query_items = list(request.args.lists())
 

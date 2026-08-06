@@ -127,6 +127,37 @@ def test_cache_keys_include_function_identity_and_path(monkeypatch):
     assert published_key != modified_key
 
 
+def test_cache_query_validation_does_not_expose_exception_details(monkeypatch):
+    """Canonicalizer failures return a fixed client-safe validation message."""
+    monkeypatch.setenv("REDIS_IP", "localhost")
+    cache_module = importlib.import_module("utils.cache_manager")
+    app = Flask(__name__)
+
+    def failing_canonicalizer():
+        """Simulate a parser failure containing internal implementation detail."""
+        raise ValueError("internal parser state: secret-field")
+
+    def unreachable_handler():
+        """Fail if validation incorrectly allows origin execution."""
+        raise AssertionError("origin should not run after validation failure")
+
+    cached_view = cache_module.kev_cache(
+        query_string=failing_canonicalizer,
+    )(unreachable_handler)
+    app.add_url_rule(
+        "/invalid-cache-query",
+        endpoint="invalid_cache_query",
+        view_func=cached_view,
+        methods=["GET"],
+    )
+
+    response = app.test_client().get("/invalid-cache-query?days=invalid")
+
+    assert response.status_code == 400
+    assert response.get_json() == {"message": "Invalid query parameters"}
+    assert b"secret-field" not in response.get_data()
+
+
 def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
     """Equivalent requests share one fill and invalid keys never reach MongoDB."""
 
