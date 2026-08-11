@@ -91,3 +91,28 @@ def sanitize_query(query):
         return None
 
     return query
+
+
+def normalize_cve_id(query):
+    """Return one canonical CVE identifier or reject the supplied value.
+
+    Sanitization alone can transform malformed input into a different valid
+    identifier. Requiring the sanitized value to match the complete CVE format
+    ensures cache identity and database identity use the same validated value.
+    """
+    sanitized_query = sanitize_query(query)
+    if not sanitized_query or not CVE_ID_FORMAT_RE.fullmatch(sanitized_query):
+        raise ValueError("Invalid CVE ID")
+    return sanitized_query.upper()
+
+
+def canonical_cve_arguments(*args, **kwargs):
+    """Canonicalize a route CVE argument for alias-independent cache keys."""
+    cve_id = kwargs.get("cve_id")
+    if cve_id is None and args:
+        # Resource methods include ``self`` first, so the CVE is always the
+        # final positional value for every currently decorated point route.
+        cve_id = args[-1]
+    if cve_id is None:
+        raise ValueError("CVE ID is required")
+    return (normalize_cve_id(cve_id),)

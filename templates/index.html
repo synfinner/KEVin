@@ -6,22 +6,22 @@
     <meta charset="UTF-8">
     <meta name="description"
         content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
-    <link rel="canonical" href="{{ url_for('index', _external=True) }}">
+    <link rel="canonical" href="{{ public_base_url }}/">
     <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#0b0f17">
     <meta property="og:title" content="KEVin Vulnerability API">
     <meta property="og:description"
         content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="{{ url_for('index', _external=True) }}">
-    <meta property="og:image" content="{{ url_for('static', filename='android-chrome-512x512.png', _external=True) }}">
+    <meta property="og:url" content="{{ public_base_url }}/">
+    <meta property="og:image" content="{{ public_base_url }}{{ url_for('static', filename='android-chrome-512x512.png') }}">
     <meta property="og:image:alt" content="KEVin API logo">
     <meta property="og:site_name" content="KEVin API">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="KEVin Vulnerability API">
     <meta name="twitter:description"
         content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
-    <meta name="twitter:image" content="{{ url_for('static', filename='android-chrome-512x512.png', _external=True) }}">
+    <meta name="twitter:image" content="{{ public_base_url }}{{ url_for('static', filename='android-chrome-512x512.png') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}"
         alt="Apple Touch Icon">
@@ -38,7 +38,7 @@
             "@context": "https://schema.org",
             "@type": "WebSite",
             "name": "KEVin Vulnerability API",
-            "url": "{{ url_for('index', _external=True) }}",
+            "url": "{{ public_base_url }}/",
             "description": "Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API."
         }
     </script>

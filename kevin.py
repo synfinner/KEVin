@@ -24,7 +24,11 @@ from utils.backend_capacity import (
     run_backend_tasks,
 )
 from utils.cache_manager import kev_cache as cache 
-from utils.sanitizer import sanitize_query
+from utils.sanitizer import (
+    canonical_cve_arguments,
+    normalize_cve_id,
+    sanitize_query,
+)
 from utils.rss_feed import create_rss_feed
 from modules.reportgen import report_gen
 from schema.api import (
@@ -47,14 +51,21 @@ logger = logging.getLogger(__name__)
 # Timeout (seconds) for greenlet joins to avoid request hangs
 GREENLET_TIMEOUT = int(os.environ.get("GREENLET_TIMEOUT", "10"))
 
-# Create a cache key for openai routes based on the query parameters
-def cve_cache_key(*args, **kwargs):
-    path = request.path
-    args = str(hash(frozenset(request.args.items())))
-    return path + args
-
 # Load environment variables using python-dotenv
 load_dotenv()
+
+PUBLIC_BASE_URL = os.environ.get(
+    "PUBLIC_BASE_URL",
+    "https://kevin.gtfkd.com",
+).rstrip("/")
+TRUSTED_HOSTS = {
+    host.strip().lower()
+    for host in os.environ.get(
+        "TRUSTED_HOSTS",
+        "kevin.gtfkd.com,localhost,127.0.0.1",
+    ).split(",")
+    if host.strip()
+}
 
 # Initialize the Flask app and the Flask-RESTful API
 app = Flask(__name__)
@@ -70,6 +81,15 @@ compress = Compress(app)
 # Enable CORS for all routes
 CORS(app)
 
+
+@app.before_request
+def reject_untrusted_host():
+    """Reject request authorities outside the deployment's host allowlist."""
+    hostname = request.host.partition(":")[0].lower()
+    if hostname not in TRUSTED_HOSTS:
+        return jsonify({"error": "Untrusted Host header"}), 400
+    return None
+
 # Route for the root endpoint ("/")
 @app.route("/")
 @cache(timeout=1800) # 30 minute cache for the main route.
@@ -81,7 +101,7 @@ def index():
     rendered HTML content. The response is cached for 30 minutes to
     reduce server load.
     """
-    return render_template("index.html")
+    return render_template("index.html", public_base_url=PUBLIC_BASE_URL)
 
 @app.route('/robots.txt')
 # 1 hour cache.
@@ -248,10 +268,38 @@ def get_metrics():
     # Return the metrics as a JSON response
     return jsonify(metrics)
 
+def parse_cve_query():
+    """Return one validated CVE query and reject duplicates or extra fields."""
+    if set(request.args.keys()) != {"cve"}:
+        raise ValueError("Exactly one CVE query parameter is required")
+    cve_values = request.args.getlist("cve")
+    if len(cve_values) != 1:
+        raise ValueError("Duplicate CVE query parameters are not allowed")
+    return normalize_cve_id(cve_values[0])
+
+
+def canonical_cve_query_items():
+    """Return validated CVE query items for stable public cache identity."""
+    return [("cve", [parse_cve_query()])]
+
+
+def lookup_one(database_collection, query):
+    """Run one MongoDB point lookup through shared backend admission."""
+    return run_backend_tasks(
+        [lambda: database_collection.find_one(query)],
+        timeout=GREENLET_TIMEOUT,
+    )[0]
+
+
 # Route to check if a specific CVE ID exists in the KEV database collection
 # Example usage: /kev/exists?cve=CVE-2021-1234
 @app.route("/kev/exists", methods=["GET"])
-@cache(timeout=15, key_prefix='cve_exist', query_string=True) # 15 second cache for the cve_exist route.
+@cache(
+    timeout=15,
+    key_prefix="cve_exist",
+    query_string=canonical_cve_query_items,
+    include_path=False,
+)
 def cve_exist():
     """
     Check if a specific CVE ID exists in the KEV database.
@@ -268,23 +316,10 @@ def cve_exist():
     Response: A JSON response indicating whether the CVE ID exists in the
               KEV database. Returns a 400 error if the CVE ID is not provided.
     """
-    # Extract the 'cve' query parameter from the URL
-    cve_id = request.args.get('cve')
-    # If the 'cve' query parameter is not provided, return an error message
-    if not cve_id:
-        return jsonify({"message": "CVE ID is required as a query parameter."}), 400
-    # Sanitize the input CVE ID to prevent SQL injection attacks
-    sanitized_cve_id = sanitize_query(cve_id)
-
-    # Use Gevent to spawn a greenlet for the database query
-    def fetch_vulnerability():
-        return collection.find_one({"cveID": sanitized_cve_id})
+    sanitized_cve_id = parse_cve_query()
 
     try:
-        vulnerability = run_backend_tasks(
-            [fetch_vulnerability],
-            timeout=GREENLET_TIMEOUT,
-        )[0]
+        vulnerability = lookup_one(collection, {"cveID": sanitized_cve_id})
     except BackendBusyError:
         return jsonify({"error": "Backend busy"}), 503
     except BackendTimeoutError:
@@ -301,7 +336,11 @@ def cve_exist():
 
 # Route for generating a report for a specific vulnerability
 @app.route("/vuln/<string:cve_id>/report", methods=["GET"])
-@cache() # Use the default 10 minute cache for the report route.
+@cache(
+    key_prefix="vulnerability_report",
+    canonical_args=canonical_cve_arguments,
+    include_path=False,
+)
 def vulnerability_report(cve_id):
     """
     Generate a report for a specific vulnerability identified by its CVE ID.
@@ -319,10 +358,18 @@ def vulnerability_report(cve_id):
     Response: Renders the vulnerability report template if the vulnerability is found,
               or returns a 404 error message if the vulnerability is not found.
     """
-    # Sanitize the input CVE ID to prevent SQL injection attacks
-    sanitized_cve_id = sanitize_query(cve_id)
-    # Use the sanitized CVE ID to fetch the corresponding vulnerability from the database
-    vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
+    sanitized_cve_id = normalize_cve_id(cve_id)
+    try:
+        vulnerability = lookup_one(
+            all_vulns_collection,
+            {"_id": sanitized_cve_id},
+        )
+    except BackendBusyError:
+        return jsonify({"error": "Backend busy"}), 503
+    except BackendTimeoutError:
+        return jsonify({"error": "Backend timeout"}), 504
+    except PyMongoError:
+        return jsonify({"error": "Backend unavailable"}), 503
     # If the vulnerability is found
     if vulnerability:
         # Send the vulnerability data to the reportgen library to generate the report
@@ -357,7 +404,12 @@ def not_found(e):
 
 # OpenAI route for a specific vulnerability with cve parameter
 @app.route("/openai/kev")
-@cache(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
+@cache(
+    timeout=10,
+    key_prefix="openai_kev",
+    query_string=canonical_cve_query_items,
+    include_path=False,
+)
 def openai_kev():
     """
     Retrieve KEV vulnerability data for a specific CVE ID from the database.
@@ -376,15 +428,15 @@ def openai_kev():
               or an error message if the CVE ID is missing or the vulnerability
               is not found.
     """
-    # Extract the 'cve' query parameter from the URL
-    cve_id = request.args.get('cve')
-    # If the 'cve' query parameter is not provided, return an error message
-    if not cve_id:
-        return {"message": "CVE ID is required as a query parameter."}, 400
-    # Sanitize the input CVE ID to prevent SQL injection attacks
-    sanitized_cve_id = sanitize_query(cve_id)
-    # Use the sanitized CVE ID to fetch the corresponding vulnerability from the database
-    vulnerability = collection.find_one({"cveID": sanitized_cve_id})
+    sanitized_cve_id = parse_cve_query()
+    try:
+        vulnerability = lookup_one(collection, {"cveID": sanitized_cve_id})
+    except BackendBusyError:
+        return {"error": "Backend busy"}, 503
+    except BackendTimeoutError:
+        return {"error": "Backend timeout"}, 504
+    except PyMongoError:
+        return {"error": "Backend unavailable"}, 503
     # If the vulnerability is found, serialize it and return it as a JSON response
     if vulnerability:
         data = serialize_vulnerability(vulnerability)
@@ -398,7 +450,12 @@ def openai_kev():
     
 # OpenAI route for all vulnerabilities with cve parameter
 @app.route("/openai/vuln")
-@cache(timeout=10, key_prefix=cve_cache_key) # 10 second cache for the openai route.
+@cache(
+    timeout=10,
+    key_prefix="openai_vuln",
+    query_string=canonical_cve_query_items,
+    include_path=False,
+)
 def openai_vuln():
     """
     Retrieve vulnerability data for a specific CVE ID from the database.
@@ -417,15 +474,18 @@ def openai_vuln():
               or an error message if the CVE ID is missing or the vulnerability
               is not found.
     """
-    # Extract the 'cve' query parameter from the URL
-    cve_id = request.args.get('cve')
-    # If the 'cve' query parameter is not provided, return an error message
-    if not cve_id:
-        return {"message": "CVE ID is required as a query parameter."}, 400
-    # Sanitize the input CVE ID to prevent SQL injection attacks
-    sanitized_cve_id = sanitize_query(cve_id)
-    # Use the sanitized CVE ID to fetch the corresponding vulnerability from the database
-    vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
+    sanitized_cve_id = parse_cve_query()
+    try:
+        vulnerability = lookup_one(
+            all_vulns_collection,
+            {"_id": sanitized_cve_id},
+        )
+    except BackendBusyError:
+        return {"error": "Backend busy"}, 503
+    except BackendTimeoutError:
+        return {"error": "Backend timeout"}, 504
+    except PyMongoError:
+        return {"error": "Backend unavailable"}, 503
     # If the vulnerability is found, serialize it and return it as a JSON response
     if vulnerability:
         data = serialize_all_vulnerability(vulnerability)

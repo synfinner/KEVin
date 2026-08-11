@@ -158,6 +158,52 @@ def test_cache_query_validation_does_not_expose_exception_details(monkeypatch):
     assert b"secret-field" not in response.get_data()
 
 
+def test_cache_canonical_arguments_share_aliases_before_origin(monkeypatch):
+    """Canonical path arguments collapse aliases before cache or singleflight."""
+    monkeypatch.setenv("REDIS_IP", "localhost")
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    origin_calls = []
+
+    def canonical_cve_arguments(cve_id):
+        """Normalize representative CVE path spellings or reject invalid input."""
+        normalized = cve_id.replace("!", "").upper()
+        if not normalized.startswith("CVE-"):
+            raise ValueError("invalid CVE")
+        return (normalized,)
+
+    @cache_module.kev_cache(
+        key_prefix="canonical_cve",
+        canonical_args=canonical_cve_arguments,
+        include_path=False,
+    )
+    def cached_lookup(cve_id):
+        """Record the origin spelling while returning equivalent data."""
+        origin_calls.append(cve_id)
+        return {"cve": cve_id.replace("!", "").upper()}
+
+    app = Flask(__name__)
+    with app.test_request_context("/vuln/cve-2026-0001/nvd"):
+        first_response = cached_lookup("cve-2026-0001")
+    with app.test_request_context("/api/vuln/CVE-2026-0001!/nvd/"):
+        alias_response = cached_lookup("CVE-2026-0001!")
+    cache_get_calls_before_invalid = memory_redis.get_calls
+    with app.test_request_context("/vuln/not-a-cve/nvd"):
+        invalid_response = cached_lookup("not-a-cve")
+
+    assert first_response == {"cve": "CVE-2026-0001"}
+    assert alias_response.get_json() == first_response
+    assert origin_calls == ["cve-2026-0001"]
+    assert len(memory_redis.values) == 1
+    assert invalid_response.status_code == 400
+    assert memory_redis.get_calls == cache_get_calls_before_invalid
+
+
 def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
     """Equivalent requests share one fill and invalid keys never reach MongoDB."""
 
@@ -260,6 +306,15 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
                 with app.test_request_context(url):
                     response = resource.get()
                 assert response.status_code == 200
+
+        noncacheable_requests = (
+            (published, "/vuln/published?days=30&page=2&per_page=25"),
+            (modified, "/api/vuln/modified?days=30&page=1&per_page=100"),
+        )
+        for resource, url in noncacheable_requests:
+            with app.test_request_context(url):
+                response = resource.get()
+            assert response.status_code == 200
         valid_cache_get_calls = memory_redis.get_calls
 
         invalid_requests = (
@@ -279,6 +334,7 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
 
     assert len(recent_collection.count_calls) == 4
     assert len(recent_collection.find_calls) == 4
+    assert len(memory_redis.values) == 2
     assert memory_redis.get_calls == valid_cache_get_calls
     assert all(
         options == {"maxTimeMS": 5000}
@@ -363,6 +419,19 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
         api_module = importlib.import_module("schema.api")
         resource = api_module.AllKevVulnerabilitiesResource()
         app = Flask(__name__)
+        admitted_requests = []
+        original_run_backend_tasks = api_module.run_backend_tasks
+
+        def recording_run_backend_tasks(tasks, timeout):
+            """Record aggregate admission while preserving real task execution."""
+            admitted_requests.append(timeout)
+            return original_run_backend_tasks(tasks, timeout=timeout)
+
+        monkeypatch.setattr(
+            api_module,
+            "run_backend_tasks",
+            recording_run_backend_tasks,
+        )
 
         valid_request_groups = (
             (
@@ -383,6 +452,24 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
                 with app.test_request_context(url):
                     response = resource.get()
                 assert response.status_code == 200
+
+        default_aliases = (
+            "/kev?page=1",
+            "/api/kev/?per_page=25&page=1",
+        )
+        for url in default_aliases:
+            with app.test_request_context(url):
+                response = resource.get()
+            assert response.status_code == 200
+
+        deep_page_requests = (
+            "/kev?page=11&per_page=25",
+            "/kev?per_page=25&page=11",
+        )
+        for url in deep_page_requests:
+            with app.test_request_context(url):
+                response = resource.get()
+            assert response.status_code == 200
         valid_cache_get_calls = memory_redis.get_calls
 
         invalid_urls = (
@@ -396,8 +483,10 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
     finally:
         sys.modules.pop("schema.api", None)
 
-    assert len(kev_collection.count_calls) == 2
-    assert len(kev_collection.find_calls) == 2
+    assert len(kev_collection.count_calls) == 7
+    assert len(kev_collection.find_calls) == 7
+    assert len(memory_redis.values) == 1
+    assert admitted_requests == [api_module.GREENLET_TIMEOUT] * 7
     assert memory_redis.get_calls == valid_cache_get_calls
     assert all(
         options == {"maxTimeMS": 5000}
@@ -846,6 +935,17 @@ def test_mongo_checkout_wait_has_a_bounded_timeout():
             },
             "/kev/CVE-2026-0001",
         ),
+        (
+            "VulnerabilityResource",
+            {
+                "_id": "record-1",
+                "cveID": "CVE-2026-0001",
+                "dateAdded": "2026-01-01",
+                "dueDate": "2026-01-22",
+                "githubPocs": ["https://example.test/poc"],
+            },
+            "/api/kev/CVE-2026-0001?references=pocs",
+        ),
     ],
 )
 def test_manual_cache_resources_do_not_query_mongo_on_hit(
@@ -899,6 +999,175 @@ def test_manual_cache_resources_do_not_query_mongo_on_hit(
 
     assert response.status_code == 200
     assert fake_collection.find_one_calls == 0
+
+
+def test_public_cve_query_routes_canonicalize_before_cache(monkeypatch):
+    """Equivalent CVE queries share fills and ignored parameters are rejected."""
+
+    class LookupCollection:
+        """Record public point lookups while returning no matching document."""
+
+        def __init__(self):
+            """Initialize an empty lookup log."""
+            self.find_one_calls = []
+
+        def find_one(self, query):
+            """Record the canonical lookup and return a cacheable miss."""
+            self.find_one_calls.append(query)
+            return None
+
+    lookup_collection = LookupCollection()
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = lookup_collection
+    fake_database.all_vulns_collection = lookup_collection
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://kevin.gtfkd.com")
+    monkeypatch.setenv("TRUSTED_HOSTS", "kevin.gtfkd.com,localhost")
+    sys.modules.pop("kevin", None)
+    sys.modules.pop("schema.api", None)
+
+    try:
+        kevin_module = importlib.import_module("kevin")
+        client = kevin_module.app.test_client()
+
+        exists_responses = (
+            client.get("/kev/exists?cve=CVE-2026-0001"),
+            client.get("/kev/exists?cve=cve-2026-0001"),
+        )
+        kev_responses = (
+            client.get("/openai/kev?cve=CVE-2026-0001"),
+            client.get("/openai/kev?cve=cve-2026-0001"),
+        )
+        vuln_responses = (
+            client.get("/openai/vuln?cve=CVE-2026-0001"),
+            client.get("/openai/vuln?cve=cve-2026-0001"),
+        )
+        invalid_responses = (
+            client.get("/kev/exists?cve=CVE-2026-0001&nonce=1"),
+            client.get("/openai/kev?cve=CVE-2026-0001&nonce=1"),
+            client.get("/openai/vuln?cve=CVE-2026-0001&cve=CVE-2026-0001"),
+        )
+    finally:
+        sys.modules.pop("kevin", None)
+        sys.modules.pop("schema.api", None)
+
+    assert [response.status_code for response in exists_responses] == [200, 200]
+    assert [response.status_code for response in kev_responses] == [404, 404]
+    assert [response.status_code for response in vuln_responses] == [404, 404]
+    assert [response.status_code for response in invalid_responses] == [400, 400, 400]
+    assert lookup_collection.find_one_calls == [
+        {"cveID": "CVE-2026-0001"},
+        {"cveID": "CVE-2026-0001"},
+        {"_id": "CVE-2026-0001"},
+    ]
+    assert len(memory_redis.values) == 3
+
+
+def test_public_cve_path_routes_canonicalize_before_cache(monkeypatch):
+    """NVD, MITRE, and report aliases validate CVEs before shared fills."""
+
+    class LookupCollection:
+        """Return one minimal CVE record and count admitted point lookups."""
+
+        def __init__(self):
+            """Initialize an empty lookup log."""
+            self.find_one_calls = []
+
+        def find_one(self, query):
+            """Record the canonical lookup and return representative data."""
+            self.find_one_calls.append(query)
+            return {
+                "_id": "CVE-2026-0001",
+                "namespaces": {
+                    "nvd_nist_gov": {},
+                    "cve_org": {},
+                },
+            }
+
+    lookup_collection = LookupCollection()
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = lookup_collection
+    fake_database.all_vulns_collection = lookup_collection
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    monkeypatch.setenv("TRUSTED_HOSTS", "localhost")
+    sys.modules.pop("kevin", None)
+    sys.modules.pop("schema.api", None)
+
+    try:
+        kevin_module = importlib.import_module("kevin")
+        client = kevin_module.app.test_client()
+        responses = (
+            client.get("/vuln/cve-2026-0001/nvd"),
+            client.get("/api/vuln/CVE-2026-0001/nvd"),
+            client.get("/vuln/cve-2026-0001/mitre"),
+            client.get("/api/vuln/CVE-2026-0001/mitre"),
+            client.get("/vuln/cve-2026-0001/report"),
+            client.get("/vuln/CVE-2026-0001/report"),
+        )
+        invalid_responses = (
+            client.get("/vuln/not-a-cve/nvd"),
+            client.get("/api/vuln/not-a-cve/mitre"),
+            client.get("/vuln/not-a-cve/report"),
+        )
+    finally:
+        sys.modules.pop("kevin", None)
+        sys.modules.pop("schema.api", None)
+
+    assert [response.status_code for response in responses] == [200] * 6
+    assert [response.status_code for response in invalid_responses] == [400] * 3
+    assert lookup_collection.find_one_calls == [
+        {"_id": "CVE-2026-0001"},
+        {"_id": "CVE-2026-0001"},
+        {"_id": "CVE-2026-0001"},
+    ]
+    assert len(memory_redis.values) == 3
+
+
+def test_homepage_rejects_untrusted_hosts_and_uses_public_origin(monkeypatch):
+    """Cached homepage metadata never derives its authority from request Host."""
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = object()
+    fake_database.all_vulns_collection = object()
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(MemoryRedis()),
+    )
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://kevin.gtfkd.com")
+    monkeypatch.setenv("TRUSTED_HOSTS", "kevin.gtfkd.com,localhost")
+    sys.modules.pop("kevin", None)
+    sys.modules.pop("schema.api", None)
+
+    try:
+        kevin_module = importlib.import_module("kevin")
+        client = kevin_module.app.test_client()
+        untrusted_response = client.get("/", headers={"Host": "evil.example"})
+        trusted_response = client.get("/", headers={"Host": "localhost"})
+    finally:
+        sys.modules.pop("kevin", None)
+        sys.modules.pop("schema.api", None)
+
+    assert untrusted_response.status_code == 400
+    assert trusted_response.status_code == 200
+    homepage = trusted_response.get_data(as_text=True)
+    assert 'href="https://kevin.gtfkd.com/"' in homepage
+    assert "evil.example" not in homepage
 
 
 def test_kevin_routes_use_bounded_backend_admission():

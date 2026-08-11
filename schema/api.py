@@ -30,7 +30,11 @@ from utils.cache_manager import (
     kev_cache as cache,
 )
 from utils.database import all_vulns_collection, collection
-from utils.sanitizer import sanitize_query
+from utils.sanitizer import (
+    canonical_cve_arguments,
+    normalize_cve_id,
+    sanitize_query,
+)
 
 # Load env using python-dotenv
 load_dotenv()
@@ -235,6 +239,34 @@ def canonical_all_kev_query_items():
         for name, value in zip(parameter_names, query_values, strict=True)
     ]
 
+
+def _canonical_query_mapping(query_items):
+    """Convert canonical cache items into a scalar policy mapping."""
+    return {name: values[0] for name, values in query_items or []}
+
+
+def should_cache_all_kev(query_items):
+    """Cache only bounded, index-friendly KEV list variants."""
+    query = _canonical_query_mapping(query_items)
+    return (
+        int(query["page"]) <= 10
+        and int(query["per_page"]) == 25
+        and not query["search"]
+        and not query["actor"]
+    )
+
+
+def should_cache_recent_vulnerabilities(query_items):
+    """Cache only the default first page for each bounded day window."""
+    query = _canonical_query_mapping(query_items)
+    return int(query["page"]) == 1 and int(query["per_page"]) == 25
+
+
+def recent_vulnerability_cache_prefix(resource):
+    """Separate published and modified datasets while sharing route aliases."""
+    return f"recent_{resource.query_type}_vulnerabilities"
+
+
 class BaseResource(Resource):
     def handle_error(self, message, status=404):
         response = {"message": message}
@@ -321,9 +353,14 @@ class cveLandResource(BaseResource):
         """ Generate a unique cache key including the CVE ID. """
         return f"cve_data_{cve_id}"
 
+
 # Resource for NVD data from the cveland via CVE-ID, which is the _id field in the cveland collection
 class cveNVDResource(BaseResource):
-    @cache()
+    @cache(
+        key_prefix="cve_nvd",
+        canonical_args=canonical_cve_arguments,
+        include_path=False,
+    )
     def get(self, cve_id):
         """
         Retrieve NVD data for a specific CVE ID.
@@ -340,21 +377,37 @@ class cveNVDResource(BaseResource):
         Response: A JSON response containing the serialized NVD data or an
                   error message if the vulnerability is not found.
         """
-        # Sanitize the input CVE ID
-        sanitized_cve_id = sanitize_query(cve_id)
-        if sanitized_cve_id is None:
-            return self.handle_error("Invalid CVE ID", 400)
-        vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
+        sanitized_cve_id = normalize_cve_id(cve_id)
+        try:
+            vulnerability = run_backend_tasks(
+                [
+                    lambda: all_vulns_collection.find_one(
+                        {"_id": sanitized_cve_id}
+                    )
+                ],
+                timeout=GREENLET_TIMEOUT,
+            )[0]
+        except BackendBusyError:
+            return self.handle_error("Backend busy", 503)
+        except BackendTimeoutError:
+            return self.handle_error("Upstream timeout", 504)
+        except PyMongoError:
+            return self.handle_error("Backend unavailable", 503)
         if not vulnerability:
             return self.handle_error("Vulnerability not found")
 
         data = nvd_serializer(vulnerability)
         return self.make_json_response(data)
 
-        
+
+
 # This class defines a resource for fetching Mitre data for a specific CVE-ID from the 'cveland' collection
 class cveMitreResource(BaseResource):
-    @cache()  # Use caching to improve performance
+    @cache(
+        key_prefix="cve_mitre",
+        canonical_args=canonical_cve_arguments,
+        include_path=False,
+    )
     def get(self, cve_id):
         """
         Retrieve Mitre data for a specific CVE ID.
@@ -371,12 +424,22 @@ class cveMitreResource(BaseResource):
         Response: A JSON response containing the serialized Mitre data or an
                   error message if the vulnerability is not found.
         """
-        # Sanitize the input CVE ID to prevent injection attacks
-        sanitized_cve_id = sanitize_query(cve_id)
-        if sanitized_cve_id is None:
-            return self.handle_error("Invalid CVE ID", 400)
-        # Fetch the vulnerability with the sanitized CVE ID from the 'all_vulns_collection'
-        vulnerability = all_vulns_collection.find_one({"_id": sanitized_cve_id})
+        sanitized_cve_id = normalize_cve_id(cve_id)
+        try:
+            vulnerability = run_backend_tasks(
+                [
+                    lambda: all_vulns_collection.find_one(
+                        {"_id": sanitized_cve_id}
+                    )
+                ],
+                timeout=GREENLET_TIMEOUT,
+            )[0]
+        except BackendBusyError:
+            return self.handle_error("Backend busy", 503)
+        except BackendTimeoutError:
+            return self.handle_error("Upstream timeout", 504)
+        except PyMongoError:
+            return self.handle_error("Backend unavailable", 503)
         if not vulnerability:
             # If the vulnerability is not found, return a 404 error with a message
             return self.handle_error("Vulnerability not found")
@@ -384,7 +447,8 @@ class cveMitreResource(BaseResource):
         data = mitre_serializer(vulnerability)
         # Return the JSON response with the serialized data
         return self.make_json_response(data)
-    
+
+
 # Resource for fetching a specific vulnerability by CVE ID
 class VulnerabilityResource(BaseResource):
     def get(self, cve_id):
@@ -419,56 +483,48 @@ class VulnerabilityResource(BaseResource):
         references_arg = sanitize_query(references_raw)
         if references_raw is not None and references_arg is None:
             return self.handle_error("Invalid value for references parameter", 400)
-        # Check if the user has requested for PoCs
-        if references_arg == 'pocs':
-            # Bypass the cache and call the serialize_githubpocs function
-            vulnerability = collection.find_one({"cveID": sanitized_cve_id})
-            if not vulnerability:
-                return self.handle_error("Vulnerability not found")
-            data = serialize_githubpocs(vulnerability)
-        elif references_arg != "pocs" and references_arg is not None:
+        if references_arg != "pocs" and references_arg is not None:
             return self.handle_error("Invalid value for references parameter", 400)
+        try:
+            vulnerability = self.load_vulnerability(sanitized_cve_id)
+        except CacheBackendUnavailable:
+            return self.handle_error("Cache temporarily unavailable", 503)
+        except BackendBusyError:
+            return self.handle_error("Backend busy", 503)
+        except BackendTimeoutError:
+            return self.handle_error("Upstream timeout", 504)
+        except PyMongoError:
+            return self.handle_error("Backend unavailable", 503)
+
+        if not vulnerability:
+            return self.handle_error("Vulnerability not found")
+        if references_arg == "pocs":
+            data = serialize_githubpocs(vulnerability)
         else:
-            try:
-                cached_data = self.get_cached_data(sanitized_cve_id)
-            except CacheBackendUnavailable:
-                return self.handle_error("Cache temporarily unavailable", 503)
-            if cached_data is not None:
-                data = serialize_vulnerability(cached_data)
-            else:
-                with cache_manager.singleflight(sanitized_cve_id) as acquired:
-                    if not acquired:
-                        return self.handle_error("Backend busy", 503)
-
-                    try:
-                        cached_data = cache_manager.get(sanitized_cve_id)
-                    except CacheBackendUnavailable:
-                        return self.handle_error("Cache temporarily unavailable", 503)
-                    if cached_data is not None:
-                        data = serialize_vulnerability(cached_data)
-                    else:
-                        try:
-                            vulnerability = run_backend_tasks(
-                                [
-                                    partial(
-                                        self.query_vulnerability,
-                                        sanitized_cve_id,
-                                    )
-                                ],
-                                timeout=GREENLET_TIMEOUT,
-                            )[0]
-                        except BackendBusyError:
-                            return self.handle_error("Backend busy", 503)
-                        except BackendTimeoutError:
-                            return self.handle_error("Upstream timeout", 504)
-                        except PyMongoError:
-                            return self.handle_error("Backend unavailable", 503)
-
-                        if not vulnerability:
-                            return self.handle_error("Vulnerability not found")
-                        cache_manager.set(sanitized_cve_id, vulnerability)
-                        data = serialize_vulnerability(vulnerability)
+            data = serialize_vulnerability(vulnerability)
         return self.make_json_response(data)
+
+    def load_vulnerability(self, sanitized_cve_id):
+        """Load one shared cached record for normal and PoC representations."""
+        cached_data = self.get_cached_data(sanitized_cve_id)
+        if cached_data is not None:
+            return cached_data
+
+        with cache_manager.singleflight(sanitized_cve_id) as acquired:
+            if not acquired:
+                raise BackendBusyError("CVE cache fill already in progress")
+
+            cached_data = cache_manager.get(sanitized_cve_id)
+            if cached_data is not None:
+                return cached_data
+
+            vulnerability = run_backend_tasks(
+                [partial(self.query_vulnerability, sanitized_cve_id)],
+                timeout=GREENLET_TIMEOUT,
+            )[0]
+            if vulnerability:
+                cache_manager.set(sanitized_cve_id, vulnerability)
+            return vulnerability
 
     def get_cached_data(self, sanitized_cve_id):
         """Fetch cached data."""
@@ -484,6 +540,8 @@ class AllKevVulnerabilitiesResource(BaseResource):
         timeout=120,
         key_prefix="all_kev_vulns",
         query_string=canonical_all_kev_query_items,
+        include_path=False,
+        cache_if=should_cache_all_kev,
     )
     def get(self):
         """
@@ -507,75 +565,96 @@ class AllKevVulnerabilitiesResource(BaseResource):
         Response: A JSON response containing pagination info and a list of
                   vulnerabilities, or an error message if an internal error occurs.
         """
+        (
+            page,
+            per_page,
+            sort_param,
+            order_param,
+            search_query,
+            filter_ransomware,
+            actor_query,
+        ) = parse_all_kev_query()
+
+        query = {}
+        if search_query:
+            # Escape special characters in the search term even if it is
+            # already sanitized.
+            search_term = re.escape(search_query)
+            query["vendorProject"] = {"$regex": search_term, "$options": "i"}
+        if filter_ransomware:
+            query["knownRansomwareCampaignUse"] = "Known"
+        if actor_query:
+            query["$or"] = [
+                {
+                    "openThreatData.communityAdversaries": {
+                        "$regex": actor_query,
+                        "$options": "i",
+                    }
+                },
+                {
+                    "openThreatData.adversaries": {
+                        "$regex": actor_query,
+                        "$options": "i",
+                    }
+                },
+            ]
+
+        sort_order = DESCENDING if order_param == "desc" else ASCENDING
+        sort_criteria = [(sort_param, sort_order)]
+
         try:
-            (
-                page,
-                per_page,
-                sort_param,
-                order_param,
-                search_query,
-                filter_ransomware,
-                actor_query,
-            ) = parse_all_kev_query()
+            total_vulns, vulnerabilities = run_backend_tasks(
+                [
+                    partial(self.count_documents, query),
+                    partial(
+                        self.fetch_vulnerabilities,
+                        query,
+                        sort_criteria,
+                        page,
+                        per_page,
+                    ),
+                ],
+                timeout=GREENLET_TIMEOUT,
+            )
+        except BackendBusyError:
+            return self.handle_error("Backend busy", 503)
+        except BackendTimeoutError:
+            return self.handle_error("Upstream timeout", 504)
+        except PyMongoError:
+            return self.handle_error("Backend unavailable", 503)
 
-            query = {}
-            if search_query:
-                # Escape special characters in the search term even if it's already sanitized.
-                search_term = re.escape(search_query)
-                # Only search in the vendorProject field
-                query["vendorProject"] = {"$regex": search_term, "$options": "i"}
-            if filter_ransomware:
-                query["knownRansomwareCampaignUse"] = "Known"
-            if actor_query:
-                # Fuzzy match for actor search
-                actor_query = {"$or": [
-                    {"openThreatData.communityAdversaries": {"$regex": actor_query, "$options": "i"}},
-                    {"openThreatData.adversaries": {"$regex": actor_query, "$options": "i"}}
-                ]}
-                query.update(actor_query)  # Merge actor query into the main query
+        total_pages = math.ceil(total_vulns / per_page)
 
-            sort_order = DESCENDING if order_param == "desc" else ASCENDING
-            sort_criteria = [(sort_param, sort_order)]
-
-            # Always run the query - caching is now handled at the method level
-            total_vulns = self.count_documents(query)
-            vulnerabilities = self.fetch_vulnerabilities(query, sort_criteria, page, per_page)
-
-            total_pages = math.ceil(total_vulns / per_page)
-
-            return self.make_json_response({
+        return self.make_json_response(
+            {
                 "page": page,
                 "per_page": per_page,
                 "total_vulns": total_vulns,
                 "total_pages": total_pages,
-                "vulnerabilities": [serialize_vulnerability(v) for v in vulnerabilities]
-            })
-        except Exception:
-            return self.handle_error("An internal server error occurred! ", 500)
+                "vulnerabilities": [
+                    serialize_vulnerability(vulnerability)
+                    for vulnerability in vulnerabilities
+                ],
+            }
+        )
 
     def count_documents(self, query):
         """Count the total number of vulnerabilities matching the query."""
-        try:
-            return collection.count_documents(
-                query,
-                maxTimeMS=MONGO_QUERY_MAX_TIME_MS,
-            )
-        except Exception as e:
-            raise e
+        return collection.count_documents(
+            query,
+            maxTimeMS=MONGO_QUERY_MAX_TIME_MS,
+        )
 
     def fetch_vulnerabilities(self, query, sort_criteria, page, per_page):
         """Fetch vulnerabilities from the database."""
-        try:
-            cursor = (
-                collection.find(query)
-                .sort(sort_criteria)
-                .skip((page - 1) * per_page)
-                .limit(per_page)
-                .max_time_ms(MONGO_QUERY_MAX_TIME_MS)
-            )
-            return list(cursor)  # Return cursor as a list
-        except Exception as e:
-            raise e
+        cursor = (
+            collection.find(query)
+            .sort(sort_criteria)
+            .skip((page - 1) * per_page)
+            .limit(per_page)
+            .max_time_ms(MONGO_QUERY_MAX_TIME_MS)
+        )
+        return list(cursor)
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
@@ -688,8 +767,10 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
 
     @cache(
         timeout=600,
-        key_prefix="recent_days_vulnerabilities",
+        key_prefix=recent_vulnerability_cache_prefix,
         query_string=canonical_recent_vulnerability_query_items,
+        include_path=False,
+        cache_if=should_cache_recent_vulnerabilities,
     )
     def get(self):
         """
