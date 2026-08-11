@@ -7,7 +7,7 @@ import os
 import re
 
 from dotenv import load_dotenv
-from flask import Response, json, jsonify, make_response, request, stream_with_context
+from flask import jsonify, make_response, request
 from flask_restful import Resource
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import PyMongoError
@@ -22,7 +22,6 @@ from schema.serializers import (
 from utils.backend_capacity import (
     BackendBusyError,
     BackendTimeoutError,
-    MAX_BACKEND_CONCURRENCY,
     run_backend_tasks,
 )
 from utils.cache_manager import (
@@ -49,6 +48,7 @@ MONGO_QUERY_MAX_TIME_MS = max(
     int(os.environ.get("MONGO_QUERY_MAX_TIME_MS", "5000")),
 )
 RECENT_VULNERABILITY_QUERY_PARAMETERS = {"days", "page", "per_page"}
+RECENT_KEV_QUERY_PARAMETERS = {"days", "limit"}
 ALL_KEV_QUERY_PARAMETERS = {
     "actor",
     "filter",
@@ -116,6 +116,40 @@ def canonical_recent_vulnerability_query_items():
         ("days", [str(days)]),
         ("page", [str(page)]),
         ("per_page", [str(per_page)]),
+    ]
+
+
+def parse_recent_kev_query():
+    """Validate and canonicalize the bounded recent-KEV query parameters."""
+    unknown_parameters = sorted(
+        set(request.args.keys()) - RECENT_KEV_QUERY_PARAMETERS
+    )
+    if unknown_parameters:
+        names = ", ".join(unknown_parameters)
+        raise ValueError(f"Unsupported query parameter(s): {names}")
+
+    days = _strict_query_integer("days")
+    result_limit = _strict_query_integer(
+        "limit",
+        default=RECENT_KEV_MAX_RESULTS,
+    )
+
+    if days > 100:
+        raise ValueError("Exceeded the maximum limit of 100 days")
+    if result_limit < 1 or result_limit > RECENT_KEV_MAX_RESULTS:
+        raise ValueError(
+            f"Limit must be between 1 and {RECENT_KEV_MAX_RESULTS} results"
+        )
+
+    return days, result_limit
+
+
+def canonical_recent_kev_query_items():
+    """Return stable cache-key items for one validated recent-KEV query."""
+    days, result_limit = parse_recent_kev_query()
+    return [
+        ("days", [str(days)]),
+        ("limit", [str(result_limit)]),
     ]
 
 
@@ -543,7 +577,11 @@ class AllKevVulnerabilitiesResource(BaseResource):
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
-    @cache(timeout=60, key_prefix='recent_kevs_', query_string=True)
+    @cache(
+        timeout=60,
+        key_prefix="recent_kevs_",
+        query_string=canonical_recent_kev_query_items,
+    )
     def get(self):
         """
         Retrieve recent KEV vulnerabilities added within a specified number of days.
@@ -554,68 +592,47 @@ class RecentKevVulnerabilitiesResource(BaseResource):
 
         Query Parameters:
         - days (int): The number of days to look back for recent vulnerabilities.
-        - limit (int): Maximum records to stream, capped by server configuration.
+        - limit (int): Maximum records to return, capped by server configuration.
 
         Returns:
         Response: A JSON response containing a list of recent vulnerabilities
                   or an error message if the input parameter is invalid.
         """
-        # Get the 'days' parameter from the query string
-        days = request.args.get("days", type=int)
-        # Validate the 'days' parameter
-        if days is None or days < 0:
-            return self.handle_error("Invalid value for days", 400)
-        # Limit days to a maximum of 100
-        if days > 100:
-            return self.handle_error("Exceeded the maximum limit of 100 days", 400)
-        result_limit = request.args.get(
-            "limit",
-            default=RECENT_KEV_MAX_RESULTS,
-            type=int,
-        )
-        if result_limit is None or result_limit < 1:
-            return self.handle_error("Invalid value for limit", 400)
-        if result_limit > RECENT_KEV_MAX_RESULTS:
-            return self.handle_error(
-                f"Exceeded the maximum limit of {RECENT_KEV_MAX_RESULTS} results",
-                400,
-            )
-        # Calculate the cutoff date based on the 'days' parameter
+        # Reuse the cache-key parser so accepted behavior and cache identity
+        # cannot drift apart.
+        days, result_limit = parse_recent_kev_query()
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
-        
-        # Use server-side filtering - only fetch vulnerabilities with dateAdded >= cutoff_date
-        cursor = collection.find(
-            {"dateAdded": {"$gte": cutoff_date_str}}
-        ).sort("dateAdded", DESCENDING).limit(result_limit)
 
-        # Stream the cursor in manageable batches to avoid loading every
-        # vulnerability into memory at once.
-        batch_size = max(1, min(MAX_BACKEND_CONCURRENCY, 200))
-        cursor = cursor.batch_size(batch_size)
+        try:
+            vulnerabilities = run_backend_tasks(
+                [
+                    partial(
+                        self.query_recent_vulnerabilities,
+                        cutoff_date_str,
+                        result_limit,
+                    )
+                ],
+                timeout=GREENLET_TIMEOUT,
+            )[0]
+        except BackendBusyError:
+            return self.handle_error("Backend busy", 503)
+        except BackendTimeoutError:
+            return self.handle_error("Upstream timeout", 504)
+        except PyMongoError:
+            return self.handle_error("Backend unavailable", 503)
 
-        def stream_vulnerabilities():
-            yield '['
-            first_chunk = True
-            try:
-                for vulnerability in cursor:
-                    serialized = serialize_vulnerability(vulnerability)
-                    payload = json.dumps(serialized, default=str)
-                    if first_chunk:
-                        first_chunk = False
-                    else:
-                        yield ','
-                    yield payload
-            finally:
-                cursor.close()
-            yield ']'
+        return self.make_json_response(vulnerabilities)
 
-        response = Response(
-            stream_with_context(stream_vulnerabilities()),
-            mimetype="application/json"
+    def query_recent_vulnerabilities(self, cutoff_date, result_limit):
+        """Materialize one bounded, deadline-limited query under admission."""
+        cursor = (
+            collection.find({"dateAdded": {"$gte": cutoff_date}})
+            .sort("dateAdded", DESCENDING)
+            .limit(result_limit)
+            .max_time_ms(MONGO_QUERY_MAX_TIME_MS)
         )
-
-        return response
+        return [serialize_vulnerability(vulnerability) for vulnerability in cursor]
 
     def process_vulnerability(self, vulnerability, cutoff_date):
         """Process a single vulnerability to check if it meets the cutoff date."""

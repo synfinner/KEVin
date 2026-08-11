@@ -919,15 +919,14 @@ def test_schema_resources_never_block_in_greenlet_pool_spawn():
     assert source.count("run_backend_tasks(") >= 3
 
 
-def test_recent_kev_stream_applies_requested_bounded_limit(monkeypatch):
-    """The recent KEV cursor is capped before a streaming response begins."""
+def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
+    """Recent KEV responses finish bounded backend work before caching."""
 
     class RecordingCursor:
-        """Record cursor bounds without requiring a running MongoDB server."""
+        """Record query bounds and return one representative vulnerability."""
 
         def __init__(self):
             """Initialize a cursor with no configured bound."""
-            self.limit_value = None
             self.operations = []
 
         def sort(self, key, direction):
@@ -936,55 +935,130 @@ def test_recent_kev_stream_applies_requested_bounded_limit(monkeypatch):
             return self
 
         def limit(self, value):
-            """Record and return the maximum number of streamed records."""
-            self.limit_value = value
+            """Record and return the maximum number of materialized records."""
             self.operations.append(("limit", value))
             return self
 
-        def batch_size(self, _value):
-            """Preserve the cursor call chain used by the resource."""
+        def max_time_ms(self, value):
+            """Record and return the MongoDB execution deadline."""
+            self.operations.append(("max_time_ms", value))
             return self
 
-        def close(self):
-            """Match the PyMongo cursor cleanup interface."""
-
         def __iter__(self):
-            """Return an empty iterator because only query shape is tested."""
-            return iter(())
+            """Yield a record that exercises the public serializer."""
+            return iter(
+                [
+                    {
+                        "_id": "record-1",
+                        "cveID": "CVE-2026-0001",
+                        "dateAdded": "2026-01-01",
+                        "dueDate": "2026-01-22",
+                    }
+                ]
+            )
 
     class RecentCollection:
-        """Return the recording cursor for a recent-vulnerability query."""
+        """Record each origin query and its independently configured cursor."""
 
         def __init__(self):
-            """Create one reusable cursor for assertion."""
-            self.cursor = RecordingCursor()
+            """Initialize empty query and cursor logs."""
+            self.find_calls = []
+            self.cursors = []
 
-        def find(self, _query):
-            """Return the cursor that records the applied result cap."""
-            return self.cursor
+        def find(self, query):
+            """Record the filter and return a fresh recording cursor."""
+            cursor = RecordingCursor()
+            self.find_calls.append(query)
+            self.cursors.append(cursor)
+            return cursor
 
     recent_collection = RecentCollection()
     fake_database = types.ModuleType("utils.database")
     fake_database.collection = recent_collection
     fake_database.all_vulns_collection = recent_collection
     monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
     sys.modules.pop("schema.api", None)
 
     try:
         api_module = importlib.import_module("schema.api")
         resource = api_module.RecentKevVulnerabilitiesResource()
         app = Flask(__name__)
-        with app.test_request_context("/kev/recent?days=100&limit=25"):
-            response = resource.get.__wrapped__(resource)
+
+        admitted_requests = []
+        original_run_backend_tasks = api_module.run_backend_tasks
+
+        def recording_run_backend_tasks(tasks, timeout):
+            """Record admission while preserving the production execution path."""
+            admitted_requests.append(timeout)
+            return original_run_backend_tasks(tasks, timeout=timeout)
+
+        monkeypatch.setattr(
+            api_module,
+            "run_backend_tasks",
+            recording_run_backend_tasks,
+        )
+
+        valid_urls = (
+            "/kev/recent?days=007&limit=025",
+            "/kev/recent?limit=25&days=7",
+        )
+        responses = []
+        for url in valid_urls:
+            with app.test_request_context(url):
+                responses.append(resource.get())
+
+        # Omitting the optional limit preserves the documented maximum default.
+        with app.test_request_context("/kev/recent?days=7"):
+            default_limit_response = resource.get()
+
+        cache_get_calls_before_invalid_requests = memory_redis.get_calls
+        invalid_urls = (
+            "/kev/recent?days=7&nonce=1",
+            "/kev/recent?days=7&days=7",
+            "/kev/recent?days=7&limit=25&limit=25",
+            "/kev/recent?days=7!&limit=25",
+            "/kev/recent?days=7&limit=0",
+            f"/kev/recent?days=7&limit={api_module.RECENT_KEV_MAX_RESULTS + 1}",
+        )
+        for url in invalid_urls:
+            with app.test_request_context(url):
+                invalid_response = resource.get()
+            assert invalid_response.status_code == 400
+            assert invalid_response.get_json() == {
+                "message": "Invalid query parameters"
+            }
     finally:
         sys.modules.pop("schema.api", None)
 
-    assert response.status_code == 200
-    assert recent_collection.cursor.limit_value == 25
-    assert recent_collection.cursor.operations == [
+    assert [response.status_code for response in responses] == [200, 200]
+    assert all(not response.is_streamed for response in responses)
+    assert responses[0].get_json() == responses[1].get_json()
+    assert default_limit_response.status_code == 200
+    assert not default_limit_response.is_streamed
+
+    # Equivalent explicit queries share one origin fill; the default is a
+    # separate, legitimate cache identity with its documented result limit.
+    assert len(recent_collection.find_calls) == 2
+    assert len(memory_redis.values) == 2
+    assert admitted_requests == [api_module.GREENLET_TIMEOUT] * 2
+    assert recent_collection.cursors[0].operations == [
         ("sort", "dateAdded", api_module.DESCENDING),
         ("limit", 25),
+        ("max_time_ms", api_module.MONGO_QUERY_MAX_TIME_MS),
     ]
+    assert recent_collection.cursors[1].operations == [
+        ("sort", "dateAdded", api_module.DESCENDING),
+        ("limit", api_module.RECENT_KEV_MAX_RESULTS),
+        ("max_time_ms", api_module.MONGO_QUERY_MAX_TIME_MS),
+    ]
+    assert memory_redis.get_calls == cache_get_calls_before_invalid_requests
 
 
 def test_viz_uses_text_safe_rendering_for_untrusted_api_data():
