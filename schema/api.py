@@ -43,6 +43,7 @@ RECENT_KEV_MAX_RESULTS = max(
     1,
     int(os.environ.get("RECENT_KEV_MAX_RESULTS", "500")),
 )
+RECENT_KEV_CACHE_TIMEOUT = 60
 MONGO_QUERY_MAX_TIME_MS = max(
     100,
     int(os.environ.get("MONGO_QUERY_MAX_TIME_MS", "5000")),
@@ -61,6 +62,11 @@ ALL_KEV_QUERY_PARAMETERS = {
 
 # Timeout in seconds for admitted backend work to finish.
 GREENLET_TIMEOUT = max(1, int(os.environ.get('GREENLET_TIMEOUT', "10")))
+
+
+class RecentKevCacheFillBusy(RuntimeError):
+    """Signal that another request owns the canonical recent-KEV fill."""
+
 
 def validate_page(page):
     """Reject non-positive and unbounded pages before MongoDB skip() calls."""
@@ -144,13 +150,9 @@ def parse_recent_kev_query():
     return days, result_limit
 
 
-def canonical_recent_kev_query_items():
-    """Return stable cache-key items for one validated recent-KEV query."""
-    days, result_limit = parse_recent_kev_query()
-    return [
-        ("days", [str(days)]),
-        ("limit", [str(result_limit)]),
-    ]
+def recent_kev_cache_key(days):
+    """Return one alias-independent key for a maximum-size daily dataset."""
+    return f"recent_kevs_days_{days}_max_{RECENT_KEV_MAX_RESULTS}"
 
 
 def parse_all_kev_query():
@@ -577,11 +579,6 @@ class AllKevVulnerabilitiesResource(BaseResource):
 
 # Resource for fetching recent vulnerabilities
 class RecentKevVulnerabilitiesResource(BaseResource):
-    @cache(
-        timeout=60,
-        key_prefix="recent_kevs_",
-        query_string=canonical_recent_kev_query_items,
-    )
     def get(self):
         """
         Retrieve recent KEV vulnerabilities added within a specified number of days.
@@ -598,23 +595,23 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         Response: A JSON response containing a list of recent vulnerabilities
                   or an error message if the input parameter is invalid.
         """
-        # Reuse the cache-key parser so accepted behavior and cache identity
-        # cannot drift apart.
-        days, result_limit = parse_recent_kev_query()
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
-        cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
+        try:
+            days, result_limit = parse_recent_kev_query()
+        except ValueError:
+            return self.handle_error("Invalid query parameters", 400)
 
         try:
-            vulnerabilities = run_backend_tasks(
-                [
-                    partial(
-                        self.query_recent_vulnerabilities,
-                        cutoff_date_str,
-                        result_limit,
-                    )
-                ],
-                timeout=GREENLET_TIMEOUT,
-            )[0]
+            vulnerabilities = self.load_recent_vulnerabilities(days)
+        except CacheBackendUnavailable:
+            return make_response(
+                {"error": "Cache temporarily unavailable"},
+                503,
+            )
+        except RecentKevCacheFillBusy:
+            return make_response(
+                {"error": "Origin temporarily busy"},
+                503,
+            )
         except BackendBusyError:
             return self.handle_error("Backend busy", 503)
         except BackendTimeoutError:
@@ -622,7 +619,45 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         except PyMongoError:
             return self.handle_error("Backend unavailable", 503)
 
-        return self.make_json_response(vulnerabilities)
+        # The cached maximum-size dataset is safe to reuse for every requested
+        # prefix, including both public aliases and their trailing-slash forms.
+        return self.make_json_response(vulnerabilities[:result_limit])
+
+    def load_recent_vulnerabilities(self, days):
+        """Load or fill one maximum-size cached dataset for the day window."""
+        cache_key = recent_kev_cache_key(days)
+        cached_vulnerabilities = cache_manager.get(cache_key)
+        if cached_vulnerabilities is not None:
+            return cached_vulnerabilities
+
+        with cache_manager.singleflight(cache_key) as acquired:
+            if not acquired:
+                raise RecentKevCacheFillBusy(
+                    "Recent KEV cache fill already in progress"
+                )
+
+            cached_vulnerabilities = cache_manager.get(cache_key)
+            if cached_vulnerabilities is not None:
+                return cached_vulnerabilities
+
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
+            vulnerabilities = run_backend_tasks(
+                [
+                    partial(
+                        self.query_recent_vulnerabilities,
+                        cutoff_date_str,
+                        RECENT_KEV_MAX_RESULTS,
+                    )
+                ],
+                timeout=GREENLET_TIMEOUT,
+            )[0]
+            cache_manager.set(
+                cache_key,
+                vulnerabilities,
+                timeout=RECENT_KEV_CACHE_TIMEOUT,
+            )
+            return vulnerabilities
 
     def query_recent_vulnerabilities(self, cutoff_date, result_limit):
         """Materialize one bounded, deadline-limited query under admission."""

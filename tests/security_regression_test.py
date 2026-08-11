@@ -920,7 +920,7 @@ def test_schema_resources_never_block_in_greenlet_pool_spawn():
 
 
 def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
-    """Recent KEV responses finish bounded backend work before caching."""
+    """Recent KEV aliases and limits share one bounded maximum-result fill."""
 
     class RecordingCursor:
         """Record query bounds and return one representative vulnerability."""
@@ -945,15 +945,16 @@ def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
             return self
 
         def __iter__(self):
-            """Yield a record that exercises the public serializer."""
+            """Yield records that prove requested limits are sliced after caching."""
             return iter(
                 [
                     {
-                        "_id": "record-1",
-                        "cveID": "CVE-2026-0001",
+                        "_id": f"record-{index}",
+                        "cveID": f"CVE-2026-{index:04d}",
                         "dateAdded": "2026-01-01",
                         "dueDate": "2026-01-22",
                     }
+                    for index in range(1, 4)
                 ]
             )
 
@@ -1006,17 +1007,14 @@ def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
         )
 
         valid_urls = (
-            "/kev/recent?days=007&limit=025",
-            "/kev/recent?limit=25&days=7",
+            "/kev/recent?days=007&limit=1",
+            "/api/kev/recent/?limit=2&days=7",
+            "/kev/recent/?days=7",
         )
         responses = []
         for url in valid_urls:
             with app.test_request_context(url):
                 responses.append(resource.get())
-
-        # Omitting the optional limit preserves the documented maximum default.
-        with app.test_request_context("/kev/recent?days=7"):
-            default_limit_response = resource.get()
 
         cache_get_calls_before_invalid_requests = memory_redis.get_calls
         invalid_urls = (
@@ -1037,23 +1035,23 @@ def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
     finally:
         sys.modules.pop("schema.api", None)
 
-    assert [response.status_code for response in responses] == [200, 200]
+    assert [response.status_code for response in responses] == [200, 200, 200]
     assert all(not response.is_streamed for response in responses)
-    assert responses[0].get_json() == responses[1].get_json()
-    assert default_limit_response.status_code == 200
-    assert not default_limit_response.is_streamed
+    assert [len(response.get_json()) for response in responses] == [1, 2, 3]
+    assert responses[0].get_json() == responses[1].get_json()[:1]
+    assert responses[1].get_json() == responses[2].get_json()[:2]
 
-    # Equivalent explicit queries share one origin fill; the default is a
-    # separate, legitimate cache identity with its documented result limit.
-    assert len(recent_collection.find_calls) == 2
-    assert len(memory_redis.values) == 2
-    assert admitted_requests == [api_module.GREENLET_TIMEOUT] * 2
+    # All aliases and requested prefixes share one maximum-size dataset.
+    assert len(recent_collection.find_calls) == 1
+    assert len(memory_redis.values) == 1
+    assert admitted_requests == [api_module.GREENLET_TIMEOUT]
+    assert len(
+        {
+            api_module.recent_kev_cache_key(days)
+            for days in range(101)
+        }
+    ) == 101
     assert recent_collection.cursors[0].operations == [
-        ("sort", "dateAdded", api_module.DESCENDING),
-        ("limit", 25),
-        ("max_time_ms", api_module.MONGO_QUERY_MAX_TIME_MS),
-    ]
-    assert recent_collection.cursors[1].operations == [
         ("sort", "dateAdded", api_module.DESCENDING),
         ("limit", api_module.RECENT_KEV_MAX_RESULTS),
         ("max_time_ms", api_module.MONGO_QUERY_MAX_TIME_MS),
