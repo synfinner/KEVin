@@ -285,13 +285,26 @@ class CacheManager:
 # Initialize a global cache manager
 cache_manager = CacheManager(redis_client)
 
-def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
+def kev_cache(
+    timeout=120,
+    key_prefix="cache_",
+    query_string=False,
+    canonical_args=None,
+    include_path=True,
+    cache_if=None,
+):
     """Cache Flask responses using route-aware, optionally canonical query keys.
 
     ``query_string`` may be ``True`` to preserve the raw query string or a
     callable that returns validated canonical query items. A canonicalizer may
     raise ``ValueError`` to reject a request with a fixed client-safe message
     before cache or origin access.
+
+    ``canonical_args`` performs the same validation and normalization for path
+    arguments. ``include_path=False`` lets public aliases share one logical
+    cache entry. ``cache_if`` receives the canonical query items and can bypass
+    caching for valid high-cardinality requests; those handlers remain
+    responsible for applying backend admission control.
     """
     def decorator(func):
         @functools.wraps(func)
@@ -299,11 +312,27 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             # Skip self (args[0]) if this is a method
             method_args = args[1:] if args and hasattr(args[0], '__class__') else args
 
+            if callable(canonical_args):
+                try:
+                    method_args = canonical_args(*args, **kwargs)
+                    cache_kwargs = {}
+                except ValueError:
+                    return make_response(
+                        {"message": "Invalid path parameters"},
+                        400,
+                    )
+            else:
+                cache_kwargs = kwargs
+
             prefix_value = key_prefix
             if callable(prefix_value):
                 prefix_value = prefix_value(*args, **kwargs)
 
-            path = request.path if has_request_context() else None
+            path = (
+                request.path
+                if include_path and has_request_context()
+                else None
+            )
             query_items = None
             if has_request_context() and callable(query_string):
                 try:
@@ -316,9 +345,20 @@ def kev_cache(timeout=120, key_prefix="cache_", query_string=False):
             elif query_string and has_request_context():
                 query_items = list(request.args.lists())
 
+            # Valid requests outside the bounded cache policy still execute,
+            # but they do not consume Redis or singleflight cardinality.
+            if callable(cache_if) and not cache_if(query_items):
+                try:
+                    return func(*args, **kwargs)
+                except PyMongoError:
+                    return make_response(
+                        {"error": "Backend temporarily unavailable"},
+                        503,
+                    )
+
             cache_context = {
                 "method_args": method_args,
-                "kwargs": kwargs,
+                "kwargs": cache_kwargs,
                 "query_items": query_items,
                 "path": path,
             }

@@ -34,9 +34,15 @@ Add necessary API KEYS.
 API_KEY=xxx
 MONGODB_URI_PROD=mongodb://MONGO_PROD_IP:27017/
 MONGODB_URI_DEV=mongodb://localhost:27017/
+PUBLIC_BASE_URL=https://kevin.gtfkd.com
+TRUSTED_HOSTS=kevin.gtfkd.com,localhost,127.0.0.1
 ```
 
 Feel free to edit the mongodb in use or variable names. I have both in here since I work on prod and dev mongodbs for the hosted version of KEVin at kevin.gtfkd.com/*.
+
+`PUBLIC_BASE_URL` is the canonical public origin used in homepage metadata.
+`TRUSTED_HOSTS` is a comma-separated allowlist for accepted HTTP Host headers;
+include the hostname used by local health checks and reverse proxies.
 
 **Set up MongoDB:**
 
