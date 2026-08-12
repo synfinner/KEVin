@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import re
 import unicodedata
 from urllib.parse import unquote
@@ -7,7 +8,11 @@ ALNUM_SPACE_HYPHEN_UNDERSCORE_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
 EXTRA_WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
 CVE_RE = re.compile(r"\bcve\b", re.IGNORECASE)
 # Pattern to validate proper CVE ID format
-CVE_ID_FORMAT_RE = re.compile(r"^CVE-\d{4}-\d+$", re.IGNORECASE)
+CVE_ID_FORMAT_RE = re.compile(
+    r"^CVE-([0-9]{4})-([0-9]{4,10})$",
+    re.IGNORECASE,
+)
+MIN_CVE_YEAR = 1999
 # SQL Injection patterns - simplified to just include UNION
 SQL_INJECTION_RE = re.compile(
     r"\b("
@@ -96,14 +101,31 @@ def sanitize_query(query):
 def normalize_cve_id(query):
     """Return one canonical CVE identifier or reject the supplied value.
 
-    Sanitization alone can transform malformed input into a different valid
-    identifier. Requiring the sanitized value to match the complete CVE format
-    ensures cache identity and database identity use the same validated value.
+    Validate before applying any lossy character filtering so punctuation or
+    operator-like input cannot be silently transformed into a different CVE.
+    The year and sequence bounds also keep attacker-generated miss namespaces
+    finite while allowing the documented CVE identifier range.
     """
-    sanitized_query = sanitize_query(query)
-    if not sanitized_query or not CVE_ID_FORMAT_RE.fullmatch(sanitized_query):
+    if query is None:
         raise ValueError("Invalid CVE ID")
-    return sanitized_query.upper()
+
+    normalized_query = str(query).strip()
+    for _ in range(5):
+        decoded_query = unquote(normalized_query)
+        if decoded_query == normalized_query:
+            break
+        normalized_query = decoded_query
+    normalized_query = unicodedata.normalize("NFKC", normalized_query)
+
+    match = CVE_ID_FORMAT_RE.fullmatch(normalized_query)
+    if match is None:
+        raise ValueError("Invalid CVE ID")
+
+    year = int(match.group(1))
+    maximum_year = datetime.now(timezone.utc).year + 1
+    if year < MIN_CVE_YEAR or year > maximum_year:
+        raise ValueError("Invalid CVE ID")
+    return normalized_query.upper()
 
 
 def canonical_cve_arguments(*args, **kwargs):

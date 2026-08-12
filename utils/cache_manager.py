@@ -1,32 +1,60 @@
 """Redis cache helpers for KEVin API responses."""
 
+from collections import OrderedDict
+from contextlib import contextmanager
+from datetime import datetime
 import functools
 import hashlib
 import hmac
 import logging
 import os
+import re
 import threading
 import time
-from contextlib import contextmanager
+
+import orjson
+from bson import ObjectId
 from flask import Response, has_request_context, make_response, request
 from gevent.lock import Semaphore
 from pymongo.errors import PyMongoError
 from redis.exceptions import RedisError
+
 from utils.cache_config import redis_client
-import re
-import orjson
-from bson import ObjectId
-from datetime import datetime
 
 
 # Regular expression for safe cache keys
 SAFE_KEY_RE = re.compile(r"^[\w\-:]+$")
 CACHE_ENVELOPE_PREFIX = b"kevin-cache-v2:"
 logger = logging.getLogger(__name__)
+RATE_LIMIT_WINDOW_SECONDS = max(
+    1,
+    int(os.getenv("ORIGIN_RATE_LIMIT_WINDOW_SECONDS", "1")),
+)
+UNCACHED_QUERY_RATE_LIMIT = max(
+    1,
+    int(os.getenv("UNCACHED_QUERY_RATE_LIMIT", "10")),
+)
+POINT_MISS_RATE_LIMIT = max(
+    1,
+    int(os.getenv("POINT_MISS_RATE_LIMIT", "20")),
+)
+NEGATIVE_CACHE_TIMEOUT = max(
+    1,
+    int(os.getenv("NEGATIVE_CACHE_TIMEOUT", "15")),
+)
+NEGATIVE_CACHE_MAX_ENTRIES = max(
+    1,
+    int(os.getenv("NEGATIVE_CACHE_MAX_ENTRIES", "1024")),
+)
+POINT_MISS_RATE_BUCKET = "cve_point_miss"
 
 
 class CacheBackendUnavailable(RuntimeError):
     """Signal that Redis is unavailable and origin load must be shed."""
+
+
+class OriginRateLimitExceeded(RuntimeError):
+    """Signal that a shared origin-work budget has been exhausted."""
 
 
 class _SingleflightEntry:
@@ -164,8 +192,11 @@ class CacheManager:
         circuit_breaker_seconds=None,
         singleflight_wait_seconds=None,
         time_func=None,
+        wall_time_func=None,
+        negative_cache_ttl=None,
+        negative_cache_max_entries=None,
     ):
-        """Initialize Redis access with a short per-worker failure circuit."""
+        """Initialize bounded Redis admission and local negative caching."""
         self.redis_client = redis_connection
         self.circuit_breaker_seconds = (
             float(os.getenv("CACHE_CIRCUIT_BREAKER_SECONDS", "1"))
@@ -178,9 +209,22 @@ class CacheManager:
             else max(0.0, float(singleflight_wait_seconds))
         )
         self._time = time.monotonic if time_func is None else time_func
+        self._wall_time = time.time if wall_time_func is None else wall_time_func
         self._unavailable_until = 0.0
         self._singleflight_entries = {}
         self._singleflight_guard = threading.Lock()
+        self.negative_cache_ttl = (
+            NEGATIVE_CACHE_TIMEOUT
+            if negative_cache_ttl is None
+            else max(0.0, float(negative_cache_ttl))
+        )
+        self.negative_cache_max_entries = (
+            NEGATIVE_CACHE_MAX_ENTRIES
+            if negative_cache_max_entries is None
+            else max(1, int(negative_cache_max_entries))
+        )
+        self._negative_entries = OrderedDict()
+        self._negative_guard = threading.Lock()
 
     def _ensure_backend_available(self):
         """Fail fast while the Redis failure circuit remains open."""
@@ -196,7 +240,7 @@ class CacheManager:
         self._unavailable_until = 0.0
 
     @contextmanager
-    def singleflight(self, key):
+    def singleflight(self, key, wait_seconds=None):
         """Yield whether this request acquired the bounded fill slot for key."""
         with self._singleflight_guard:
             entry = self._singleflight_entries.get(key)
@@ -205,7 +249,12 @@ class CacheManager:
                 self._singleflight_entries[key] = entry
             entry.users += 1
 
-        acquired = entry.lock.acquire(timeout=self.singleflight_wait_seconds)
+        wait_timeout = (
+            self.singleflight_wait_seconds
+            if wait_seconds is None
+            else max(0.0, float(wait_seconds))
+        )
+        acquired = entry.lock.acquire(timeout=wait_timeout)
         try:
             yield acquired
         finally:
@@ -215,6 +264,77 @@ class CacheManager:
                 entry.users -= 1
                 if entry.users == 0:
                     self._singleflight_entries.pop(key, None)
+
+    def enforce_rate_limit(self, bucket, limit, window_seconds=None):
+        """Atomically admit one unit of origin work in a shared Redis window."""
+        if limit is None:
+            return
+
+        self._ensure_backend_available()
+        window = max(
+            1,
+            int(
+                RATE_LIMIT_WINDOW_SECONDS
+                if window_seconds is None
+                else window_seconds
+            ),
+        )
+        window_id = int(self._wall_time() // window)
+        safe_bucket = normalize_cache_key_prefix(bucket)
+        counter_key = sanitize_cache_key(
+            f"origin_rate_{safe_bucket}_{window_id}"
+        )
+        try:
+            pipeline = self.redis_client.pipeline(transaction=True)
+            pipeline.incr(counter_key)
+            pipeline.expire(counter_key, window * 2)
+            count, _ = pipeline.execute()
+        except RedisError as exc:
+            self._mark_backend_unavailable()
+            raise CacheBackendUnavailable("Redis admission check failed") from exc
+
+        self._mark_backend_available()
+        if int(count) > max(1, int(limit)):
+            raise OriginRateLimitExceeded(
+                f"Origin rate limit exceeded for {safe_bucket}"
+            )
+
+    def has_negative(self, key):
+        """Return whether a bounded local miss entry remains active."""
+        safe_key = sanitize_cache_key(key)
+        now = self._time()
+        with self._negative_guard:
+            self._prune_negative_entries(now)
+            expires_at = self._negative_entries.get(safe_key)
+            if expires_at is None or expires_at <= now:
+                self._negative_entries.pop(safe_key, None)
+                return False
+            self._negative_entries.move_to_end(safe_key)
+            return True
+
+    def remember_negative(self, key):
+        """Remember one miss without allowing attacker-controlled memory growth."""
+        if self.negative_cache_ttl <= 0:
+            return
+
+        safe_key = sanitize_cache_key(key)
+        now = self._time()
+        with self._negative_guard:
+            self._prune_negative_entries(now)
+            self._negative_entries[safe_key] = now + self.negative_cache_ttl
+            self._negative_entries.move_to_end(safe_key)
+            while len(self._negative_entries) > self.negative_cache_max_entries:
+                self._negative_entries.popitem(last=False)
+
+    def _prune_negative_entries(self, now):
+        """Remove expired local misses while the negative-cache lock is held."""
+        expired_keys = [
+            key
+            for key, expires_at in self._negative_entries.items()
+            if expires_at <= now
+        ]
+        for key in expired_keys:
+            self._negative_entries.pop(key, None)
 
     def get(self, key):
         """Retrieve data from the cache by key."""
@@ -292,6 +412,11 @@ def kev_cache(
     canonical_args=None,
     include_path=True,
     cache_if=None,
+    uncached_rate_limit=None,
+    miss_rate_limit=None,
+    rate_limit_bucket=None,
+    rate_limit_window=RATE_LIMIT_WINDOW_SECONDS,
+    negative_timeout=NEGATIVE_CACHE_TIMEOUT,
 ):
     """Cache Flask responses using route-aware, optionally canonical query keys.
 
@@ -303,8 +428,9 @@ def kev_cache(
     ``canonical_args`` performs the same validation and normalization for path
     arguments. ``include_path=False`` lets public aliases share one logical
     cache entry. ``cache_if`` receives the canonical query items and can bypass
-    caching for valid high-cardinality requests; those handlers remain
-    responsible for applying backend admission control.
+    caching for valid high-cardinality requests. Uncached variants and cache
+    misses can use separate shared Redis admission budgets so multiple workers
+    cannot collectively overwhelm MongoDB.
     """
     def decorator(func):
         @functools.wraps(func)
@@ -345,17 +471,6 @@ def kev_cache(
             elif query_string and has_request_context():
                 query_items = list(request.args.lists())
 
-            # Valid requests outside the bounded cache policy still execute,
-            # but they do not consume Redis or singleflight cardinality.
-            if callable(cache_if) and not cache_if(query_items):
-                try:
-                    return func(*args, **kwargs)
-                except PyMongoError:
-                    return make_response(
-                        {"error": "Backend temporarily unavailable"},
-                        503,
-                    )
-
             cache_context = {
                 "method_args": method_args,
                 "kwargs": cache_kwargs,
@@ -367,6 +482,43 @@ def kev_cache(
                 f"{func.__module__}.{func.__qualname__}",
                 cache_context,
             )
+
+            admission_bucket = rate_limit_bucket or (
+                f"{func.__module__}_{func.__qualname__}"
+            )
+
+            # Uncached variants still share one zero-wait fill slot per exact
+            # query and one cross-worker budget for the broader route family.
+            if callable(cache_if) and not cache_if(query_items):
+                with cache_manager.singleflight(
+                    f"uncached_{cache_key}",
+                    wait_seconds=0,
+                ) as acquired:
+                    if not acquired:
+                        return make_response(
+                            {"error": "Origin temporarily busy"},
+                            503,
+                        )
+                    try:
+                        cache_manager.enforce_rate_limit(
+                            admission_bucket,
+                            uncached_rate_limit,
+                            rate_limit_window,
+                        )
+                    except OriginRateLimitExceeded:
+                        return _rate_limit_response(rate_limit_window)
+                    except CacheBackendUnavailable:
+                        return make_response(
+                            {"error": "Cache temporarily unavailable"},
+                            503,
+                        )
+                    try:
+                        return func(*args, **kwargs)
+                    except PyMongoError:
+                        return make_response(
+                            {"error": "Backend temporarily unavailable"},
+                            503,
+                        )
 
             # Debug: print cache key
             # print(f"[kev_cache] Cache key: {cache_key}")
@@ -403,6 +555,20 @@ def kev_cache(
                     return cached_data
 
                 try:
+                    cache_manager.enforce_rate_limit(
+                        admission_bucket,
+                        miss_rate_limit,
+                        rate_limit_window,
+                    )
+                except OriginRateLimitExceeded:
+                    return _rate_limit_response(rate_limit_window)
+                except CacheBackendUnavailable:
+                    return make_response(
+                        {"error": "Cache temporarily unavailable"},
+                        503,
+                    )
+
+                try:
                     result = func(*args, **kwargs)
                 except PyMongoError:
                     return make_response(
@@ -414,7 +580,19 @@ def kev_cache(
                 response = make_response(result)
                 # Server errors are transient and must not outlive recovery.
                 if response.status_code < 500:
-                    cache_manager.set(cache_key, response, timeout=timeout)
+                    cache_timeout = (
+                        min(timeout, negative_timeout)
+                        if response.status_code >= 400
+                        else timeout
+                    )
+                    cache_manager.set(cache_key, response, timeout=cache_timeout)
                 return result
         return wrapper
     return decorator
+
+
+def _rate_limit_response(window_seconds):
+    """Return a retryable response without exposing admission internals."""
+    response = make_response({"error": "Origin rate limit exceeded"}, 429)
+    response.headers["Retry-After"] = str(max(1, int(window_seconds)))
+    return response

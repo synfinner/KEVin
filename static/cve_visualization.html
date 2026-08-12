@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <!-- Font Awesome for icons -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
     <style>
         /* Layout */
         .navbar-brand {
@@ -984,7 +984,7 @@
                             <button class="btn btn-danger" id="resetView"><i class="fas fa-redo"></i> Reset</button>
                             <div class="input-group" style="width: 220px;">
                                 <div class="input-group-prepend"><span class="input-group-text">per_page</span></div>
-                                <input type="number" id="perPage" class="form-control" min="1" max="100" value="25">
+                                <input type="number" id="perPage" class="form-control" min="25" max="100" value="25">
                             </div>
                         </div>
                     </div>
@@ -1158,6 +1158,9 @@
         let loadAllActive = false;
         let actorDisplayName = '';
         let pageInfo = { current: 0, total: null };
+        // Bound every automatic series so one browser action cannot fan out
+        // into hundreds of API and MongoDB requests.
+        const MAX_AUTOMATIC_PAGES = 10;
         const POSITION_STORAGE_KEY = 'kev-graph-pos-v1';
         const MAX_POSITION_STORE = 400;
         const persistedPositions = loadPersistedPositions();
@@ -1375,7 +1378,7 @@
 
         document.getElementById('perPage').addEventListener('change', function () {
             const val = parseInt(this.value, 10);
-            perPage = Math.max(1, Math.min(100, isNaN(val) ? 25 : val));
+            perPage = Math.max(25, Math.min(100, isNaN(val) ? 25 : val));
             this.value = perPage;
         });
 
@@ -1605,18 +1608,22 @@
 
         function loadMoreDataByActor(actor, totalPages) {
             let page = 2;
+            const automaticPageLimit = Math.min(totalPages, MAX_AUTOMATIC_PAGES);
             actorLoadActive = true;
             const encodedActor = encodeURIComponent(actor);
 
             const fetchPage = () => {
                 if (!actorLoadActive) return;
-                if (page > totalPages) {
+                if (page > automaticPageLimit) {
                     actorLoadActive = false;
                     if (actorLoadTimer) {
                         clearTimeout(actorLoadTimer);
                         actorLoadTimer = null;
                     }
-                    return; // End recursion
+                    if (totalPages > automaticPageLimit) {
+                        setStatus(`Stopped after ${automaticPageLimit} pages. Refine the actor search to load a smaller result set.`);
+                    }
+                    return; // End the bounded request series
                 }
 
                 cancelCurrentRequest(); // Cancel any ongoing request before starting a new one
@@ -1686,23 +1693,28 @@
                         performActorGraphSearch(lastActorSearchTerm, { focus: false, updateStatus: false });
                     }
                     const totalPages = first.total_pages;
-                    updateProgress(1, totalPages);
-                    setStatus(`Loading all pages: 1/${totalPages}`);
-                    pageInfo = { current: 1, total: totalPages || pageInfo.total };
+                    const automaticPageLimit = Math.min(totalPages, MAX_AUTOMATIC_PAGES);
+                    updateProgress(1, automaticPageLimit);
+                    setStatus(`Loading up to ${automaticPageLimit} pages: 1/${automaticPageLimit}`);
+                    pageInfo = { current: 1, total: automaticPageLimit || pageInfo.total };
                     updateStatusChips();
                     // Sequentially fetch remaining pages
                     let p = 2;
                     const loop = () => {
                         if (!loadAllActive) return;
-                        if (p > totalPages) {
+                        if (p > automaticPageLimit) {
                             loadAllActive = false;
                             if (loadAllTimer) {
                                 clearTimeout(loadAllTimer);
                                 loadAllTimer = null;
                             }
-                            setStatus('All pages loaded.');
+                            setStatus(
+                                totalPages > automaticPageLimit
+                                    ? `Stopped after ${automaticPageLimit} pages. Use filters to narrow the dataset.`
+                                    : 'All pages loaded.'
+                            );
                             hideProgress();
-                            pageInfo = { current: totalPages, total: totalPages };
+                            pageInfo = { current: automaticPageLimit, total: automaticPageLimit };
                             updateStatusChips();
                             fitToScreen();
                             return;
@@ -1724,9 +1736,9 @@
                                 if (lastActorSearchTerm) {
                                     performActorGraphSearch(lastActorSearchTerm, { focus: false, updateStatus: false });
                                 }
-                                updateProgress(p, totalPages);
-                                setStatus(`Loading all pages: ${p}/${totalPages}`);
-                                pageInfo = { current: p, total: totalPages };
+                                updateProgress(p, automaticPageLimit);
+                                setStatus(`Loading up to ${automaticPageLimit} pages: ${p}/${automaticPageLimit}`);
+                                pageInfo = { current: p, total: automaticPageLimit };
                                 updateStatusChips();
                                 p++;
                                 loadAllTimer = setTimeout(() => {
@@ -3415,13 +3427,13 @@
                 const params = new URLSearchParams(window.location.search);
                 const actor = params.get('actor');
                 const p = parseInt(params.get('per_page') || '0', 10);
-                if (p) { perPage = Math.max(1, Math.min(100, p)); document.getElementById('perPage').value = perPage; }
+                if (p) { perPage = Math.max(25, Math.min(100, p)); document.getElementById('perPage').value = perPage; }
                 if (actor) {
                     document.getElementById('actorSearch').value = actor;
                     actorDisplayName = actor;
                     searchedActor = actor.toLowerCase();
                     updateStatusChips();
-                    fetchDataByActor(searchedActor);
+                    setStatus('Actor query prefilled. Press Search to load results.');
                 }
             } catch { /* ignore */ }
         })();
@@ -3434,8 +3446,8 @@
         bindKeyboardShortcuts();
 
     </script>
-    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-LtrjvnR4Twt/qOuYxE721u19sVFLVSA4hf/rRt6PrZTmiPltdZcI7q7PXQBYTKyf" crossorigin="anonymous"></script>
 </body>
 
 </html>
