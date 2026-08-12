@@ -26,6 +26,12 @@ from utils.backend_capacity import (
 )
 from utils.cache_manager import (
     CacheBackendUnavailable,
+    NEGATIVE_CACHE_TIMEOUT,
+    POINT_MISS_RATE_BUCKET,
+    POINT_MISS_RATE_LIMIT,
+    RATE_LIMIT_WINDOW_SECONDS,
+    UNCACHED_QUERY_RATE_LIMIT,
+    OriginRateLimitExceeded,
     cache_manager,
     kev_cache as cache,
 )
@@ -268,12 +274,23 @@ def recent_vulnerability_cache_prefix(resource):
 
 
 class BaseResource(Resource):
+    """Provide consistent JSON and admission-control responses."""
+
     def handle_error(self, message, status=404):
+        """Return a JSON error response with the requested HTTP status."""
         response = {"message": message}
         return make_response(jsonify(response), status)
 
     def make_json_response(self, data, status=200):
+        """Return JSON data with the requested HTTP status."""
         return make_response(jsonify(data), status)
+
+    def handle_rate_limit(self):
+        """Return the shared point-miss budget response."""
+        response = self.handle_error("Origin rate limit exceeded", 429)
+        response.headers["Retry-After"] = str(RATE_LIMIT_WINDOW_SECONDS)
+        return response
+
 
 # Resource for fectching mitre and nvd data from the cveland via CVE-ID,
 # which is the _id field in the cveland collection
@@ -295,9 +312,9 @@ class cveLandResource(BaseResource):
                   error message if the input parameters are invalid or the
                   vulnerability is not found.
         """
-        # Sanitize the CVE ID first. Fix #179
-        sanitized_cve_id = sanitize_query(cve_id)
-        if sanitized_cve_id is None:
+        try:
+            sanitized_cve_id = normalize_cve_id(cve_id)
+        except ValueError:
             return self.handle_error("Invalid CVE ID", 400)
 
         # Use partial to create a new function that includes the cve_id in the key prefix
@@ -311,6 +328,10 @@ class cveLandResource(BaseResource):
             return self.make_json_response(cached_data)
 
         cache_key = cache_key_func()
+        negative_key = f"negative_{cache_key}"
+        if cache_manager.has_negative(negative_key):
+            return self.handle_error("Vulnerability not found")
+
         with cache_manager.singleflight(cache_key) as acquired:
             if not acquired:
                 return self.handle_error("Backend busy", 503)
@@ -321,6 +342,19 @@ class cveLandResource(BaseResource):
                 return self.handle_error("Cache temporarily unavailable", 503)
             if cached_data is not None:
                 return self.make_json_response(cached_data)
+            if cache_manager.has_negative(negative_key):
+                return self.handle_error("Vulnerability not found")
+
+            try:
+                cache_manager.enforce_rate_limit(
+                    POINT_MISS_RATE_BUCKET,
+                    POINT_MISS_RATE_LIMIT,
+                    RATE_LIMIT_WINDOW_SECONDS,
+                )
+            except OriginRateLimitExceeded:
+                return self.handle_rate_limit()
+            except CacheBackendUnavailable:
+                return self.handle_error("Cache temporarily unavailable", 503)
 
             try:
                 vulnerability = run_backend_tasks(
@@ -338,6 +372,8 @@ class cveLandResource(BaseResource):
                 data = serialize_all_vulnerability(vulnerability)
                 cache_manager.set(cache_key, data, timeout=180)
                 return self.make_json_response(data)
+
+            cache_manager.remember_negative(negative_key)
 
         return self.handle_error("Vulnerability not found")
 
@@ -360,6 +396,9 @@ class cveNVDResource(BaseResource):
         key_prefix="cve_nvd",
         canonical_args=canonical_cve_arguments,
         include_path=False,
+        miss_rate_limit=POINT_MISS_RATE_LIMIT,
+        rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+        negative_timeout=NEGATIVE_CACHE_TIMEOUT,
     )
     def get(self, cve_id):
         """
@@ -407,6 +446,9 @@ class cveMitreResource(BaseResource):
         key_prefix="cve_mitre",
         canonical_args=canonical_cve_arguments,
         include_path=False,
+        miss_rate_limit=POINT_MISS_RATE_LIMIT,
+        rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+        negative_timeout=NEGATIVE_CACHE_TIMEOUT,
     )
     def get(self, cve_id):
         """
@@ -474,9 +516,9 @@ class VulnerabilityResource(BaseResource):
                   error message if the input parameters are invalid or the
                   vulnerability is not found.
         """
-        # Sanitize the input CVE ID
-        sanitized_cve_id = sanitize_query(cve_id)
-        if sanitized_cve_id is None:
+        try:
+            sanitized_cve_id = normalize_cve_id(cve_id)
+        except ValueError:
             return self.handle_error("Invalid CVE ID", 400)
         # Get the 'references' argument and sanitize it
         references_raw = request.args.get('references')
@@ -489,6 +531,8 @@ class VulnerabilityResource(BaseResource):
             vulnerability = self.load_vulnerability(sanitized_cve_id)
         except CacheBackendUnavailable:
             return self.handle_error("Cache temporarily unavailable", 503)
+        except OriginRateLimitExceeded:
+            return self.handle_rate_limit()
         except BackendBusyError:
             return self.handle_error("Backend busy", 503)
         except BackendTimeoutError:
@@ -506,29 +550,43 @@ class VulnerabilityResource(BaseResource):
 
     def load_vulnerability(self, sanitized_cve_id):
         """Load one shared cached record for normal and PoC representations."""
-        cached_data = self.get_cached_data(sanitized_cve_id)
+        cache_key = f"kev_data_{sanitized_cve_id}"
+        negative_key = f"negative_{cache_key}"
+        cached_data = self.get_cached_data(cache_key)
         if cached_data is not None:
             return cached_data
+        if cache_manager.has_negative(negative_key):
+            return None
 
-        with cache_manager.singleflight(sanitized_cve_id) as acquired:
+        with cache_manager.singleflight(cache_key) as acquired:
             if not acquired:
                 raise BackendBusyError("CVE cache fill already in progress")
 
-            cached_data = cache_manager.get(sanitized_cve_id)
+            cached_data = cache_manager.get(cache_key)
             if cached_data is not None:
                 return cached_data
+            if cache_manager.has_negative(negative_key):
+                return None
+
+            cache_manager.enforce_rate_limit(
+                POINT_MISS_RATE_BUCKET,
+                POINT_MISS_RATE_LIMIT,
+                RATE_LIMIT_WINDOW_SECONDS,
+            )
 
             vulnerability = run_backend_tasks(
                 [partial(self.query_vulnerability, sanitized_cve_id)],
                 timeout=GREENLET_TIMEOUT,
             )[0]
             if vulnerability:
-                cache_manager.set(sanitized_cve_id, vulnerability)
+                cache_manager.set(cache_key, vulnerability)
+            else:
+                cache_manager.remember_negative(negative_key)
             return vulnerability
 
-    def get_cached_data(self, sanitized_cve_id):
+    def get_cached_data(self, cache_key):
         """Fetch cached data."""
-        return cache_manager.get(sanitized_cve_id)
+        return cache_manager.get(cache_key)
 
     def query_vulnerability(self, sanitized_cve_id):
         """Query the database for the vulnerability."""
@@ -542,6 +600,8 @@ class AllKevVulnerabilitiesResource(BaseResource):
         query_string=canonical_all_kev_query_items,
         include_path=False,
         cache_if=should_cache_all_kev,
+        uncached_rate_limit=UNCACHED_QUERY_RATE_LIMIT,
+        rate_limit_bucket="all_kev_uncached",
     )
     def get(self):
         """
@@ -771,6 +831,8 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         query_string=canonical_recent_vulnerability_query_items,
         include_path=False,
         cache_if=should_cache_recent_vulnerabilities,
+        uncached_rate_limit=UNCACHED_QUERY_RATE_LIMIT,
+        rate_limit_bucket="recent_vulnerability_uncached",
     )
     def get(self):
         """

@@ -36,6 +36,11 @@ MONGODB_URI_PROD=mongodb://MONGO_PROD_IP:27017/
 MONGODB_URI_DEV=mongodb://localhost:27017/
 PUBLIC_BASE_URL=https://kevin.gtfkd.com
 TRUSTED_HOSTS=kevin.gtfkd.com,localhost,127.0.0.1
+ORIGIN_RATE_LIMIT_WINDOW_SECONDS=1
+UNCACHED_QUERY_RATE_LIMIT=10
+POINT_MISS_RATE_LIMIT=20
+NEGATIVE_CACHE_TIMEOUT=15
+NEGATIVE_CACHE_MAX_ENTRIES=1024
 ```
 
 Feel free to edit the mongodb in use or variable names. I have both in here since I work on prod and dev mongodbs for the hosted version of KEVin at kevin.gtfkd.com/*.
@@ -43,6 +48,13 @@ Feel free to edit the mongodb in use or variable names. I have both in here sinc
 `PUBLIC_BASE_URL` is the canonical public origin used in homepage metadata.
 `TRUSTED_HOSTS` is a comma-separated allowlist for accepted HTTP Host headers;
 include the hostname used by local health checks and reverse proxies.
+
+The origin-admission settings are read once at startup. Redis enforces the
+shared per-window limits across workers: `UNCACHED_QUERY_RATE_LIMIT` covers
+valid list variants outside the bounded cache policy, and
+`POINT_MISS_RATE_LIMIT` covers point-route cache misses. Negative point results
+use `NEGATIVE_CACHE_TIMEOUT`; manual point resources also keep at most
+`NEGATIVE_CACHE_MAX_ENTRIES` short-lived misses in each worker.
 
 **Set up MongoDB:**
 

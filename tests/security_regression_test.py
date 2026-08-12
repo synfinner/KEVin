@@ -3,6 +3,7 @@
 from datetime import datetime
 import importlib
 from pathlib import Path
+import re
 import sys
 import types
 import unittest
@@ -17,6 +18,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import MaxConnectionsError
 
 from utils.rss_feed import create_rss_feed
+from utils.sanitizer import normalize_cve_id
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +32,7 @@ class MemoryRedis:
     def __init__(self):
         """Initialize an empty in-memory Redis value store."""
         self.values = {}
+        self.counters = {}
         self.get_calls = 0
 
     def get(self, key):
@@ -40,6 +43,41 @@ class MemoryRedis:
     def setex(self, key, _timeout, value):
         """Store a byte payload using the Redis setex call shape."""
         self.values[key] = value
+
+    def pipeline(self, transaction=True):
+        """Return a tiny transactional-pipeline test double."""
+        assert transaction is True
+        return MemoryRedisPipeline(self)
+
+
+class MemoryRedisPipeline:
+    """Execute the rate-limit commands used by the cache manager."""
+
+    def __init__(self, redis):
+        """Keep the backing in-memory Redis instance and queued commands."""
+        self.redis = redis
+        self.commands = []
+
+    def incr(self, key):
+        """Queue one atomic counter increment."""
+        self.commands.append(("incr", key, None))
+        return self
+
+    def expire(self, key, seconds):
+        """Queue the expiry shape; test counters are reset between tests."""
+        self.commands.append(("expire", key, seconds))
+        return self
+
+    def execute(self):
+        """Execute queued commands and return Redis-compatible results."""
+        results = []
+        for command, key, _value in self.commands:
+            if command == "incr":
+                self.redis.counters[key] = self.redis.counters.get(key, 0) + 1
+                results.append(self.redis.counters[key])
+            else:
+                results.append(True)
+        return results
 
 
 class ExhaustedRedis:
@@ -1165,9 +1203,148 @@ def test_homepage_rejects_untrusted_hosts_and_uses_public_origin(monkeypatch):
 
     assert untrusted_response.status_code == 400
     assert trusted_response.status_code == 200
+    assert "object-src 'none'" in trusted_response.headers["Content-Security-Policy"]
+    assert trusted_response.headers["X-Content-Type-Options"] == "nosniff"
     homepage = trusted_response.get_data(as_text=True)
     assert 'href="https://kevin.gtfkd.com/"' in homepage
     assert "evil.example" not in homepage
+
+
+def test_uncached_origin_requests_have_a_global_rate_budget(monkeypatch):
+    """Valid cache-bypass variants stop before repeated origin execution."""
+    monkeypatch.setenv("REDIS_IP", "localhost")
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    origin_calls = []
+
+    @cache_module.kev_cache(
+        query_string=lambda: [("search", ["vendor"])],
+        cache_if=lambda _items: False,
+        uncached_rate_limit=1,
+        rate_limit_bucket="test_expensive_query",
+    )
+    def expensive_query():
+        """Record each origin execution that survives cache admission."""
+        origin_calls.append("called")
+        return {"ok": True}
+
+    app = Flask(__name__)
+    app.add_url_rule("/expensive", view_func=expensive_query)
+    client = app.test_client()
+
+    first_response = client.get("/expensive?search=vendor")
+    limited_response = client.get("/expensive?search=vendor")
+
+    assert first_response.status_code == 200
+    assert limited_response.status_code == 429
+    assert limited_response.headers["Retry-After"] == "1"
+    assert origin_calls == ["called"]
+
+
+def test_cve_normalization_rejects_lossy_and_unbounded_identifiers():
+    """CVE canonicalization never repairs malformed attacker input."""
+    assert normalize_cve_id("cve-2026-0001") == "CVE-2026-0001"
+    malformed_values = (
+        "CVE-2026-0001!",
+        "CVE-2026-1",
+        f"CVE-2026-{'1' * 11}",
+        "CVE-1234-1234",
+        "CVE-٢٠٢٦-٠٠٠١",
+    )
+    for malformed_value in malformed_values:
+        with pytest.raises(ValueError):
+            normalize_cve_id(malformed_value)
+
+
+def test_manual_point_routes_reject_malformed_cves_and_cache_misses(monkeypatch):
+    """Manual point resources validate strictly and remember bounded misses."""
+
+    class MissingCollection:
+        """Count point lookups while returning no matching vulnerability."""
+
+        def __init__(self):
+            """Initialize an empty lookup log."""
+            self.find_one_calls = []
+
+        def find_one(self, query):
+            """Record a point lookup and return a miss."""
+            self.find_one_calls.append(query)
+            return None
+
+    missing_collection = MissingCollection()
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = missing_collection
+    fake_database.all_vulns_collection = missing_collection
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(memory_redis),
+    )
+    monkeypatch.setenv("TRUSTED_HOSTS", "localhost")
+    sys.modules.pop("kevin", None)
+    sys.modules.pop("schema.api", None)
+
+    try:
+        kevin_module = importlib.import_module("kevin")
+        api_module = importlib.import_module("schema.api")
+        monkeypatch.setattr(api_module, "POINT_MISS_RATE_LIMIT", 1)
+        client = kevin_module.app.test_client()
+        malformed_response = client.get("/kev/CVE-2026-0001!")
+        first_miss = client.get("/kev/CVE-2026-9999")
+        repeated_miss = client.get("/kev/CVE-2026-9999")
+        distinct_miss = client.get("/kev/CVE-2026-9998")
+    finally:
+        sys.modules.pop("kevin", None)
+        sys.modules.pop("schema.api", None)
+
+    assert malformed_response.status_code == 400
+    assert [first_miss.status_code, repeated_miss.status_code] == [404, 404]
+    assert distinct_miss.status_code == 429
+    assert distinct_miss.headers["Retry-After"] == "1"
+    assert missing_collection.find_one_calls == [{"cveID": "CVE-2026-9999"}]
+
+
+def test_graph_query_state_cannot_start_an_unbounded_request_loop():
+    """URL state only prefills graph controls and automatic paging is capped."""
+    source = (ROOT / "static" / "cve_visualization.html").read_text()
+    init_start = source.index("function initFromQuery")
+    init_end = source.index("updateGraphSnapshot([], []);", init_start)
+    init_block = source[init_start:init_end]
+
+    assert "const MAX_AUTOMATIC_PAGES = 10;" in source
+    assert "fetchDataByActor(searchedActor)" not in init_block
+    assert "Math.min(totalPages, MAX_AUTOMATIC_PAGES)" in source
+    assert "Math.max(25, Math.min(100, p))" in init_block
+
+
+def test_external_scripts_are_integrity_pinned_and_csp_is_enabled():
+    """Every cross-origin script is byte-pinned and Flask emits a CSP."""
+    html_paths = (
+        ROOT / "templates" / "example.html",
+        ROOT / "static" / "viz.html",
+        ROOT / "static" / "cve_visualization.html",
+    )
+    script_pattern = re.compile(r"<script\s+[^>]*src=\"https://[^>]+>")
+
+    external_scripts = []
+    for html_path in html_paths:
+        external_scripts.extend(script_pattern.findall(html_path.read_text()))
+
+    assert external_scripts
+    assert all('integrity="sha384-' in tag for tag in external_scripts)
+    assert all('crossorigin="anonymous"' in tag for tag in external_scripts)
+
+    source = (ROOT / "kevin.py").read_text()
+    assert "Content-Security-Policy" in source
+    assert "object-src 'none'" in source
 
 
 def test_kevin_routes_use_bounded_backend_admission():

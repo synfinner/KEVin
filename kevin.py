@@ -23,7 +23,12 @@ from utils.backend_capacity import (
     BackendTimeoutError,
     run_backend_tasks,
 )
-from utils.cache_manager import kev_cache as cache 
+from utils.cache_manager import (
+    NEGATIVE_CACHE_TIMEOUT,
+    POINT_MISS_RATE_BUCKET,
+    POINT_MISS_RATE_LIMIT,
+    kev_cache as cache,
+)
 from utils.sanitizer import (
     canonical_cve_arguments,
     normalize_cve_id,
@@ -89,6 +94,29 @@ def reject_untrusted_host():
     if hostname not in TRUSTED_HOSTS:
         return jsonify({"error": "Untrusted Host header"}), 400
     return None
+
+
+@app.after_request
+def add_browser_security_headers(response):
+    """Constrain browser content sources and common MIME-sniffing behavior."""
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://code.jquery.com "
+        "https://cdn.jsdelivr.net https://maxcdn.bootstrapcdn.com "
+        "https://cdn.datatables.net; "
+        "style-src 'self' 'unsafe-inline' https://maxcdn.bootstrapcdn.com "
+        "https://cdn.datatables.net https://cdnjs.cloudflare.com "
+        "https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com "
+        "https://cdnjs.cloudflare.com; "
+        "img-src 'self' data:; connect-src 'self'; object-src 'none'; "
+        "base-uri 'self'; frame-ancestors 'none'",
+    )
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
 
 # Route for the root endpoint ("/")
 @app.route("/")
@@ -299,6 +327,9 @@ def lookup_one(database_collection, query):
     key_prefix="cve_exist",
     query_string=canonical_cve_query_items,
     include_path=False,
+    miss_rate_limit=POINT_MISS_RATE_LIMIT,
+    rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+    negative_timeout=NEGATIVE_CACHE_TIMEOUT,
 )
 def cve_exist():
     """
@@ -340,6 +371,9 @@ def cve_exist():
     key_prefix="vulnerability_report",
     canonical_args=canonical_cve_arguments,
     include_path=False,
+    miss_rate_limit=POINT_MISS_RATE_LIMIT,
+    rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+    negative_timeout=NEGATIVE_CACHE_TIMEOUT,
 )
 def vulnerability_report(cve_id):
     """
@@ -409,6 +443,9 @@ def not_found(e):
     key_prefix="openai_kev",
     query_string=canonical_cve_query_items,
     include_path=False,
+    miss_rate_limit=POINT_MISS_RATE_LIMIT,
+    rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+    negative_timeout=NEGATIVE_CACHE_TIMEOUT,
 )
 def openai_kev():
     """
@@ -455,6 +492,9 @@ def openai_kev():
     key_prefix="openai_vuln",
     query_string=canonical_cve_query_items,
     include_path=False,
+    miss_rate_limit=POINT_MISS_RATE_LIMIT,
+    rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+    negative_timeout=NEGATIVE_CACHE_TIMEOUT,
 )
 def openai_vuln():
     """
