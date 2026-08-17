@@ -27,7 +27,7 @@ pluggy==1.6.0
 pymongo==4.17.0
 pytest==9.1.1
 python-dateutil==2.9.0.post0
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 python-snappy==0.7.3
 pytz==2026.3.post1
 redis==8.1.0
