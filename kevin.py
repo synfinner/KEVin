@@ -55,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 # Timeout (seconds) for greenlet joins to avoid request hangs
 GREENLET_TIMEOUT = int(os.environ.get("GREENLET_TIMEOUT", "10"))
+MONGO_QUERY_MAX_TIME_MS = max(100, int(os.environ.get("MONGO_QUERY_MAX_TIME_MS", "5000")))
 
 # Load environment variables using python-dotenv
 load_dotenv()
@@ -238,7 +239,12 @@ def user_agreement():
     return send_from_directory(app.static_folder, 'agreement.html', mimetype='text/html')
 
 @app.route("/rss")
-@cache(timeout=1800, key_prefix='rss_feed')  # 30 minute cache for the RSS feed.
+@cache(
+    timeout=1800,
+    key_prefix='rss_feed',
+    miss_rate_limit=POINT_MISS_RATE_LIMIT,
+    rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+)  # 30 minute cache for the RSS feed.
 def rss_feed():
     """
     Serve the RSS feed.
@@ -248,8 +254,27 @@ def rss_feed():
     feed as a response. The response is cached for 30 minutes to reduce
     server load.
     """
-    # Fetch recent KEV Entries from the MongoDB collection
-    recent_entries = collection.find().sort("dateAdded", -1).limit(12)
+    def fetch_recent_entries():
+        cursor = (
+            collection.find()
+            .sort("dateAdded", -1)
+            .limit(12)
+            .max_time_ms(MONGO_QUERY_MAX_TIME_MS)
+        )
+        return list(cursor)
+
+    try:
+        recent_entries = run_backend_tasks(
+            [fetch_recent_entries],
+            timeout=GREENLET_TIMEOUT,
+        )[0]
+    except BackendBusyError:
+        return jsonify({"error": "Backend busy"}), 503
+    except BackendTimeoutError:
+        return jsonify({"error": "Backend timeout"}), 504
+    except PyMongoError:
+        return jsonify({"error": "Backend unavailable"}), 503
+
     # Create an RSS feed from the recent KEV Entries
     rss_feed = create_rss_feed(recent_entries)
     return Response(rss_feed, mimetype='application/rss+xml')
@@ -257,7 +282,11 @@ def rss_feed():
 
 # Route for the metrics page ("/get_metrics")
 @app.route('/get_metrics')
-@cache(timeout=1800) # 30 minute cache for the metrics route.
+@cache(
+    timeout=1800,
+    miss_rate_limit=POINT_MISS_RATE_LIMIT,
+    rate_limit_bucket=POINT_MISS_RATE_BUCKET,
+) # 30 minute cache for the metrics route.
 def get_metrics():
     """
     Retrieve metrics for the KEV and CVE databases.
@@ -271,7 +300,7 @@ def get_metrics():
     """
     # Use Gevent to spawn greenlets for counting documents
     def count_kevs():
-        return collection.count_documents({})
+        return collection.estimated_document_count()
 
     def count_cves():
         return all_vulns_collection.estimated_document_count()
