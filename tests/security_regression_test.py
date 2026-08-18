@@ -1764,6 +1764,7 @@ def test_fill_lock_release_requires_matching_owner():
     manager = cache_module.CacheManager(memory_redis)
 
     first_owner = manager._acquire_fill_lock("cve_data_one")
+    assert len(bytes.fromhex(first_owner)) == cache_module.SECURE_RANDOM_BYTES
     second_owner = "ffffffffffffffffffffffffffffffff"
     memory_redis.values[manager._fill_lock_key("cve_data_one")] = second_owner
     manager._release_fill_lock("cve_data_one", first_owner)

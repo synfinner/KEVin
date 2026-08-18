@@ -48,6 +48,8 @@ NEGATIVE_CACHE_MAX_ENTRIES = max(
     int(os.getenv("NEGATIVE_CACHE_MAX_ENTRIES", "1024")),
 )
 POINT_MISS_RATE_BUCKET = "cve_point_miss"
+# Default minimum entropy for tokens and lock owners (16 bytes).
+SECURE_RANDOM_BYTES = 16
 NEGATIVE_CACHE_MARKER = {"kevin_negative": True}
 FILL_LOCK_SECONDS = max(
     1,
@@ -299,7 +301,7 @@ class CacheManager:
         """Acquire a cluster-wide fill lock or fail closed if Redis is down."""
         self._ensure_backend_available()
         lock_key = self._fill_lock_key(key)
-        owner = secrets.token_hex(16)
+        owner = secrets.token_hex(SECURE_RANDOM_BYTES)
         try:
             acquired = self.redis_client.set(
                 lock_key,

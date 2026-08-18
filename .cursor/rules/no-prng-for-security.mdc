@@ -7,21 +7,22 @@ alwaysApply: true
 
 If code needs randomness, use a cryptographically secure generator: Python `secrets` or `os.urandom`. Nothing else.
 
-Never use `random`, `randrange`, `randint`, `numpy.random`, or `Math.random` for tokens, nonces, lock owners, session IDs, cache TTL jitter, or anything an attacker should not be able to predict.
+Tokens, nonces, lock owners, and session IDs must have **at least 128 bits** of entropy (`secrets.token_bytes(16)`, `secrets.token_hex(16)`, or `os.urandom(16)`). Do not go smaller.
 
-Do not invent a substitute (hash the key, stir the clock, seed `random` yourself). That is still not a vetted RNG.
+Never use `random`, `randrange`, `randint`, `numpy.random`, or `Math.random`. Do not invent a substitute (hash the key, stir the clock, seed `random` yourself).
+
+Bounded operational draws (for example TTL jitter in `[0, spread]`) may use `secrets.randbelow` without padding to 128 bits.
 
 ```python
 # ❌ BAD — predictable PRNG (Bandit B311)
 import random
-owner = hex(random.getrandbits(128))
-timeout = 120 + int(12 * random.random())
+owner = hex(random.getrandbits(64))
 
 # ❌ BAD — homemade "randomness"
-timeout = 120 + hashlib.sha256(key.encode()).digest()[0] % 12
+owner = hashlib.sha256(key.encode()).hexdigest()[:16]
 
-# ✅ GOOD — secrets / os.urandom
+# ✅ GOOD — 128-bit minimum for identifiers
 import secrets
 owner = secrets.token_hex(16)
-timeout = 120 + secrets.randbelow(13)
+nonce = os.urandom(16)
 ```
