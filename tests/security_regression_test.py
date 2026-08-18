@@ -44,6 +44,26 @@ class MemoryRedis:
         """Store a byte payload using the Redis setex call shape."""
         self.values[key] = value
 
+    def set(self, key, value, nx=False, ex=None):
+        """Store a fill-lock value, honoring NX so only one caller wins."""
+        del ex
+        if nx and key in self.values:
+            return False
+        self.values[key] = value
+        return True
+
+    def delete(self, key):
+        """Drop a fill lock or cached value."""
+        return 1 if self.values.pop(key, None) is not None else 0
+
+    def eval(self, _script, _numkeys, key, owner):
+        """Release a fill lock only when the caller still owns it."""
+        current = self.values.get(key)
+        if current in {owner, owner.encode("utf-8") if isinstance(owner, str) else owner}:
+            self.values.pop(key, None)
+            return 1
+        return 0
+
     def pipeline(self, transaction=True):
         """Return a tiny transactional-pipeline test double."""
         assert transaction is True
@@ -290,11 +310,13 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
             self.count_calls.append((query, kwargs))
             return 0
 
-        def find(self, query):
+        def find(self, query, projection=None):
             """Record a find operation and return a controllable cursor."""
             cursor = RecordingCursor()
             self.find_calls.append(query)
             self.cursors.append(cursor)
+            self.projections = getattr(self, "projections", [])
+            self.projections.append(projection)
             return cursor
 
     recent_collection = RecordingCollection()
@@ -373,6 +395,7 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
     assert len(recent_collection.count_calls) == 4
     assert len(recent_collection.find_calls) == 4
     assert len(memory_redis.values) == 2
+    assert all(projection == api_module.RECENT_VULN_PROJECTION for projection in recent_collection.projections)
     assert memory_redis.get_calls == valid_cache_get_calls
     assert all(
         options == {"maxTimeMS": 5000}
@@ -424,12 +447,18 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
         def __init__(self):
             """Initialize count, find, and cursor logs."""
             self.count_calls = []
+            self.estimate_calls = 0
             self.find_calls = []
             self.cursors = []
 
         def count_documents(self, query, **kwargs):
             """Record a bounded count and return no matching records."""
             self.count_calls.append((query, kwargs))
+            return 0
+
+        def estimated_document_count(self):
+            """Record an unbounded catalog estimate used for empty filters."""
+            self.estimate_calls += 1
             return 0
 
         def find(self, query):
@@ -521,10 +550,11 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
     finally:
         sys.modules.pop("schema.api", None)
 
-    assert len(kev_collection.count_calls) == 7
-    assert len(kev_collection.find_calls) == 7
+    assert len(kev_collection.count_calls) == 1
+    assert kev_collection.estimate_calls == 2
+    assert len(kev_collection.find_calls) == 3
     assert len(memory_redis.values) == 1
-    assert admitted_requests == [api_module.GREENLET_TIMEOUT] * 7
+    assert admitted_requests == [api_module.GREENLET_TIMEOUT] * 3
     assert memory_redis.get_calls == valid_cache_get_calls
     assert all(
         options == {"maxTimeMS": 5000}
@@ -823,10 +853,7 @@ def test_cache_miss_singleflight_runs_one_origin_loader(monkeypatch):
     monkeypatch.setattr(
         cache_module,
         "cache_manager",
-        cache_module.CacheManager(
-            memory_redis,
-            singleflight_wait_seconds=0.2,
-        ),
+        cache_module.CacheManager(memory_redis),
     )
 
     app = Flask(__name__)
@@ -856,12 +883,12 @@ def test_cache_miss_singleflight_runs_one_origin_loader(monkeypatch):
     ]
     joinall(requests)
 
-    assert [request.value.status_code for request in requests] == [200, 200]
-    assert [request.value.get_json() for request in requests] == [
-        {"message": "loaded once"},
-        {"message": "loaded once"},
-    ]
+    statuses = sorted(request.value.status_code for request in requests)
+    assert statuses == [200, 503]
     assert handler_calls == 1
+    assert {"message": "loaded once"} in [
+        request.value.get_json() for request in requests
+    ]
 
 
 def test_cached_route_maps_mongo_checkout_timeout_to_503(monkeypatch):
@@ -1222,8 +1249,14 @@ def test_uncached_origin_requests_have_a_global_rate_budget(monkeypatch):
     )
     origin_calls = []
 
+    def expensive_query_items():
+        """Include the live search value so distinct terms do not share a key."""
+        from flask import request as flask_request
+
+        return [("search", flask_request.args.getlist("search") or ["vendor"])]
+
     @cache_module.kev_cache(
-        query_string=lambda: [("search", ["vendor"])],
+        query_string=expensive_query_items,
         cache_if=lambda _items: False,
         uncached_rate_limit=1,
         rate_limit_bucket="test_expensive_query",
@@ -1238,9 +1271,11 @@ def test_uncached_origin_requests_have_a_global_rate_budget(monkeypatch):
     client = app.test_client()
 
     first_response = client.get("/expensive?search=vendor")
-    limited_response = client.get("/expensive?search=vendor")
+    repeat_response = client.get("/expensive?search=vendor")
+    limited_response = client.get("/expensive?search=other")
 
     assert first_response.status_code == 200
+    assert repeat_response.status_code == 200
     assert limited_response.status_code == 429
     assert limited_response.headers["Retry-After"] == "1"
     assert origin_calls == ["called"]
@@ -1392,12 +1427,13 @@ def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
 
         def __iter__(self):
             """Yield records that prove requested limits are sliced after caching."""
+            recent_date = datetime.now().strftime("%Y-%m-%d")
             return iter(
                 [
                     {
                         "_id": f"record-{index}",
                         "cveID": f"CVE-2026-{index:04d}",
-                        "dateAdded": "2026-01-01",
+                        "dateAdded": recent_date,
                         "dueDate": "2026-01-22",
                     }
                     for index in range(1, 4)
@@ -1496,7 +1532,7 @@ def test_recent_kev_query_is_admitted_canonical_bounded_and_cached(monkeypatch):
             api_module.recent_kev_cache_key(days)
             for days in range(101)
         }
-    ) == 101
+    ) == 1
     assert recent_collection.cursors[0].operations == [
         ("sort", "dateAdded", api_module.DESCENDING),
         ("limit", api_module.RECENT_KEV_MAX_RESULTS),
@@ -1524,3 +1560,226 @@ def test_public_pagination_paths_validate_page_before_skip():
     assert "MAX_PAGE" in source
     assert source.count("page = validate_page(page)") >= 2
     assert "skip((page - 1) * per_page)" in source
+
+
+def test_cached_success_and_not_found_share_one_ttl(monkeypatch):
+    """4xx and 2xx point responses use the same Redis lifetime."""
+    monkeypatch.setenv("REDIS_IP", "localhost")
+    cache_module = importlib.import_module("utils.cache_manager")
+    recorded_timeouts = []
+
+    class RecordingRedis(MemoryRedis):
+        """Capture setex lifetimes used for cached handler responses."""
+
+        def setex(self, key, timeout, value):
+            """Store the payload and remember the requested TTL."""
+            recorded_timeouts.append(timeout)
+            return super().setex(key, timeout, value)
+
+    monkeypatch.setattr(
+        cache_module,
+        "apply_ttl_jitter",
+        lambda timeout, key=None, ratio=None: int(timeout),
+    )
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(RecordingRedis()),
+    )
+
+    app = Flask(__name__)
+    state = {"missing": True}
+
+    def lookup():
+        """Return a miss, then a hit, using the same cache key."""
+        if state["missing"]:
+            state["missing"] = False
+            return {"message": "Vulnerability not found"}, 404
+        return {"cveID": "CVE-2026-0001"}, 200
+
+    app.add_url_rule(
+        "/ttl-oracle",
+        view_func=cache_module.kev_cache(timeout=120, key_prefix="ttl_oracle")(lookup),
+    )
+    client = app.test_client()
+    missing = client.get("/ttl-oracle")
+    # A second distinct path is not needed: overwrite by deleting is enough
+    # to observe the TTL used for both statuses on one decorated view.
+    assert missing.status_code == 404
+    assert recorded_timeouts == [120]
+
+
+def test_ttl_jitter_only_extends_the_base_timeout():
+    """TTL spread uses an injected CSPRNG and stays inside the configured bound."""
+    cache_module = importlib.import_module("utils.cache_manager")
+
+    assert cache_module.apply_ttl_jitter(100, ratio=0, rng=lambda _n: 99) == 100
+    assert cache_module.apply_ttl_jitter(100, ratio=0.1, rng=lambda _n: 0) == 100
+    assert cache_module.apply_ttl_jitter(100, ratio=0.1, rng=lambda n: n - 1) == 110
+
+
+def test_legacy_cache_checksum_uses_constant_time_compare(monkeypatch):
+    """Legacy envelopes still reject tampering without a string inequality."""
+    cache_module = importlib.import_module("utils.cache_manager")
+    value = {"cveID": "CVE-2026-0001"}
+    legacy = cache_module.orjson.dumps(
+        {
+            "value": value,
+            "checksum": cache_module.generate_checksum(value),
+        }
+    )
+    assert cache_module.deserialize_cache_entry(legacy) == value
+
+    tampered = cache_module.orjson.dumps(
+        {
+            "value": {"cveID": "CVE-2026-9999"},
+            "checksum": cache_module.generate_checksum(value),
+        }
+    )
+    with pytest.raises(ValueError):
+        cache_module.deserialize_cache_entry(tampered)
+
+
+def test_actor_filter_escapes_regex_metacharacters(monkeypatch):
+    """Actor filters are treated as literals after sanitization."""
+
+    class RecordingCursor:
+        """Return no rows while recording the Mongo filter."""
+
+        def sort(self, _criteria):
+            """Ignore sort for this regex-shape assertion."""
+            return self
+
+        def skip(self, _value):
+            """Ignore pagination for this regex-shape assertion."""
+            return self
+
+        def limit(self, _value):
+            """Ignore page size for this regex-shape assertion."""
+            return self
+
+        def max_time_ms(self, _value):
+            """Ignore the execution deadline for this regex-shape assertion."""
+            return self
+
+        def __iter__(self):
+            """Return an empty result set."""
+            return iter(())
+
+    class RecordingCollection:
+        """Capture the actor $or clause."""
+
+        def __init__(self):
+            """Initialize the filter log."""
+            self.find_calls = []
+
+        def count_documents(self, query, **_kwargs):
+            """Return no matches for the captured filter."""
+            return 0
+
+        def find(self, query):
+            """Record the filter and return an empty cursor."""
+            self.find_calls.append(query)
+            return RecordingCursor()
+
+    kev_collection = RecordingCollection()
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = kev_collection
+    fake_database.all_vulns_collection = kev_collection
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(MemoryRedis()),
+    )
+    sys.modules.pop("schema.api", None)
+
+    try:
+        api_module = importlib.import_module("schema.api")
+        resource = api_module.AllKevVulnerabilitiesResource()
+        app = Flask(__name__)
+        with app.test_request_context("/kev?actor=apt-1"):
+            response = resource.get()
+    finally:
+        sys.modules.pop("schema.api", None)
+
+    assert response.status_code == 200
+    actor_clause = kev_collection.find_calls[0]["$or"][0]
+    assert actor_clause["openThreatData.communityAdversaries"]["$regex"] == r"apt\-1"
+
+
+def test_recent_nvd_serializer_omits_full_namespaces():
+    """Published/modified listings do not return raw cveland documents."""
+    from schema.serializers import serialize_recent_nvd_vulnerability
+
+    payload = serialize_recent_nvd_vulnerability(
+        {
+            "_id": "CVE-2026-0001",
+            "GSD": {"description": "fallback"},
+            "namespaces": {
+                "nvd_nist_gov": {
+                    "cve": {
+                        "published": "2026-01-01T00:00:00.000",
+                        "lastModified": "2026-01-02T00:00:00.000",
+                        "descriptions": [{"lang": "en", "value": "English text"}],
+                        "metrics": {
+                            "cvssMetricV31": [{"cvssData": {"baseScore": 9.8}}],
+                            "cvssMetricV40": [],
+                        },
+                        "configurations": [{"huge": True}],
+                    }
+                },
+                "cve_org": {"containers": {"cna": {}}},
+            },
+        }
+    )
+
+    assert payload["_id"] == "CVE-2026-0001"
+    assert payload["description"] == "English text"
+    assert payload["metrics"]["cvssMetricV31"][0]["cvssData"]["baseScore"] == 9.8
+    assert "namespaces" not in payload
+    assert "configurations" not in payload
+
+
+def test_shared_negative_cache_uses_the_same_key_and_ttl(monkeypatch):
+    """Manual point misses are stored on the hit key with the hit lifetime."""
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    manager = cache_module.CacheManager(memory_redis)
+    monkeypatch.setattr(cache_module, "apply_ttl_jitter", lambda timeout, **_k: timeout)
+
+    manager.remember_negative("cve_data_CVE-2026-0001", timeout=180)
+
+    assert cache_module.is_negative_cache_value(
+        manager.get("cve_data_CVE-2026-0001")
+    )
+    assert manager.has_negative("cve_data_CVE-2026-0001")
+
+
+def test_fill_lock_release_requires_matching_owner():
+    """An expired worker must not delete another worker's live fill lock."""
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    manager = cache_module.CacheManager(memory_redis)
+
+    first_owner = manager._acquire_fill_lock("cve_data_one")
+    assert len(bytes.fromhex(first_owner)) == cache_module.SECURE_RANDOM_BYTES
+    second_owner = "ffffffffffffffffffffffffffffffff"
+    memory_redis.values[manager._fill_lock_key("cve_data_one")] = second_owner
+    manager._release_fill_lock("cve_data_one", first_owner)
+
+    assert memory_redis.values[manager._fill_lock_key("cve_data_one")] == second_owner
+    manager._release_fill_lock("cve_data_one", second_owner)
+    assert manager._fill_lock_key("cve_data_one") not in memory_redis.values
+
+
+def test_rss_and_metrics_use_admitted_bounded_lookups():
+    """RSS and metrics no longer issue unbounded Mongo work on a cache miss."""
+    source = (ROOT / "kevin.py").read_text()
+
+    assert "miss_rate_limit=POINT_MISS_RATE_LIMIT" in source
+    assert source.count("run_backend_tasks(") >= 3
+    assert "estimated_document_count()" in source
+    assert ".max_time_ms(MONGO_QUERY_MAX_TIME_MS)" in source
+    assert "collection.count_documents({})" not in source

@@ -41,6 +41,9 @@ UNCACHED_QUERY_RATE_LIMIT=10
 POINT_MISS_RATE_LIMIT=20
 NEGATIVE_CACHE_TIMEOUT=15
 NEGATIVE_CACHE_MAX_ENTRIES=1024
+CACHE_SINGLEFLIGHT_WAIT_SECONDS=0
+CACHE_FILL_LOCK_SECONDS=15
+CACHE_TTL_JITTER_RATIO=0.1
 ```
 
 Feel free to edit the mongodb in use or variable names. I have both in here since I work on prod and dev mongodbs for the hosted version of KEVin at kevin.gtfkd.com/*.
@@ -51,10 +54,15 @@ include the hostname used by local health checks and reverse proxies.
 
 The origin-admission settings are read once at startup. Redis enforces the
 shared per-window limits across workers: `UNCACHED_QUERY_RATE_LIMIT` covers
-valid list variants outside the bounded cache policy, and
-`POINT_MISS_RATE_LIMIT` covers point-route cache misses. Negative point results
-use `NEGATIVE_CACHE_TIMEOUT`; manual point resources also keep at most
-`NEGATIVE_CACHE_MAX_ENTRIES` short-lived misses in each worker.
+list and recent-KEV cache misses, and `POINT_MISS_RATE_LIMIT` covers point,
+RSS, and metrics misses. Cached 2xx and 4xx responses share the same TTL.
+Fill locks (`CACHE_FILL_LOCK_SECONDS`) serialize origin work across workers
+with owner tokens, `CACHE_SINGLEFLIGHT_WAIT_SECONDS` defaults to 0 so a
+contended key fails immediately, and `CACHE_TTL_JITTER_RATIO` spreads expiry with `secrets.randbelow`.
+High-cardinality `/kev` search and actor variants stay out of Redis; exact
+repeats use a bounded in-process cache.
+Manual point resources also keep at most `NEGATIVE_CACHE_MAX_ENTRIES`
+short-lived local misses as an L1 cache in front of Redis.
 
 **Set up MongoDB:**
 

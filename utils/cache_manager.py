@@ -9,6 +9,7 @@ import hmac
 import logging
 import os
 import re
+import secrets
 import threading
 import time
 
@@ -47,6 +48,31 @@ NEGATIVE_CACHE_MAX_ENTRIES = max(
     int(os.getenv("NEGATIVE_CACHE_MAX_ENTRIES", "1024")),
 )
 POINT_MISS_RATE_BUCKET = "cve_point_miss"
+# Default minimum entropy for tokens and lock owners (16 bytes).
+SECURE_RANDOM_BYTES = 16
+NEGATIVE_CACHE_MARKER = {"kevin_negative": True}
+FILL_LOCK_SECONDS = max(
+    1,
+    int(os.getenv("CACHE_FILL_LOCK_SECONDS", "15")),
+)
+CACHE_TTL_JITTER_RATIO = max(
+    0.0,
+    float(os.getenv("CACHE_TTL_JITTER_RATIO", "0.1")),
+)
+LOCAL_REPEAT_CACHE_MAX_ENTRIES = max(
+    1,
+    int(os.getenv("LOCAL_REPEAT_CACHE_MAX_ENTRIES", "64")),
+)
+LOCAL_REPEAT_CACHE_TTL = max(
+    1,
+    int(os.getenv("LOCAL_REPEAT_CACHE_TTL", "30")),
+)
+FILL_LOCK_RELEASE_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
 
 
 class CacheBackendUnavailable(RuntimeError):
@@ -55,6 +81,25 @@ class CacheBackendUnavailable(RuntimeError):
 
 class OriginRateLimitExceeded(RuntimeError):
     """Signal that a shared origin-work budget has been exhausted."""
+
+
+def is_negative_cache_value(value):
+    """Return whether a cache payload represents a shared, stored miss."""
+    return isinstance(value, dict) and value.get("kevin_negative") is True
+
+
+def apply_ttl_jitter(timeout, key=None, ratio=None, rng=None):
+    """Add a CSPRNG-bounded positive spread to a cache TTL."""
+    del key
+    timeout = max(1, int(timeout))
+    jitter_ratio = (
+        CACHE_TTL_JITTER_RATIO if ratio is None else max(0.0, float(ratio))
+    )
+    if jitter_ratio <= 0:
+        return timeout
+    spread = max(1, int(timeout * jitter_ratio))
+    sample = secrets.randbelow if rng is None else rng
+    return timeout + int(sample(spread + 1))
 
 
 class _SingleflightEntry:
@@ -180,7 +225,11 @@ def deserialize_cache_entry(cached_data):
     legacy_entry = orjson.loads(cached_data)
     value = legacy_entry.get("value")
     stored_checksum = legacy_entry.get("checksum")
-    if generate_checksum(value) != stored_checksum:
+    generated_checksum = generate_checksum(value)
+    if not isinstance(stored_checksum, str) or not hmac.compare_digest(
+        generated_checksum,
+        stored_checksum,
+    ):
         raise ValueError("Cache integrity check failed.")
     return value
 
@@ -204,10 +253,11 @@ class CacheManager:
             else max(0.0, float(circuit_breaker_seconds))
         )
         self.singleflight_wait_seconds = (
-            float(os.getenv("CACHE_SINGLEFLIGHT_WAIT_SECONDS", "0.25"))
+            float(os.getenv("CACHE_SINGLEFLIGHT_WAIT_SECONDS", "0"))
             if singleflight_wait_seconds is None
             else max(0.0, float(singleflight_wait_seconds))
         )
+        self.fill_lock_seconds = FILL_LOCK_SECONDS
         self._time = time.monotonic if time_func is None else time_func
         self._wall_time = time.time if wall_time_func is None else wall_time_func
         self._unavailable_until = 0.0
@@ -225,6 +275,10 @@ class CacheManager:
         )
         self._negative_entries = OrderedDict()
         self._negative_guard = threading.Lock()
+        self.local_repeat_ttl = LOCAL_REPEAT_CACHE_TTL
+        self.local_repeat_max_entries = LOCAL_REPEAT_CACHE_MAX_ENTRIES
+        self._local_repeat_entries = OrderedDict()
+        self._local_repeat_guard = threading.Lock()
 
     def _ensure_backend_available(self):
         """Fail fast while the Redis failure circuit remains open."""
@@ -239,9 +293,47 @@ class CacheManager:
         """Close the Redis failure circuit after a successful command."""
         self._unavailable_until = 0.0
 
+    def _fill_lock_key(self, key):
+        """Return the Redis lock key that serializes one origin fill."""
+        return sanitize_cache_key(f"fill_{normalize_cache_key_prefix(key)}")
+
+    def _acquire_fill_lock(self, key):
+        """Acquire a cluster-wide fill lock or fail closed if Redis is down."""
+        self._ensure_backend_available()
+        lock_key = self._fill_lock_key(key)
+        owner = secrets.token_hex(SECURE_RANDOM_BYTES)
+        try:
+            acquired = self.redis_client.set(
+                lock_key,
+                owner,
+                nx=True,
+                ex=self.fill_lock_seconds,
+            )
+        except RedisError as exc:
+            self._mark_backend_unavailable()
+            raise CacheBackendUnavailable("Redis fill lock failed") from exc
+        self._mark_backend_available()
+        return owner if acquired else None
+
+    def _release_fill_lock(self, key, owner):
+        """Delete the fill lock only when this caller still owns it."""
+        if not owner:
+            return
+        try:
+            self._ensure_backend_available()
+            self.redis_client.eval(
+                FILL_LOCK_RELEASE_SCRIPT,
+                1,
+                self._fill_lock_key(key),
+                owner,
+            )
+            self._mark_backend_available()
+        except (RedisError, CacheBackendUnavailable):
+            return
+
     @contextmanager
-    def singleflight(self, key, wait_seconds=None):
-        """Yield whether this request acquired the bounded fill slot for key."""
+    def singleflight(self, key, wait_seconds=None, use_redis_lock=True):
+        """Yield whether this request acquired the local and Redis fill slots."""
         with self._singleflight_guard:
             entry = self._singleflight_entries.get(key)
             if entry is None:
@@ -255,9 +347,16 @@ class CacheManager:
             else max(0.0, float(wait_seconds))
         )
         acquired = entry.lock.acquire(timeout=wait_timeout)
+        lock_owner = None
         try:
-            yield acquired
+            if acquired and use_redis_lock:
+                lock_owner = self._acquire_fill_lock(key)
+                yield lock_owner is not None
+            else:
+                yield acquired
         finally:
+            if lock_owner is not None:
+                self._release_fill_lock(key, lock_owner)
             if acquired:
                 entry.lock.release()
             with self._singleflight_guard:
@@ -300,31 +399,74 @@ class CacheManager:
             )
 
     def has_negative(self, key):
-        """Return whether a bounded local miss entry remains active."""
+        """Return whether a shared or local miss entry remains active."""
         safe_key = sanitize_cache_key(key)
         now = self._time()
         with self._negative_guard:
             self._prune_negative_entries(now)
             expires_at = self._negative_entries.get(safe_key)
-            if expires_at is None or expires_at <= now:
-                self._negative_entries.pop(safe_key, None)
-                return False
-            self._negative_entries.move_to_end(safe_key)
-            return True
+            if expires_at is not None and expires_at > now:
+                self._negative_entries.move_to_end(safe_key)
+                return True
+            self._negative_entries.pop(safe_key, None)
 
-    def remember_negative(self, key):
-        """Remember one miss without allowing attacker-controlled memory growth."""
-        if self.negative_cache_ttl <= 0:
+        try:
+            return is_negative_cache_value(self.get(safe_key))
+        except CacheBackendUnavailable:
+            return False
+
+    def remember_negative(self, key, timeout=None):
+        """Remember one miss in Redis and a bounded local LRU."""
+        ttl = (
+            self.negative_cache_ttl
+            if timeout is None
+            else max(1, int(timeout))
+        )
+        if ttl <= 0:
             return
 
         safe_key = sanitize_cache_key(key)
         now = self._time()
         with self._negative_guard:
             self._prune_negative_entries(now)
-            self._negative_entries[safe_key] = now + self.negative_cache_ttl
+            self._negative_entries[safe_key] = now + ttl
             self._negative_entries.move_to_end(safe_key)
             while len(self._negative_entries) > self.negative_cache_max_entries:
                 self._negative_entries.popitem(last=False)
+        self.set(safe_key, NEGATIVE_CACHE_MARKER, timeout=ttl)
+
+    def get_local_repeat(self, key):
+        """Return a bounded in-process repeat of an uncached origin response."""
+        safe_key = sanitize_cache_key(key)
+        now = self._time()
+        with self._local_repeat_guard:
+            expires_at = self._local_repeat_entries.get(safe_key)
+            if expires_at is None:
+                return None
+            expires, value = expires_at
+            if expires <= now:
+                self._local_repeat_entries.pop(safe_key, None)
+                return None
+            self._local_repeat_entries.move_to_end(safe_key)
+            return value
+
+    def remember_local_repeat(self, key, value, timeout=None):
+        """Remember one uncached response without writing a Redis key."""
+        ttl = self.local_repeat_ttl if timeout is None else max(1, int(timeout))
+        safe_key = sanitize_cache_key(key)
+        now = self._time()
+        with self._local_repeat_guard:
+            expired = [
+                stored_key
+                for stored_key, (expires_at, _value) in self._local_repeat_entries.items()
+                if expires_at <= now
+            ]
+            for stored_key in expired:
+                self._local_repeat_entries.pop(stored_key, None)
+            self._local_repeat_entries[safe_key] = (now + ttl, value)
+            self._local_repeat_entries.move_to_end(safe_key)
+            while len(self._local_repeat_entries) > self.local_repeat_max_entries:
+                self._local_repeat_entries.popitem(last=False)
 
     def _prune_negative_entries(self, now):
         """Remove expired local misses while the negative-cache lock is held."""
@@ -385,7 +527,11 @@ class CacheManager:
                 }
             key = sanitize_cache_key(key)
             serialized_payload = serialize_cache_entry(value)
-            self.redis_client.setex(key, timeout, serialized_payload)
+            self.redis_client.setex(
+                key,
+                apply_ttl_jitter(timeout, key=key),
+                serialized_payload,
+            )
         except RedisError as exc:
             self._mark_backend_unavailable()
             logger.warning("Redis cache write failed: %s", exc)
@@ -490,35 +636,49 @@ def kev_cache(
             # Uncached variants still share one zero-wait fill slot per exact
             # query and one cross-worker budget for the broader route family.
             if callable(cache_if) and not cache_if(query_items):
-                with cache_manager.singleflight(
-                    f"uncached_{cache_key}",
-                    wait_seconds=0,
-                ) as acquired:
-                    if not acquired:
-                        return make_response(
-                            {"error": "Origin temporarily busy"},
-                            503,
-                        )
-                    try:
-                        cache_manager.enforce_rate_limit(
-                            admission_bucket,
-                            uncached_rate_limit,
-                            rate_limit_window,
-                        )
-                    except OriginRateLimitExceeded:
-                        return _rate_limit_response(rate_limit_window)
-                    except CacheBackendUnavailable:
-                        return make_response(
-                            {"error": "Cache temporarily unavailable"},
-                            503,
-                        )
-                    try:
-                        return func(*args, **kwargs)
-                    except PyMongoError:
-                        return make_response(
-                            {"error": "Backend temporarily unavailable"},
-                            503,
-                        )
+                local_hit = cache_manager.get_local_repeat(cache_key)
+                if local_hit is not None:
+                    return local_hit
+                try:
+                    with cache_manager.singleflight(
+                        f"uncached_{cache_key}",
+                        wait_seconds=0,
+                    ) as acquired:
+                        if not acquired:
+                            return make_response(
+                                {"error": "Origin temporarily busy"},
+                                503,
+                            )
+                        local_hit = cache_manager.get_local_repeat(cache_key)
+                        if local_hit is not None:
+                            return local_hit
+                        try:
+                            cache_manager.enforce_rate_limit(
+                                admission_bucket,
+                                uncached_rate_limit,
+                                rate_limit_window,
+                            )
+                        except OriginRateLimitExceeded:
+                            return _rate_limit_response(rate_limit_window)
+                        except CacheBackendUnavailable:
+                            return make_response(
+                                {"error": "Cache temporarily unavailable"},
+                                503,
+                            )
+                        try:
+                            result = func(*args, **kwargs)
+                        except PyMongoError:
+                            return make_response(
+                                {"error": "Backend temporarily unavailable"},
+                                503,
+                            )
+                        cache_manager.remember_local_repeat(cache_key, result)
+                        return result
+                except CacheBackendUnavailable:
+                    return make_response(
+                        {"error": "Cache temporarily unavailable"},
+                        503,
+                    )
 
             # Debug: print cache key
             # print(f"[kev_cache] Cache key: {cache_key}")
@@ -535,58 +695,61 @@ def kev_cache(
                 # print(f"[kev_cache] Cache hit for key: {cache_key}")
                 return cached_data
 
-            with cache_manager.singleflight(cache_key) as acquired:
-                if not acquired:
-                    return make_response(
-                        {"error": "Origin temporarily busy"},
-                        503,
-                    )
+            try:
+                with cache_manager.singleflight(cache_key) as acquired:
+                    if not acquired:
+                        return make_response(
+                            {"error": "Origin temporarily busy"},
+                            503,
+                        )
 
-                # A concurrent leader may have filled the key while this
-                # request waited, so recheck before calling the origin.
-                try:
-                    cached_data = cache_manager.get(cache_key)
-                except CacheBackendUnavailable:
-                    return make_response(
-                        {"error": "Cache temporarily unavailable"},
-                        503,
-                    )
-                if cached_data is not None:
-                    return cached_data
+                    # A concurrent leader may have filled the key while this
+                    # request waited, so recheck before calling the origin.
+                    try:
+                        cached_data = cache_manager.get(cache_key)
+                    except CacheBackendUnavailable:
+                        return make_response(
+                            {"error": "Cache temporarily unavailable"},
+                            503,
+                        )
+                    if cached_data is not None:
+                        return cached_data
 
-                try:
-                    cache_manager.enforce_rate_limit(
-                        admission_bucket,
-                        miss_rate_limit,
-                        rate_limit_window,
-                    )
-                except OriginRateLimitExceeded:
-                    return _rate_limit_response(rate_limit_window)
-                except CacheBackendUnavailable:
-                    return make_response(
-                        {"error": "Cache temporarily unavailable"},
-                        503,
-                    )
+                    try:
+                        cache_manager.enforce_rate_limit(
+                            admission_bucket,
+                            miss_rate_limit,
+                            rate_limit_window,
+                        )
+                    except OriginRateLimitExceeded:
+                        return _rate_limit_response(rate_limit_window)
+                    except CacheBackendUnavailable:
+                        return make_response(
+                            {"error": "Cache temporarily unavailable"},
+                            503,
+                        )
 
-                try:
-                    result = func(*args, **kwargs)
-                except PyMongoError:
-                    return make_response(
-                        {"error": "Backend temporarily unavailable"},
-                        503,
-                    )
-                # Normalize every Flask-supported return form before serialization
-                # so cache hits preserve status, body, and essential headers.
-                response = make_response(result)
-                # Server errors are transient and must not outlive recovery.
-                if response.status_code < 500:
-                    cache_timeout = (
-                        min(timeout, negative_timeout)
-                        if response.status_code >= 400
-                        else timeout
-                    )
-                    cache_manager.set(cache_key, response, timeout=cache_timeout)
-                return result
+                    try:
+                        result = func(*args, **kwargs)
+                    except PyMongoError:
+                        return make_response(
+                            {"error": "Backend temporarily unavailable"},
+                            503,
+                        )
+                    # Normalize every Flask-supported return form before serialization
+                    # so cache hits preserve status, body, and essential headers.
+                    response = make_response(result)
+                    # Server errors are transient and must not outlive recovery.
+                    # 4xx uses the same TTL as 2xx so status cannot be inferred
+                    # from cache lifetime.
+                    if response.status_code < 500:
+                        cache_manager.set(cache_key, response, timeout=timeout)
+                    return result
+            except CacheBackendUnavailable:
+                return make_response(
+                    {"error": "Cache temporarily unavailable"},
+                    503,
+                )
         return wrapper
     return decorator
 

@@ -49,14 +49,8 @@ def get_cvss_metrics(nvd_data):
     
     return cvss_data
 
-def report_gen(vulnerability):
-    nvd_data = get_nvd_data(vulnerability)
-    vuln_references = get_vuln_references(nvd_data)
-    vuln_description = get_vuln_description(nvd_data)
-    cvss_metrics = get_cvss_metrics(nvd_data)
-
-    # Updated Jinja2 template
-    report_template = Template("""
+# Compile once at import so report_gen() does not re-parse the template.
+report_template = Template("""
 ## Description
 
 {{ vuln_description }}
@@ -77,6 +71,13 @@ def report_gen(vulnerability):
 
 {{ references_bullet_points }}
 """)
+
+
+def report_gen(vulnerability):
+    nvd_data = get_nvd_data(vulnerability)
+    vuln_references = get_vuln_references(nvd_data)
+    vuln_description = get_vuln_description(nvd_data)
+    cvss_metrics = get_cvss_metrics(nvd_data)
 
     report = report_template.render(
         vuln_description=vuln_description,

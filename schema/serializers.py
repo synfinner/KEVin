@@ -135,3 +135,37 @@ def serialize_recent_cve_vulnerability(vulnerability):
         # Extract the 'nvdData' field from the vulnerability data, or use None if it's not present
         "nvdData": vulnerability.get("nvdData", None)
     }
+
+
+def _english_description(descriptions):
+    """Return the first English NVD description from a descriptions list."""
+    if not isinstance(descriptions, list):
+        return ""
+    for description in descriptions:
+        if isinstance(description, dict) and description.get("lang") == "en":
+            return description.get("value") or ""
+    return ""
+
+
+def serialize_recent_nvd_vulnerability(vulnerability):
+    """Return a bounded public projection of one cveland document."""
+    namespaces = vulnerability.get("namespaces") or {}
+    nvd_data = namespaces.get("nvd_nist_gov") or {}
+    cve = nvd_data.get("cve") if isinstance(nvd_data, dict) else {}
+    if not isinstance(cve, dict):
+        cve = {}
+    metrics = cve.get("metrics") if isinstance(cve.get("metrics"), dict) else {}
+    gsd = vulnerability.get("GSD") if isinstance(vulnerability.get("GSD"), dict) else {}
+    identifier = str(vulnerability.get("_id", ""))
+    return {
+        "_id": identifier,
+        "cveID": identifier,
+        "published": cve.get("published"),
+        "lastModified": cve.get("lastModified"),
+        "description": _english_description(cve.get("descriptions"))
+        or gsd.get("description", ""),
+        "metrics": {
+            "cvssMetricV31": metrics.get("cvssMetricV31") or [],
+            "cvssMetricV40": metrics.get("cvssMetricV40") or [],
+        },
+    }

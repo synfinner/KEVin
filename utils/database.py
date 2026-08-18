@@ -84,6 +84,10 @@ REQUIRED_KEV_INDEXES = [
     ("dateAdded", ASCENDING, "idx_dateAdded"),
     ("dueDate", ASCENDING, "idx_dueDate"),
     ("cveID", ASCENDING, "idx_cveID"),
+    ("vendorProject", ASCENDING, "idx_vendorProject"),
+    ("knownRansomwareCampaignUse", ASCENDING, "idx_ransomware"),
+    ("openThreatData.adversaries", ASCENDING, "idx_otx_adversaries"),
+    ("openThreatData.communityAdversaries", ASCENDING, "idx_otx_community_adversaries"),
 ]
 
 

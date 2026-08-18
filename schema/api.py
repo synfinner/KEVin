@@ -17,6 +17,7 @@ from schema.serializers import (
     nvd_serializer,
     serialize_all_vulnerability,
     serialize_githubpocs,
+    serialize_recent_nvd_vulnerability,
     serialize_vulnerability,
 )
 from utils.backend_capacity import (
@@ -33,6 +34,7 @@ from utils.cache_manager import (
     UNCACHED_QUERY_RATE_LIMIT,
     OriginRateLimitExceeded,
     cache_manager,
+    is_negative_cache_value,
     kev_cache as cache,
 )
 from utils.database import all_vulns_collection, collection
@@ -54,6 +56,18 @@ RECENT_KEV_MAX_RESULTS = max(
     int(os.environ.get("RECENT_KEV_MAX_RESULTS", "500")),
 )
 RECENT_KEV_CACHE_TIMEOUT = 60
+RECENT_KEV_MAX_DAYS = 100
+CVE_LAND_CACHE_TIMEOUT = 180
+KEV_POINT_CACHE_TIMEOUT = 120
+RECENT_VULN_PROJECTION = {
+    "_id": 1,
+    "GSD.description": 1,
+    "namespaces.nvd_nist_gov.cve.published": 1,
+    "namespaces.nvd_nist_gov.cve.lastModified": 1,
+    "namespaces.nvd_nist_gov.cve.descriptions": 1,
+    "namespaces.nvd_nist_gov.cve.metrics.cvssMetricV31": 1,
+    "namespaces.nvd_nist_gov.cve.metrics.cvssMetricV40": 1,
+}
 MONGO_QUERY_MAX_TIME_MS = max(
     100,
     int(os.environ.get("MONGO_QUERY_MAX_TIME_MS", "5000")),
@@ -150,8 +164,8 @@ def parse_recent_kev_query():
         default=RECENT_KEV_MAX_RESULTS,
     )
 
-    if days > 100:
-        raise ValueError("Exceeded the maximum limit of 100 days")
+    if days > RECENT_KEV_MAX_DAYS:
+        raise ValueError(f"Exceeded the maximum limit of {RECENT_KEV_MAX_DAYS} days")
     if result_limit < 1 or result_limit > RECENT_KEV_MAX_RESULTS:
         raise ValueError(
             f"Limit must be between 1 and {RECENT_KEV_MAX_RESULTS} results"
@@ -160,9 +174,18 @@ def parse_recent_kev_query():
     return days, result_limit
 
 
-def recent_kev_cache_key(days):
-    """Return one alias-independent key for a maximum-size daily dataset."""
-    return f"recent_kevs_days_{days}_max_{RECENT_KEV_MAX_RESULTS}"
+def recent_kev_cache_key(days=None):
+    """Return one shared key for the maximum recent-KEV window."""
+    del days
+    return f"recent_kevs_days_{RECENT_KEV_MAX_DAYS}_max_{RECENT_KEV_MAX_RESULTS}"
+
+
+def _serialized_date_added(vulnerability):
+    """Return the canonical YYYY-MM-DD dateAdded value from a cached record."""
+    date_added = vulnerability.get("dateAdded")
+    if isinstance(date_added, datetime):
+        return date_added.strftime("%Y-%m-%d")
+    return str(date_added or "")
 
 
 def parse_all_kev_query():
@@ -252,7 +275,7 @@ def _canonical_query_mapping(query_items):
 
 
 def should_cache_all_kev(query_items):
-    """Cache only bounded, index-friendly KEV list variants."""
+    """Cache only bounded, index-friendly KEV list variants in Redis."""
     query = _canonical_query_mapping(query_items)
     return (
         int(query["page"]) <= 10
@@ -324,56 +347,65 @@ class cveLandResource(BaseResource):
             cached_data = self.get_cached_data(cache_key_func)
         except CacheBackendUnavailable:
             return self.handle_error("Cache temporarily unavailable", 503)
+        if is_negative_cache_value(cached_data):
+            return self.handle_error("Vulnerability not found")
         if cached_data is not None:
             return self.make_json_response(cached_data)
 
         cache_key = cache_key_func()
-        negative_key = f"negative_{cache_key}"
-        if cache_manager.has_negative(negative_key):
-            return self.handle_error("Vulnerability not found")
 
-        with cache_manager.singleflight(cache_key) as acquired:
-            if not acquired:
-                return self.handle_error("Backend busy", 503)
+        try:
+            with cache_manager.singleflight(cache_key) as acquired:
+                if not acquired:
+                    return self.handle_error("Backend busy", 503)
 
-            try:
-                cached_data = cache_manager.get(cache_key)
-            except CacheBackendUnavailable:
-                return self.handle_error("Cache temporarily unavailable", 503)
-            if cached_data is not None:
-                return self.make_json_response(cached_data)
-            if cache_manager.has_negative(negative_key):
-                return self.handle_error("Vulnerability not found")
+                try:
+                    cached_data = cache_manager.get(cache_key)
+                except CacheBackendUnavailable:
+                    return self.handle_error("Cache temporarily unavailable", 503)
+                if is_negative_cache_value(cached_data):
+                    return self.handle_error("Vulnerability not found")
+                if cached_data is not None:
+                    return self.make_json_response(cached_data)
 
-            try:
-                cache_manager.enforce_rate_limit(
-                    POINT_MISS_RATE_BUCKET,
-                    POINT_MISS_RATE_LIMIT,
-                    RATE_LIMIT_WINDOW_SECONDS,
+                try:
+                    cache_manager.enforce_rate_limit(
+                        POINT_MISS_RATE_BUCKET,
+                        POINT_MISS_RATE_LIMIT,
+                        RATE_LIMIT_WINDOW_SECONDS,
+                    )
+                except OriginRateLimitExceeded:
+                    return self.handle_rate_limit()
+                except CacheBackendUnavailable:
+                    return self.handle_error("Cache temporarily unavailable", 503)
+
+                try:
+                    vulnerability = run_backend_tasks(
+                        [partial(self.query_vulnerability, sanitized_cve_id)],
+                        timeout=GREENLET_TIMEOUT,
+                    )[0]
+                except BackendBusyError:
+                    return self.handle_error("Backend busy", 503)
+                except BackendTimeoutError:
+                    return self.handle_error("Upstream timeout", 504)
+                except PyMongoError:
+                    return self.handle_error("Backend unavailable", 503)
+
+                if vulnerability:
+                    data = serialize_all_vulnerability(vulnerability)
+                    cache_manager.set(
+                        cache_key,
+                        data,
+                        timeout=CVE_LAND_CACHE_TIMEOUT,
+                    )
+                    return self.make_json_response(data)
+
+                cache_manager.remember_negative(
+                    cache_key,
+                    timeout=CVE_LAND_CACHE_TIMEOUT,
                 )
-            except OriginRateLimitExceeded:
-                return self.handle_rate_limit()
-            except CacheBackendUnavailable:
-                return self.handle_error("Cache temporarily unavailable", 503)
-
-            try:
-                vulnerability = run_backend_tasks(
-                    [partial(self.query_vulnerability, sanitized_cve_id)],
-                    timeout=GREENLET_TIMEOUT,
-                )[0]
-            except BackendBusyError:
-                return self.handle_error("Backend busy", 503)
-            except BackendTimeoutError:
-                return self.handle_error("Upstream timeout", 504)
-            except PyMongoError:
-                return self.handle_error("Backend unavailable", 503)
-
-            if vulnerability:
-                data = serialize_all_vulnerability(vulnerability)
-                cache_manager.set(cache_key, data, timeout=180)
-                return self.make_json_response(data)
-
-            cache_manager.remember_negative(negative_key)
+        except CacheBackendUnavailable:
+            return self.handle_error("Cache temporarily unavailable", 503)
 
         return self.handle_error("Vulnerability not found")
 
@@ -551,22 +583,21 @@ class VulnerabilityResource(BaseResource):
     def load_vulnerability(self, sanitized_cve_id):
         """Load one shared cached record for normal and PoC representations."""
         cache_key = f"kev_data_{sanitized_cve_id}"
-        negative_key = f"negative_{cache_key}"
         cached_data = self.get_cached_data(cache_key)
+        if is_negative_cache_value(cached_data):
+            return None
         if cached_data is not None:
             return cached_data
-        if cache_manager.has_negative(negative_key):
-            return None
 
         with cache_manager.singleflight(cache_key) as acquired:
             if not acquired:
                 raise BackendBusyError("CVE cache fill already in progress")
 
             cached_data = cache_manager.get(cache_key)
+            if is_negative_cache_value(cached_data):
+                return None
             if cached_data is not None:
                 return cached_data
-            if cache_manager.has_negative(negative_key):
-                return None
 
             cache_manager.enforce_rate_limit(
                 POINT_MISS_RATE_BUCKET,
@@ -579,9 +610,16 @@ class VulnerabilityResource(BaseResource):
                 timeout=GREENLET_TIMEOUT,
             )[0]
             if vulnerability:
-                cache_manager.set(cache_key, vulnerability)
+                cache_manager.set(
+                    cache_key,
+                    vulnerability,
+                    timeout=KEV_POINT_CACHE_TIMEOUT,
+                )
             else:
-                cache_manager.remember_negative(negative_key)
+                cache_manager.remember_negative(
+                    cache_key,
+                    timeout=KEV_POINT_CACHE_TIMEOUT,
+                )
             return vulnerability
 
     def get_cached_data(self, cache_key):
@@ -600,6 +638,7 @@ class AllKevVulnerabilitiesResource(BaseResource):
         query_string=canonical_all_kev_query_items,
         include_path=False,
         cache_if=should_cache_all_kev,
+        miss_rate_limit=UNCACHED_QUERY_RATE_LIMIT,
         uncached_rate_limit=UNCACHED_QUERY_RATE_LIMIT,
         rate_limit_bucket="all_kev_uncached",
     )
@@ -644,16 +683,17 @@ class AllKevVulnerabilitiesResource(BaseResource):
         if filter_ransomware:
             query["knownRansomwareCampaignUse"] = "Known"
         if actor_query:
+            actor_term = re.escape(actor_query)
             query["$or"] = [
                 {
                     "openThreatData.communityAdversaries": {
-                        "$regex": actor_query,
+                        "$regex": actor_term,
                         "$options": "i",
                     }
                 },
                 {
                     "openThreatData.adversaries": {
-                        "$regex": actor_query,
+                        "$regex": actor_term,
                         "$options": "i",
                     }
                 },
@@ -699,11 +739,13 @@ class AllKevVulnerabilitiesResource(BaseResource):
         )
 
     def count_documents(self, query):
-        """Count the total number of vulnerabilities matching the query."""
-        return collection.count_documents(
-            query,
-            maxTimeMS=MONGO_QUERY_MAX_TIME_MS,
-        )
+        """Count matching KEV rows without scanning the full catalog unbound."""
+        if query:
+            return collection.count_documents(
+                query,
+                maxTimeMS=MONGO_QUERY_MAX_TIME_MS,
+            )
+        return collection.estimated_document_count()
 
     def fetch_vulnerabilities(self, query, sort_criteria, page, per_page):
         """Fetch vulnerabilities from the database."""
@@ -746,6 +788,8 @@ class RecentKevVulnerabilitiesResource(BaseResource):
                 {"error": "Cache temporarily unavailable"},
                 503,
             )
+        except OriginRateLimitExceeded:
+            return self.handle_rate_limit()
         except RecentKevCacheFillBusy:
             return make_response(
                 {"error": "Origin temporarily busy"},
@@ -763,11 +807,14 @@ class RecentKevVulnerabilitiesResource(BaseResource):
         return self.make_json_response(vulnerabilities[:result_limit])
 
     def load_recent_vulnerabilities(self, days):
-        """Load or fill one maximum-size cached dataset for the day window."""
-        cache_key = recent_kev_cache_key(days)
+        """Load the shared max-window dataset and slice it to the requested days."""
+        cache_key = recent_kev_cache_key()
         cached_vulnerabilities = cache_manager.get(cache_key)
         if cached_vulnerabilities is not None:
-            return cached_vulnerabilities
+            return self.filter_recent_vulnerabilities(
+                cached_vulnerabilities,
+                days,
+            )
 
         with cache_manager.singleflight(cache_key) as acquired:
             if not acquired:
@@ -777,10 +824,20 @@ class RecentKevVulnerabilitiesResource(BaseResource):
 
             cached_vulnerabilities = cache_manager.get(cache_key)
             if cached_vulnerabilities is not None:
-                return cached_vulnerabilities
+                return self.filter_recent_vulnerabilities(
+                    cached_vulnerabilities,
+                    days,
+                )
 
-            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
-            cutoff_date_str = cutoff_date.strftime("%Y-%m-%d")
+            cache_manager.enforce_rate_limit(
+                "recent_kev_miss",
+                UNCACHED_QUERY_RATE_LIMIT,
+                RATE_LIMIT_WINDOW_SECONDS,
+            )
+
+            cutoff_date_str = (
+                datetime.now(timezone.utc) - timedelta(days=RECENT_KEV_MAX_DAYS)
+            ).strftime("%Y-%m-%d")
             vulnerabilities = run_backend_tasks(
                 [
                     partial(
@@ -796,7 +853,18 @@ class RecentKevVulnerabilitiesResource(BaseResource):
                 vulnerabilities,
                 timeout=RECENT_KEV_CACHE_TIMEOUT,
             )
-            return vulnerabilities
+            return self.filter_recent_vulnerabilities(vulnerabilities, days)
+
+    def filter_recent_vulnerabilities(self, vulnerabilities, days):
+        """Keep cached records that fall inside the caller's day window."""
+        cutoff_date = (
+            datetime.now(timezone.utc) - timedelta(days=days)
+        ).strftime("%Y-%m-%d")
+        return [
+            vulnerability
+            for vulnerability in vulnerabilities
+            if _serialized_date_added(vulnerability) >= cutoff_date
+        ]
 
     def query_recent_vulnerabilities(self, cutoff_date, result_limit):
         """Materialize one bounded, deadline-limited query under admission."""
@@ -831,6 +899,7 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         query_string=canonical_recent_vulnerability_query_items,
         include_path=False,
         cache_if=should_cache_recent_vulnerabilities,
+        miss_rate_limit=UNCACHED_QUERY_RATE_LIMIT,
         uncached_rate_limit=UNCACHED_QUERY_RATE_LIMIT,
         rate_limit_bucket="recent_vulnerability_uncached",
     )
@@ -905,7 +974,10 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         }
         response_data = {
             "pagination": pagination_info,
-            "vulnerabilities": self.add_id_first(recent_vulnerabilities_list)  # Ensure _id is first
+            "vulnerabilities": [
+                serialize_recent_nvd_vulnerability(vulnerability)
+                for vulnerability in recent_vulnerabilities_list
+            ],
         }
         return self.make_json_response(response_data)
  
@@ -920,11 +992,12 @@ class RecentVulnerabilitiesByDaysResource(BaseResource):
         """Query the database for recent vulnerabilities with pagination."""
         skip = (page - 1) * per_page  # Calculate how many documents to skip
         recent_vulnerabilities = all_vulns_collection.find(
-            {field: {"$gt": cutoff_date}}
+            {field: {"$gt": cutoff_date}},
+            RECENT_VULN_PROJECTION,
         ).sort(field, sort_order).skip(skip).limit(per_page).max_time_ms(
             MONGO_QUERY_MAX_TIME_MS
         )
-        return [v for v in recent_vulnerabilities]  # Convert cursor to list
+        return [vulnerability for vulnerability in recent_vulnerabilities]
 
     def add_id_first(self, vulnerabilities):
         """Ensure the _id is the first displayed value in each vulnerability."""
