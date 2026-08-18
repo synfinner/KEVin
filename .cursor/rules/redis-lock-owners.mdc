@@ -1,0 +1,21 @@
+---
+description: Release Redis locks only with a unique owner token and compare-and-delete
+alwaysApply: true
+---
+
+# Redis lock owners
+
+Distributed locks (`SET NX EX`, fill locks, leader locks) must store a unique owner, not a constant. Release atomically only when the stored value still matches. An expired lock can be claimed by another worker; unconditional `DEL` then deletes the new owner's live lock and allows stampedes.
+
+Owner tokens use `secrets.token_hex(16)` (128 bits). Lock TTL must be longer than the fill/backend timeout (`CACHE_FILL_LOCK_SECONDS` default 15 > `GREENLET_TIMEOUT` default 10).
+
+```python
+# ❌ BAD — shared value and unconditional delete
+redis_client.set(lock_key, "1", nx=True, ex=10)
+redis_client.delete(lock_key)
+
+# ✅ GOOD — unique owner + Lua compare-and-delete
+owner = secrets.token_hex(16)
+redis_client.set(lock_key, owner, nx=True, ex=15)
+redis_client.eval(FILL_LOCK_RELEASE_SCRIPT, 1, lock_key, owner)
+```

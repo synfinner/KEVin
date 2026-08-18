@@ -1,0 +1,25 @@
+---
+description: Do not Redis-cache high-cardinality unauthenticated query variants
+globs: schema/**/*.py,utils/cache_manager.py,kevin.py
+alwaysApply: false
+---
+
+# Bounded public cache
+
+Unauthenticated list routes must not store arbitrary `search`, `actor`, or pagination combinations in Redis. A client can otherwise fill or churn Redis with full KEV/NVD payloads.
+
+Redis-cache only a small, explicit allowlist (`cache_if`). Typical `/kev` bounds: `page <= 10`, `per_page == 25`, empty `search` and `actor`. Exact repeats of rejected variants may use the bounded in-process LRU (`LOCAL_REPEAT_CACHE_MAX_ENTRIES`), not a new Redis key.
+
+Low-cardinality windows (for example `/kev/recent?days=`) share one max-window Redis key and filter in process. Do not create one key per user parameter.
+
+```python
+# ❌ BAD — every search/actor/page lands in Redis
+@cache(timeout=120, query_string=canonical_all_kev_query_items)
+
+# ✅ GOOD — Redis only for bounded variants
+@cache(
+    timeout=120,
+    query_string=canonical_all_kev_query_items,
+    cache_if=should_cache_all_kev,
+)
+```
