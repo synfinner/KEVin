@@ -86,18 +86,18 @@ def is_negative_cache_value(value):
     return isinstance(value, dict) and value.get("kevin_negative") is True
 
 
-def apply_ttl_jitter(timeout, key=None, ratio=None):
-    """Spread expiry by a key-derived offset. This is not a security control."""
+def apply_ttl_jitter(timeout, key=None, ratio=None, rng=None):
+    """Add a CSPRNG-bounded positive spread to a cache TTL."""
+    del key
     timeout = max(1, int(timeout))
     jitter_ratio = (
         CACHE_TTL_JITTER_RATIO if ratio is None else max(0.0, float(ratio))
     )
-    if jitter_ratio <= 0 or key is None:
+    if jitter_ratio <= 0:
         return timeout
     spread = max(1, int(timeout * jitter_ratio))
-    digest = hashlib.sha256(str(key).encode("utf-8")).digest()
-    sample = int.from_bytes(digest[:8], "big") / float(1 << 64)
-    return timeout + int(spread * sample)
+    sample = secrets.randbelow if rng is None else rng
+    return timeout + int(sample(spread + 1))
 
 
 class _SingleflightEntry:

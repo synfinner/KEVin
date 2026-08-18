@@ -1610,17 +1610,12 @@ def test_cached_success_and_not_found_share_one_ttl(monkeypatch):
 
 
 def test_ttl_jitter_only_extends_the_base_timeout():
-    """Expiry spread is a stable hash of the cache key, not a PRNG."""
+    """TTL spread uses an injected CSPRNG and stays inside the configured bound."""
     cache_module = importlib.import_module("utils.cache_manager")
 
-    assert cache_module.apply_ttl_jitter(100, key="alpha", ratio=0) == 100
-    assert cache_module.apply_ttl_jitter(100, ratio=0.1) == 100
-    first = cache_module.apply_ttl_jitter(100, key="alpha", ratio=0.1)
-    second = cache_module.apply_ttl_jitter(100, key="alpha", ratio=0.1)
-    other = cache_module.apply_ttl_jitter(100, key="beta", ratio=0.1)
-    assert first == second
-    assert 100 <= first <= 110
-    assert 100 <= other <= 110
+    assert cache_module.apply_ttl_jitter(100, ratio=0, rng=lambda _n: 99) == 100
+    assert cache_module.apply_ttl_jitter(100, ratio=0.1, rng=lambda _n: 0) == 100
+    assert cache_module.apply_ttl_jitter(100, ratio=0.1, rng=lambda n: n - 1) == 110
 
 
 def test_legacy_cache_checksum_uses_constant_time_compare(monkeypatch):

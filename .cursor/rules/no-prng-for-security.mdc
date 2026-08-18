@@ -1,29 +1,27 @@
 ---
-description: Never use pseudo-random generators for security-sensitive behavior
+description: Only use vetted CSPRNG APIs when the code needs randomness
 alwaysApply: true
 ---
 
-# No PRNG for security
+# Only vetted secure RNGs
 
-Never use a pseudo-random number generator (`random`, `randrange`, `randint`, `numpy.random`, `Math.random`) for security-sensitive behavior.
+If code needs randomness, use a cryptographically secure generator: Python `secrets` or `os.urandom`. Nothing else.
 
-That includes tokens, nonces, lock owners, session IDs, password resets, and anything described as making an attack "unpredictable" (cache TTL jitter, request delays, key prefixes).
+Never use `random`, `randrange`, `randint`, `numpy.random`, or `Math.random` for tokens, nonces, lock owners, session IDs, cache TTL jitter, or anything an attacker should not be able to predict.
 
-`random` is deterministic once the state is known. Do not treat it as a control.
+Do not invent a substitute (hash the key, stir the clock, seed `random` yourself). That is still not a vetted RNG.
 
 ```python
-# ❌ BAD — Bandit B311; attackers can predict or reproduce the stream
+# ❌ BAD — predictable PRNG (Bandit B311)
 import random
+owner = hex(random.getrandbits(128))
 timeout = 120 + int(12 * random.random())
-token = hex(random.getrandbits(128))
 
-# ✅ GOOD — secrets/os.urandom only when you need an actual secret
+# ❌ BAD — homemade "randomness"
+timeout = 120 + hashlib.sha256(key.encode()).digest()[0] % 12
+
+# ✅ GOOD — secrets / os.urandom
 import secrets
 owner = secrets.token_hex(16)
-
-# ✅ GOOD — operational spreading without claiming security
-digest = hashlib.sha256(cache_key.encode()).digest()
-timeout = 120 + digest[0] % 12
+timeout = 120 + secrets.randbelow(13)
 ```
-
-If a design only works because a value is "hard to guess," use `secrets` or `os.urandom`, or replace the design with an explicit control (allowlist, TTL equality, admission limit). Do not paper over it with `random`.

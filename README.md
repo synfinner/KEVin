@@ -58,9 +58,9 @@ list and recent-KEV cache misses, and `POINT_MISS_RATE_LIMIT` covers point,
 RSS, and metrics misses. Cached 2xx and 4xx responses share the same TTL.
 Fill locks (`CACHE_FILL_LOCK_SECONDS`) serialize origin work across workers
 with owner tokens, `CACHE_SINGLEFLIGHT_WAIT_SECONDS` defaults to 0 so a
-contended key fails immediately, and `CACHE_TTL_JITTER_RATIO` spreads expiry
-with a key-derived offset (not a PRNG). High-cardinality `/kev` search and
-actor variants stay out of Redis; exact repeats use a bounded in-process cache.
+contended key fails immediately, and `CACHE_TTL_JITTER_RATIO` spreads expiry with `secrets.randbelow`.
+High-cardinality `/kev` search and actor variants stay out of Redis; exact
+repeats use a bounded in-process cache.
 Manual point resources also keep at most `NEGATIVE_CACHE_MAX_ENTRIES`
 short-lived local misses as an L1 cache in front of Redis.
 
