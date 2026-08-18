@@ -8,8 +8,8 @@ import hashlib
 import hmac
 import logging
 import os
-import random
 import re
+import secrets
 import threading
 import time
 
@@ -51,12 +51,26 @@ POINT_MISS_RATE_BUCKET = "cve_point_miss"
 NEGATIVE_CACHE_MARKER = {"kevin_negative": True}
 FILL_LOCK_SECONDS = max(
     1,
-    int(os.getenv("CACHE_FILL_LOCK_SECONDS", "10")),
+    int(os.getenv("CACHE_FILL_LOCK_SECONDS", "15")),
 )
 CACHE_TTL_JITTER_RATIO = max(
     0.0,
     float(os.getenv("CACHE_TTL_JITTER_RATIO", "0.1")),
 )
+LOCAL_REPEAT_CACHE_MAX_ENTRIES = max(
+    1,
+    int(os.getenv("LOCAL_REPEAT_CACHE_MAX_ENTRIES", "64")),
+)
+LOCAL_REPEAT_CACHE_TTL = max(
+    1,
+    int(os.getenv("LOCAL_REPEAT_CACHE_TTL", "30")),
+)
+FILL_LOCK_RELEASE_SCRIPT = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
 
 
 class CacheBackendUnavailable(RuntimeError):
@@ -72,17 +86,18 @@ def is_negative_cache_value(value):
     return isinstance(value, dict) and value.get("kevin_negative") is True
 
 
-def apply_ttl_jitter(timeout, ratio=None, random_func=None):
-    """Add a bounded, positive jitter so public TTLs are not wall-clock aligned."""
+def apply_ttl_jitter(timeout, key=None, ratio=None):
+    """Spread expiry by a key-derived offset. This is not a security control."""
     timeout = max(1, int(timeout))
     jitter_ratio = (
         CACHE_TTL_JITTER_RATIO if ratio is None else max(0.0, float(ratio))
     )
-    if jitter_ratio <= 0:
+    if jitter_ratio <= 0 or key is None:
         return timeout
     spread = max(1, int(timeout * jitter_ratio))
-    sample = random.random() if random_func is None else float(random_func())
-    return timeout + int(spread * min(1.0, max(0.0, sample)))
+    digest = hashlib.sha256(str(key).encode("utf-8")).digest()
+    sample = int.from_bytes(digest[:8], "big") / float(1 << 64)
+    return timeout + int(spread * sample)
 
 
 class _SingleflightEntry:
@@ -258,6 +273,10 @@ class CacheManager:
         )
         self._negative_entries = OrderedDict()
         self._negative_guard = threading.Lock()
+        self.local_repeat_ttl = LOCAL_REPEAT_CACHE_TTL
+        self.local_repeat_max_entries = LOCAL_REPEAT_CACHE_MAX_ENTRIES
+        self._local_repeat_entries = OrderedDict()
+        self._local_repeat_guard = threading.Lock()
 
     def _ensure_backend_available(self):
         """Fail fast while the Redis failure circuit remains open."""
@@ -280,10 +299,11 @@ class CacheManager:
         """Acquire a cluster-wide fill lock or fail closed if Redis is down."""
         self._ensure_backend_available()
         lock_key = self._fill_lock_key(key)
+        owner = secrets.token_hex(16)
         try:
             acquired = self.redis_client.set(
                 lock_key,
-                "1",
+                owner,
                 nx=True,
                 ex=self.fill_lock_seconds,
             )
@@ -291,13 +311,20 @@ class CacheManager:
             self._mark_backend_unavailable()
             raise CacheBackendUnavailable("Redis fill lock failed") from exc
         self._mark_backend_available()
-        return bool(acquired)
+        return owner if acquired else None
 
-    def _release_fill_lock(self, key):
-        """Drop a fill lock; expiry remains the safety net if Redis fails."""
+    def _release_fill_lock(self, key, owner):
+        """Delete the fill lock only when this caller still owns it."""
+        if not owner:
+            return
         try:
             self._ensure_backend_available()
-            self.redis_client.delete(self._fill_lock_key(key))
+            self.redis_client.eval(
+                FILL_LOCK_RELEASE_SCRIPT,
+                1,
+                self._fill_lock_key(key),
+                owner,
+            )
             self._mark_backend_available()
         except (RedisError, CacheBackendUnavailable):
             return
@@ -318,16 +345,16 @@ class CacheManager:
             else max(0.0, float(wait_seconds))
         )
         acquired = entry.lock.acquire(timeout=wait_timeout)
-        redis_locked = False
+        lock_owner = None
         try:
             if acquired and use_redis_lock:
-                redis_locked = self._acquire_fill_lock(key)
-                yield redis_locked
+                lock_owner = self._acquire_fill_lock(key)
+                yield lock_owner is not None
             else:
                 yield acquired
         finally:
-            if redis_locked:
-                self._release_fill_lock(key)
+            if lock_owner is not None:
+                self._release_fill_lock(key, lock_owner)
             if acquired:
                 entry.lock.release()
             with self._singleflight_guard:
@@ -406,6 +433,39 @@ class CacheManager:
                 self._negative_entries.popitem(last=False)
         self.set(safe_key, NEGATIVE_CACHE_MARKER, timeout=ttl)
 
+    def get_local_repeat(self, key):
+        """Return a bounded in-process repeat of an uncached origin response."""
+        safe_key = sanitize_cache_key(key)
+        now = self._time()
+        with self._local_repeat_guard:
+            expires_at = self._local_repeat_entries.get(safe_key)
+            if expires_at is None:
+                return None
+            expires, value = expires_at
+            if expires <= now:
+                self._local_repeat_entries.pop(safe_key, None)
+                return None
+            self._local_repeat_entries.move_to_end(safe_key)
+            return value
+
+    def remember_local_repeat(self, key, value, timeout=None):
+        """Remember one uncached response without writing a Redis key."""
+        ttl = self.local_repeat_ttl if timeout is None else max(1, int(timeout))
+        safe_key = sanitize_cache_key(key)
+        now = self._time()
+        with self._local_repeat_guard:
+            expired = [
+                stored_key
+                for stored_key, (expires_at, _value) in self._local_repeat_entries.items()
+                if expires_at <= now
+            ]
+            for stored_key in expired:
+                self._local_repeat_entries.pop(stored_key, None)
+            self._local_repeat_entries[safe_key] = (now + ttl, value)
+            self._local_repeat_entries.move_to_end(safe_key)
+            while len(self._local_repeat_entries) > self.local_repeat_max_entries:
+                self._local_repeat_entries.popitem(last=False)
+
     def _prune_negative_entries(self, now):
         """Remove expired local misses while the negative-cache lock is held."""
         expired_keys = [
@@ -467,7 +527,7 @@ class CacheManager:
             serialized_payload = serialize_cache_entry(value)
             self.redis_client.setex(
                 key,
-                apply_ttl_jitter(timeout),
+                apply_ttl_jitter(timeout, key=key),
                 serialized_payload,
             )
         except RedisError as exc:
@@ -574,6 +634,9 @@ def kev_cache(
             # Uncached variants still share one zero-wait fill slot per exact
             # query and one cross-worker budget for the broader route family.
             if callable(cache_if) and not cache_if(query_items):
+                local_hit = cache_manager.get_local_repeat(cache_key)
+                if local_hit is not None:
+                    return local_hit
                 try:
                     with cache_manager.singleflight(
                         f"uncached_{cache_key}",
@@ -584,6 +647,9 @@ def kev_cache(
                                 {"error": "Origin temporarily busy"},
                                 503,
                             )
+                        local_hit = cache_manager.get_local_repeat(cache_key)
+                        if local_hit is not None:
+                            return local_hit
                         try:
                             cache_manager.enforce_rate_limit(
                                 admission_bucket,
@@ -598,12 +664,14 @@ def kev_cache(
                                 503,
                             )
                         try:
-                            return func(*args, **kwargs)
+                            result = func(*args, **kwargs)
                         except PyMongoError:
                             return make_response(
                                 {"error": "Backend temporarily unavailable"},
                                 503,
                             )
+                        cache_manager.remember_local_repeat(cache_key, result)
+                        return result
                 except CacheBackendUnavailable:
                     return make_response(
                         {"error": "Cache temporarily unavailable"},

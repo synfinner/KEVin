@@ -42,7 +42,7 @@ POINT_MISS_RATE_LIMIT=20
 NEGATIVE_CACHE_TIMEOUT=15
 NEGATIVE_CACHE_MAX_ENTRIES=1024
 CACHE_SINGLEFLIGHT_WAIT_SECONDS=0
-CACHE_FILL_LOCK_SECONDS=10
+CACHE_FILL_LOCK_SECONDS=15
 CACHE_TTL_JITTER_RATIO=0.1
 ```
 
@@ -56,9 +56,11 @@ The origin-admission settings are read once at startup. Redis enforces the
 shared per-window limits across workers: `UNCACHED_QUERY_RATE_LIMIT` covers
 list and recent-KEV cache misses, and `POINT_MISS_RATE_LIMIT` covers point,
 RSS, and metrics misses. Cached 2xx and 4xx responses share the same TTL.
-Fill locks (`CACHE_FILL_LOCK_SECONDS`) serialize origin work across workers,
-`CACHE_SINGLEFLIGHT_WAIT_SECONDS` defaults to 0 so a contended key fails
-immediately, and `CACHE_TTL_JITTER_RATIO` adds a small positive TTL jitter.
+Fill locks (`CACHE_FILL_LOCK_SECONDS`) serialize origin work across workers
+with owner tokens, `CACHE_SINGLEFLIGHT_WAIT_SECONDS` defaults to 0 so a
+contended key fails immediately, and `CACHE_TTL_JITTER_RATIO` spreads expiry
+with a key-derived offset (not a PRNG). High-cardinality `/kev` search and
+actor variants stay out of Redis; exact repeats use a bounded in-process cache.
 Manual point resources also keep at most `NEGATIVE_CACHE_MAX_ENTRIES`
 short-lived local misses as an L1 cache in front of Redis.
 

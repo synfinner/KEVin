@@ -269,16 +269,26 @@ def canonical_all_kev_query_items():
     ]
 
 
+def _canonical_query_mapping(query_items):
+    """Convert canonical cache items into a scalar policy mapping."""
+    return {name: values[0] for name, values in query_items or []}
+
+
 def should_cache_all_kev(query_items):
-    """Cache every canonical KEV list query, including exact search repeats."""
-    del query_items
-    return True
+    """Cache only bounded, index-friendly KEV list variants in Redis."""
+    query = _canonical_query_mapping(query_items)
+    return (
+        int(query["page"]) <= 10
+        and int(query["per_page"]) == 25
+        and not query["search"]
+        and not query["actor"]
+    )
 
 
 def should_cache_recent_vulnerabilities(query_items):
-    """Cache every canonical published/modified page, including repeats."""
-    del query_items
-    return True
+    """Cache only the default first page for each bounded day window."""
+    query = _canonical_query_mapping(query_items)
+    return int(query["page"]) == 1 and int(query["per_page"]) == 25
 
 
 def recent_vulnerability_cache_prefix(resource):

@@ -1,0 +1,29 @@
+---
+description: Never use pseudo-random generators for security-sensitive behavior
+alwaysApply: true
+---
+
+# No PRNG for security
+
+Never use a pseudo-random number generator (`random`, `randrange`, `randint`, `numpy.random`, `Math.random`) for security-sensitive behavior.
+
+That includes tokens, nonces, lock owners, session IDs, password resets, and anything described as making an attack "unpredictable" (cache TTL jitter, request delays, key prefixes).
+
+`random` is deterministic once the state is known. Do not treat it as a control.
+
+```python
+# ❌ BAD — Bandit B311; attackers can predict or reproduce the stream
+import random
+timeout = 120 + int(12 * random.random())
+token = hex(random.getrandbits(128))
+
+# ✅ GOOD — secrets/os.urandom only when you need an actual secret
+import secrets
+owner = secrets.token_hex(16)
+
+# ✅ GOOD — operational spreading without claiming security
+digest = hashlib.sha256(cache_key.encode()).digest()
+timeout = 120 + digest[0] % 12
+```
+
+If a design only works because a value is "hard to guess," use `secrets` or `os.urandom`, or replace the design with an explicit control (allowlist, TTL equality, admission limit). Do not paper over it with `random`.

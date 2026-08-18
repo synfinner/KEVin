@@ -56,6 +56,14 @@ class MemoryRedis:
         """Drop a fill lock or cached value."""
         return 1 if self.values.pop(key, None) is not None else 0
 
+    def eval(self, _script, _numkeys, key, owner):
+        """Release a fill lock only when the caller still owns it."""
+        current = self.values.get(key)
+        if current in {owner, owner.encode("utf-8") if isinstance(owner, str) else owner}:
+            self.values.pop(key, None)
+            return 1
+        return 0
+
     def pipeline(self, transaction=True):
         """Return a tiny transactional-pipeline test double."""
         assert transaction is True
@@ -386,7 +394,7 @@ def test_recent_vulnerability_cache_uses_canonical_validated_query(monkeypatch):
 
     assert len(recent_collection.count_calls) == 4
     assert len(recent_collection.find_calls) == 4
-    assert len(memory_redis.values) == 4
+    assert len(memory_redis.values) == 2
     assert all(projection == api_module.RECENT_VULN_PROJECTION for projection in recent_collection.projections)
     assert memory_redis.get_calls == valid_cache_get_calls
     assert all(
@@ -545,7 +553,7 @@ def test_all_kev_cache_uses_canonical_validated_query(monkeypatch):
     assert len(kev_collection.count_calls) == 1
     assert kev_collection.estimate_calls == 2
     assert len(kev_collection.find_calls) == 3
-    assert len(memory_redis.values) == 3
+    assert len(memory_redis.values) == 1
     assert admitted_requests == [api_module.GREENLET_TIMEOUT] * 3
     assert memory_redis.get_calls == valid_cache_get_calls
     assert all(
@@ -1241,8 +1249,14 @@ def test_uncached_origin_requests_have_a_global_rate_budget(monkeypatch):
     )
     origin_calls = []
 
+    def expensive_query_items():
+        """Include the live search value so distinct terms do not share a key."""
+        from flask import request as flask_request
+
+        return [("search", flask_request.args.getlist("search") or ["vendor"])]
+
     @cache_module.kev_cache(
-        query_string=lambda: [("search", ["vendor"])],
+        query_string=expensive_query_items,
         cache_if=lambda _items: False,
         uncached_rate_limit=1,
         rate_limit_bucket="test_expensive_query",
@@ -1257,9 +1271,11 @@ def test_uncached_origin_requests_have_a_global_rate_budget(monkeypatch):
     client = app.test_client()
 
     first_response = client.get("/expensive?search=vendor")
-    limited_response = client.get("/expensive?search=vendor")
+    repeat_response = client.get("/expensive?search=vendor")
+    limited_response = client.get("/expensive?search=other")
 
     assert first_response.status_code == 200
+    assert repeat_response.status_code == 200
     assert limited_response.status_code == 429
     assert limited_response.headers["Retry-After"] == "1"
     assert origin_calls == ["called"]
@@ -1563,7 +1579,7 @@ def test_cached_success_and_not_found_share_one_ttl(monkeypatch):
     monkeypatch.setattr(
         cache_module,
         "apply_ttl_jitter",
-        lambda timeout, ratio=None, random_func=None: int(timeout),
+        lambda timeout, key=None, ratio=None: int(timeout),
     )
     monkeypatch.setattr(
         cache_module,
@@ -1594,12 +1610,17 @@ def test_cached_success_and_not_found_share_one_ttl(monkeypatch):
 
 
 def test_ttl_jitter_only_extends_the_base_timeout():
-    """Public cache expiry is delayed by a bounded positive jitter."""
+    """Expiry spread is a stable hash of the cache key, not a PRNG."""
     cache_module = importlib.import_module("utils.cache_manager")
 
-    assert cache_module.apply_ttl_jitter(100, ratio=0, random_func=lambda: 1) == 100
-    assert cache_module.apply_ttl_jitter(100, ratio=0.1, random_func=lambda: 1) == 110
-    assert cache_module.apply_ttl_jitter(100, ratio=0.1, random_func=lambda: 0) == 100
+    assert cache_module.apply_ttl_jitter(100, key="alpha", ratio=0) == 100
+    assert cache_module.apply_ttl_jitter(100, ratio=0.1) == 100
+    first = cache_module.apply_ttl_jitter(100, key="alpha", ratio=0.1)
+    second = cache_module.apply_ttl_jitter(100, key="alpha", ratio=0.1)
+    other = cache_module.apply_ttl_jitter(100, key="beta", ratio=0.1)
+    assert first == second
+    assert 100 <= first <= 110
+    assert 100 <= other <= 110
 
 
 def test_legacy_cache_checksum_uses_constant_time_compare(monkeypatch):
@@ -1739,6 +1760,22 @@ def test_shared_negative_cache_uses_the_same_key_and_ttl(monkeypatch):
         manager.get("cve_data_CVE-2026-0001")
     )
     assert manager.has_negative("cve_data_CVE-2026-0001")
+
+
+def test_fill_lock_release_requires_matching_owner():
+    """An expired worker must not delete another worker's live fill lock."""
+    cache_module = importlib.import_module("utils.cache_manager")
+    memory_redis = MemoryRedis()
+    manager = cache_module.CacheManager(memory_redis)
+
+    first_owner = manager._acquire_fill_lock("cve_data_one")
+    second_owner = "ffffffffffffffffffffffffffffffff"
+    memory_redis.values[manager._fill_lock_key("cve_data_one")] = second_owner
+    manager._release_fill_lock("cve_data_one", first_owner)
+
+    assert memory_redis.values[manager._fill_lock_key("cve_data_one")] == second_owner
+    manager._release_fill_lock("cve_data_one", second_owner)
+    assert manager._fill_lock_key("cve_data_one") not in memory_redis.values
 
 
 def test_rss_and_metrics_use_admitted_bounded_lookups():
