@@ -8,3 +8,4 @@ poc_processor.py
 intel_processor.py
 pubdate.py
 .pytest_cache/
+.cursor/
