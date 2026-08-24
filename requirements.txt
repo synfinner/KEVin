@@ -15,8 +15,8 @@ flask-orjson==2.0.0
 Flask-RESTful==0.3.10
 gevent==26.8.0
 greenlet==3.5.5
-gunicorn==26.0.0
-idna==3.18
+gunicorn==26.1.0
+idna==3.19
 iniconfig==2.3.0
 itsdangerous==2.2.0
 Jinja2==3.1.6
@@ -38,5 +38,5 @@ terminaltables==3.1.10
 urllib3==2.7.0
 Werkzeug==3.1.8
 zope.event==6.2
-zope.interface==8.5
+zope.interface==8.6
 zstandard==0.25.0
