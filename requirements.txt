@@ -24,7 +24,7 @@ MarkupSafe==3.0.3
 orjson==3.12.0
 packaging==26.3
 pluggy==1.6.0
-pymongo==4.18.0
+pymongo==4.18.1
 pytest==9.1.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.3
