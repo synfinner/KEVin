@@ -1,9 +1,8 @@
 aniso8601==10.0.1
 backports.zstd==1.8.0
 blinker==1.9.0
-#Brotli==1.2.0
-Brotli @ git+https://github.com/google/brotli.git@v1.2.0#egg=Brotli
-certifi==2026.10.18
+Brotli==1.2.1
+certifi==2026.10.19
 charset-normalizer==3.5.2
 click==8.5.0
 cramjam==2.14.0
@@ -27,15 +26,16 @@ packaging==26.3
 pluggy==1.7.0
 pymongo==4.19.0
 pytest==9.1.1
-python-dateutil==2.9.0.post0
+python-dateutil==3.0.0
 python-dotenv==1.2.4
 python-snappy==0.7.3
 pytz==2026.5
 redis==8.1.0
 requests==2.34.2
-setuptools==84.0.0
+setuptools==84.2.1
 six==1.17.0
 terminaltables==3.1.10
+tzdata==2026.5
 urllib3==2.8.0
 Werkzeug==3.1.9
 zope.event==6.2
