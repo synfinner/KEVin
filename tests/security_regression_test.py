@@ -1237,6 +1237,111 @@ def test_homepage_rejects_untrusted_hosts_and_uses_public_origin(monkeypatch):
     assert "evil.example" not in homepage
 
 
+def test_homepage_reads_as_an_api_reference(monkeypatch):
+    """Landing page states the product and lists the canonical routes."""
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = object()
+    fake_database.all_vulns_collection = object()
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(MemoryRedis()),
+    )
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://kevin.gtfkd.com")
+    monkeypatch.setenv("TRUSTED_HOSTS", "kevin.gtfkd.com,localhost")
+    sys.modules.pop("kevin", None)
+    sys.modules.pop("schema.api", None)
+
+    try:
+        kevin_module = importlib.import_module("kevin")
+        client = kevin_module.app.test_client()
+        response = client.get("/", headers={"Host": "localhost"})
+    finally:
+        sys.modules.pop("kevin", None)
+        sys.modules.pop("schema.api", None)
+
+    assert response.status_code == 200
+    homepage = response.get_data(as_text=True)
+    assert "Known exploited vulnerabilities, as an API." in homepage
+    assert "Security intelligence, delivered fast." not in homepage
+    assert "radial-gradient" not in homepage
+    assert "fonts.googleapis.com" not in homepage
+    assert "curl https://kevin.gtfkd.com/kev/recent?days=7" in homepage
+    assert 'id="metrics-cves"' in homepage
+    assert 'id="metrics-kevs"' in homepage
+    assert "View examples" in homepage
+    assert "Open KEV Viewer" in homepage
+    assert 'href="/viz"' in homepage
+    for snippet in (
+        'href="/kev"',
+        "/kev/exists?cve=CVE-2023-22527",
+        "/kev/recent?days=7",
+        "/vuln/CVE-2023-22527",
+        "/vuln/CVE-2023-22527/nvd",
+        "/vuln/CVE-2023-22527/mitre",
+        "/vuln/published?days=7",
+        'href="/agreement"',
+        'href="/privacy-policy"',
+        "https://github.com/synfinner/KEVin/issues",
+        'href="/donate"',
+        'href="/about"',
+    ):
+        assert snippet in homepage
+
+
+def test_viz_page_matches_the_reference_layout(monkeypatch):
+    """KEV Viewer uses the same flat reference chrome as the homepage."""
+    fake_database = types.ModuleType("utils.database")
+    fake_database.collection = object()
+    fake_database.all_vulns_collection = object()
+    monkeypatch.setitem(sys.modules, "utils.database", fake_database)
+    cache_module = importlib.import_module("utils.cache_manager")
+    monkeypatch.setattr(
+        cache_module,
+        "cache_manager",
+        cache_module.CacheManager(MemoryRedis()),
+    )
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://kevin.gtfkd.com")
+    monkeypatch.setenv("TRUSTED_HOSTS", "kevin.gtfkd.com,localhost")
+    sys.modules.pop("kevin", None)
+    sys.modules.pop("schema.api", None)
+
+    try:
+        kevin_module = importlib.import_module("kevin")
+        client = kevin_module.app.test_client()
+        response = client.get("/viz", headers={"Host": "localhost"})
+    finally:
+        sys.modules.pop("kevin", None)
+        sys.modules.pop("schema.api", None)
+
+    assert response.status_code == 200
+    page = response.get_data(as_text=True)
+    assert "<h1>KEV Viewer</h1>" in page
+    assert 'id="kevTable"' in page
+    assert 'id="kevModal"' in page
+    assert 'class="view-link"' in page
+    assert "radial-gradient" not in page
+    assert "fonts.googleapis.com" not in page
+    assert "Space Grotesk" not in page
+    assert "--bg: #f7f8f9" in page
+    assert 'class="brand" href="/"' in page
+    assert ">KEVin<" in page
+    assert 'aria-current="page"' in page
+    for snippet in (
+        'href="/examples"',
+        'href="/graph"',
+        'href="/rss"',
+        'href="/about"',
+        'href="/agreement"',
+        'href="/privacy-policy"',
+        'href="/donate"',
+        "https://github.com/synfinner/KEVin/issues",
+    ):
+        assert snippet in page
+
+
 def test_uncached_origin_requests_have_a_global_rate_budget(monkeypatch):
     """Valid cache-bypass variants stop before repeated origin execution."""
     monkeypatch.setenv("REDIS_IP", "localhost")

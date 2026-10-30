@@ -5,13 +5,13 @@
     <title>KEVin Vulnerability API</title>
     <meta charset="UTF-8">
     <meta name="description"
-        content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
+        content="Query the CISA Known Exploited Vulnerabilities catalog and CVE records through the KEVin API.">
     <link rel="canonical" href="{{ public_base_url }}/">
     <meta name="robots" content="index, follow">
-    <meta name="theme-color" content="#0b0f17">
+    <meta name="theme-color" content="#f7f8f9">
     <meta property="og:title" content="KEVin Vulnerability API">
     <meta property="og:description"
-        content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
+        content="Query the CISA Known Exploited Vulnerabilities catalog and CVE records through the KEVin API.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ public_base_url }}/">
     <meta property="og:image" content="{{ public_base_url }}{{ url_for('static', filename='android-chrome-512x512.png') }}">
@@ -20,38 +20,32 @@
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="KEVin Vulnerability API">
     <meta name="twitter:description"
-        content="Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API.">
+        content="Query the CISA Known Exploited Vulnerabilities catalog and CVE records through the KEVin API.">
     <meta name="twitter:image" content="{{ public_base_url }}{{ url_for('static', filename='android-chrome-512x512.png') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}"
-        alt="Apple Touch Icon">
-    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}"
-        alt="Apple Touch Icon">
-    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}"
-        alt="Apple Touch Icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon-16x16.png') }}">
     <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
-    <link
-        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap"
-        rel="stylesheet">
     <script type="application/ld+json">
         {
             "@context": "https://schema.org",
             "@type": "WebSite",
             "name": "KEVin Vulnerability API",
             "url": "{{ public_base_url }}/",
-            "description": "Access CISA's Known Exploited Vulnerabilities Catalog (KEV) and CVE Data through the KEVin API."
+            "description": "Query the CISA Known Exploited Vulnerabilities catalog and CVE records through the KEVin API."
         }
     </script>
     <style>
         :root {
-            --bg: #0b0f17;
-            --surface: #121826;
-            --surface-2: #161e30;
-            --text: #e6edf7;
-            --muted: #a2acbd;
-            --accent: #23d3b7;
-            --accent-soft: rgba(35, 211, 183, 0.2);
-            --warning: #f59e0b;
+            --bg: #f7f8f9;
+            --surface: #ffffff;
+            --text: #111827;
+            --muted: #5c6570;
+            --line: #e3e5e8;
+            --line-soft: #eef0f2;
+            --get: #157347;
+            --get-bg: #e5f6ec;
         }
 
         * {
@@ -60,11 +54,10 @@
 
         body {
             margin: 0;
-            font-family: "Space Grotesk", system-ui, sans-serif;
+            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
             color: var(--text);
-            background: radial-gradient(circle at 20% 20%, rgba(35, 211, 183, 0.18), transparent 45%),
-                radial-gradient(circle at 80% 0%, rgba(79, 70, 229, 0.18), transparent 40%),
-                var(--bg);
+            background: var(--bg);
+            line-height: 1.5;
         }
 
         a {
@@ -72,22 +65,14 @@
             text-decoration: none;
         }
 
-        .page {
-            max-width: 1180px;
-            margin: 0 auto;
-            padding: 32px 24px 72px;
-            position: relative;
+        a:hover {
+            text-decoration: underline;
         }
 
-        .page::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-            background-size: 60px 60px;
-            opacity: 0.25;
-            pointer-events: none;
+        .page {
+            max-width: 1040px;
+            margin: 0 auto;
+            padding: 28px 24px 64px;
         }
 
         .topbar {
@@ -95,190 +80,282 @@
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            position: relative;
-            z-index: 1;
+            padding-bottom: 20px;
         }
 
         .brand {
-            font-size: 1.2rem;
+            font-size: 1.35rem;
             font-weight: 600;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
+            letter-spacing: -0.02em;
+        }
+
+        .brand:hover {
+            text-decoration: none;
         }
 
         .nav-links {
             display: flex;
-            gap: 16px;
+            gap: 22px;
             color: var(--muted);
             font-size: 0.95rem;
-            flex-wrap: wrap;
         }
 
         .hero {
-            margin-top: 30px;
-            padding: 28px;
-            border-radius: 22px;
-            background: linear-gradient(145deg, rgba(18, 24, 38, 0.95), rgba(22, 30, 48, 0.95));
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
             display: grid;
-            grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
-            gap: 24px;
-            position: relative;
-            z-index: 1;
+            grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr);
+            gap: 36px;
+            align-items: start;
+            padding: 12px 0 8px;
         }
 
-        .hero h1 {
-            margin: 0 0 12px;
-            font-size: clamp(2.2rem, 2.8vw, 3rem);
-        }
-
-        .hero p {
-            margin: 0 0 18px;
+        .eyebrow {
+            margin: 0 0 10px;
             color: var(--muted);
-            font-size: 1.05rem;
-        }
-
-        .cta-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-
-        .btn {
-            padding: 10px 18px;
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: transparent;
-            color: var(--text);
-            font-weight: 500;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .btn.primary {
-            border-color: transparent;
-            background: var(--accent);
-            color: #04121a;
-            box-shadow: 0 10px 20px rgba(35, 211, 183, 0.35);
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        .stat-panel {
-            display: grid;
-            gap: 14px;
-        }
-
-        .signal-card {
-            padding: 16px 18px;
-            border-radius: 16px;
-            background: var(--surface-2);
-            border: 1px solid rgba(35, 211, 183, 0.3);
-        }
-
-        .signal-label {
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-size: 0.8rem;
-            color: var(--muted);
-        }
-
-        .signal-value {
-            font-size: 1.8rem;
-            font-weight: 600;
-            margin-top: 8px;
-        }
-
-        .section {
-            margin-top: 36px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .section h2 {
-            font-size: 1.4rem;
-            margin: 0 0 16px;
-        }
-
-        .api-grid {
-            display: grid;
-            gap: 18px;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        }
-
-        .api-card {
-            background: rgba(18, 24, 38, 0.9);
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 18px;
-        }
-
-        .api-card h3 {
-            margin: 0 0 12px;
-            font-size: 1.1rem;
-        }
-
-        .endpoint-row {
-            display: grid;
-            gap: 6px;
-            margin-bottom: 12px;
-            padding: 10px 12px;
-            border-left: 3px solid var(--accent);
-            background: rgba(35, 211, 183, 0.05);
-            border-radius: 8px;
-        }
-
-        .endpoint-row code {
-            font-family: "JetBrains Mono", ui-monospace, monospace;
-            color: var(--accent);
             font-size: 0.95rem;
         }
 
-        .endpoint-row a {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+        h1 {
+            margin: 0 0 14px;
+            font-size: clamp(2rem, 4vw, 2.55rem);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.12;
         }
 
-        .endpoint-row span {
+        .lede {
+            margin: 0 0 22px;
+            color: var(--muted);
+            font-size: 1.02rem;
+        }
+
+        .actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 9px 14px;
+            border-radius: 6px;
+            background: #111827;
+            color: #ffffff;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .button:hover {
+            background: #000000;
+            text-decoration: none;
+        }
+
+        .text-link {
+            color: #374151;
+            font-size: 0.95rem;
+        }
+
+        .sample {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .sample-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--line-soft);
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .sample-bar button {
+            border: 0;
+            background: transparent;
+            color: #374151;
+            font: inherit;
+            cursor: pointer;
+            padding: 2px 4px;
+        }
+
+        .sample-bar button:hover {
+            text-decoration: underline;
+        }
+
+        .sample pre {
+            margin: 0;
+            padding: 16px 14px 22px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.84rem;
+            line-height: 1.45;
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            margin-top: 28px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .metric {
+            padding: 16px 18px;
+            border-right: 1px solid var(--line);
+        }
+
+        .metric:last-child {
+            border-right: 0;
+        }
+
+        .metric-value {
+            font-size: 1.65rem;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+        }
+
+        .metric-label {
+            margin-top: 2px;
             color: var(--muted);
             font-size: 0.92rem;
         }
 
-        .info-grid {
-            display: grid;
-            gap: 16px;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        .section {
+            margin-top: 36px;
         }
 
-        .info-card {
-            background: rgba(18, 24, 38, 0.9);
-            border-radius: 14px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            padding: 16px;
+        h2 {
+            margin: 0 0 12px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .table-wrap {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            font-weight: 500;
             color: var(--muted);
+            font-size: 0.85rem;
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--line);
         }
 
-        .info-card h4 {
-            margin: 0 0 8px;
-            color: var(--text);
+        td {
+            padding: 12px 16px;
+            border-top: 1px solid var(--line-soft);
+            vertical-align: middle;
         }
 
-        .info-card a {
-            color: var(--accent);
+        td code,
+        .note code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.92rem;
         }
 
-        @media (max-width: 900px) {
+        .method {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: var(--get-bg);
+            color: var(--get);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .note {
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 18px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .footer p {
+            margin: 0 0 10px;
+        }
+
+        .footer nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        @media (max-width: 800px) {
+            .hero,
+            .metrics {
+                grid-template-columns: 1fr 1fr;
+            }
+
             .hero {
                 grid-template-columns: 1fr;
             }
 
             .topbar {
-                flex-direction: column;
                 align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .metric {
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+            }
+
+            .metric:last-child {
+                border-bottom: 0;
+            }
+
+            thead {
+                display: none;
+            }
+
+            tr {
+                display: grid;
+                grid-template-columns: auto 1fr;
+                gap: 2px 12px;
+                padding: 12px 16px;
+                border-top: 1px solid var(--line-soft);
+            }
+
+            td {
+                border: 0;
+                padding: 0;
+            }
+
+            td:nth-child(3) {
+                grid-column: 1 / -1;
+                color: var(--muted);
             }
         }
     </style>
@@ -287,185 +364,159 @@
 <body>
     <div class="page">
         <header class="topbar">
-            <div class="brand">KEVin API</div>
-            <nav class="nav-links">
-                <a href="{{ url_for('example') }}" target="_blank" rel="noopener">Examples</a>
-                <a href="https://kevin.gtfkd.com/about" target="_blank" rel="noopener">About</a>
-                <a href="https://kevin.gtfkd.com/viz" target="_blank" rel="noopener">KEV Viewer</a>
-                <a href="https://kevin.gtfkd.com/rss" target="_blank" rel="noopener">RSS Feed</a>
-                <a href="https://kevin.gtfkd.com/graph" target="_blank" rel="noopener">TA Graph</a>
+            <a class="brand" href="/">KEVin</a>
+            <nav class="nav-links" aria-label="Primary">
+                <a href="{{ url_for('example') }}">Examples</a>
+                <a href="/viz">Viewer</a>
+                <a href="/graph">Graph</a>
+                <a href="/rss">RSS</a>
             </nav>
         </header>
 
         <section class="hero">
             <div>
-                <h1>Security intelligence, delivered fast.</h1>
-                <p>Query the CISA Known Exploited Vulnerabilities Catalog (KEV) and Common Vulnerabilities and Exposures
-                    (CVE) data with predictable endpoints designed for analysts and automation.
-                </p>
-                <div class="cta-row">
-                    <a class="btn primary" href="{{ url_for('example') }}" target="_blank" rel="noopener">Go to
-                        Examples</a>
-                    <a class="btn" href="https://kevin.gtfkd.com/viz" target="_blank" rel="noopener">KEV Viewer</a>
-                    <a class="btn" href="https://kevin.gtfkd.com/rss" target="_blank" rel="noopener">RSS Feed</a>
-                    <a class="btn" href="https://kevin.gtfkd.com/graph" target="_blank" rel="noopener">KEV TA Graph</a>
+                <p class="eyebrow">CISA KEV and CVE</p>
+                <h1>Known exploited vulnerabilities, as an API.</h1>
+                <p class="lede">Query the CISA catalog and CVE records.<br>Built for analysts and scripts.</p>
+                <div class="actions">
+                    <a class="button" href="{{ url_for('example') }}">View examples</a>
+                    <a class="text-link" href="/viz">Open KEV Viewer</a>
                 </div>
             </div>
-            <div class="stat-panel">
-                <div class="signal-card">
-                    <div class="signal-label">Total CVEs</div>
-                    <div id="metrics-cves" class="signal-value">Loading...</div>
+            <div class="sample">
+                <div class="sample-bar">
+                    <span>curl</span>
+                    <button type="button" id="copy-sample">Copy</button>
                 </div>
-                <div class="signal-card">
-                    <div class="signal-label">Total KEVs</div>
-                    <div id="metrics-kevs" class="signal-value">Loading...</div>
-                </div>
-                <div class="signal-card">
-                    <div class="signal-label">Rate Limit</div>
-                    <div class="signal-value">2 RPS</div>
-                </div>
+                <pre id="curl-sample">curl {{ public_base_url }}/kev/recent?days=7</pre>
+            </div>
+        </section>
+
+        <section class="metrics" aria-label="Catalog status">
+            <div class="metric">
+                <div id="metrics-cves" class="metric-value">—</div>
+                <div class="metric-label">CVEs</div>
+            </div>
+            <div class="metric">
+                <div id="metrics-kevs" class="metric-value">—</div>
+                <div class="metric-label">KEVs</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">2</div>
+                <div class="metric-label">req/s</div>
+            </div>
+            <div class="metric">
+                <div class="metric-value">3 hours</div>
+                <div class="metric-label">Edge cache</div>
             </div>
         </section>
 
         <section class="section">
-            <h2>API Usage</h2>
-            <div class="api-grid">
-                <article class="api-card">
-                    <h3>KEV Endpoints</h3>
-                    <div class="endpoint-row">
-                        <a href="/kev" target="_blank" rel="noopener"><code>/kev</code></a>
-                        <span>Latest KEVs</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev/exists?cve=CVE-2023-22527" target="_blank"
-                            rel="noopener"><code>/kev/exists?cve=CVE-2023-22527</code></a>
-                        <span>KEV presence check</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?filter=ransomware" target="_blank"
-                            rel="noopener"><code>/kev?filter=ransomware</code></a>
-                        <span>Filter by ransomware</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?page=1&amp;per_page=25" target="_blank"
-                            rel="noopener"><code>/kev?page=1&amp;per_page=25</code></a>
-                        <span>Paginated KEV list</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?page=2&amp;per_page=25" target="_blank"
-                            rel="noopener"><code>/kev?page=2&amp;per_page=25</code></a>
-                        <span>Next page of KEVs</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?search=Microsoft&amp;page=1&amp;per_page=10" target="_blank"
-                            rel="noopener"><code>/kev?search=Microsoft&amp;page=1&amp;per_page=10</code></a>
-                        <span>Keyword search</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev/CVE-2023-1234" target="_blank" rel="noopener"><code>/kev/CVE-2023-1234</code></a>
-                        <span>Fetch by CVE ID</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev/recent?days=7" target="_blank" rel="noopener"><code>/kev/recent?days=7</code></a>
-                        <span>Recent additions</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?sort=date&amp;order=desc&amp;page=1&amp;per_page=15" target="_blank"
-                            rel="noopener"><code>/kev?sort=date&amp;order=desc&amp;page=1&amp;per_page=15</code></a>
-                        <span>Sort by newest date added</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?sort=severity&amp;order=desc&amp;page=1&amp;per_page=15" target="_blank"
-                            rel="noopener"><code>/kev?sort=severity&amp;order=desc&amp;page=1&amp;per_page=15</code></a>
-                        <span>Sort by highest severity</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/kev?actor=Lazarus%20Group" target="_blank"
-                            rel="noopener"><code>/kev?actor=Lazarus%20Group</code></a>
-                        <span>Search by threat actor</span>
-                    </div>
-                </article>
-                <article class="api-card">
-                    <h3>Vuln Endpoints</h3>
-                    <div class="endpoint-row">
-                        <a href="/vuln/CVE-2023-1234" target="_blank"
-                            rel="noopener"><code>/vuln/CVE-2023-1234</code></a>
-                        <span>CVE details</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/vuln/CVE-2023-1234/nvd" target="_blank"
-                            rel="noopener"><code>/vuln/CVE-2023-1234/nvd</code></a>
-                        <span>NVD data</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/vuln/CVE-2023-1234/mitre" target="_blank"
-                            rel="noopener"><code>/vuln/CVE-2023-1234/mitre</code></a>
-                        <span>MITRE data</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/vuln/published?days=7" target="_blank"
-                            rel="noopener"><code>/vuln/published?days=7</code></a>
-                        <span>Recent NVD vulns</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/vuln/published?days=7&amp;page=2" target="_blank"
-                            rel="noopener"><code>/vuln/published?days=7&amp;page=2</code></a>
-                        <span>Paginated results</span>
-                    </div>
-                    <div class="endpoint-row">
-                        <a href="/vuln/published?days=7&amp;page=1&amp;per_page=30" target="_blank"
-                            rel="noopener"><code>/vuln/published?days=7&amp;page=1&amp;per_page=30</code></a>
-                        <span>Custom page size</span>
-                    </div>
-                </article>
+            <h2>Endpoints</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Method</th>
+                            <th scope="col">Path</th>
+                            <th scope="col">Returns</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/kev"><code>/kev</code></a></td>
+                            <td>Latest entries</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/kev/CVE-2023-22527"><code>/kev/{cve}</code></a></td>
+                            <td>One KEV record</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/kev/exists?cve=CVE-2023-22527"><code>/kev/exists?cve=</code></a></td>
+                            <td>Whether a CVE is in the catalog</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/kev/recent?days=7"><code>/kev/recent?days=</code></a></td>
+                            <td>Added in the last N days</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/kev?search=Microsoft"><code>/kev?search=</code></a></td>
+                            <td>Keyword, ransomware, actor, and sort filters</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/vuln/CVE-2023-22527"><code>/vuln/{cve}</code></a></td>
+                            <td>CVE details</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/vuln/CVE-2023-22527/nvd"><code>/vuln/{cve}/nvd</code></a></td>
+                            <td>NVD record</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/vuln/CVE-2023-22527/mitre"><code>/vuln/{cve}/mitre</code></a></td>
+                            <td>MITRE record</td>
+                        </tr>
+                        <tr>
+                            <td><span class="method">GET</span></td>
+                            <td><a href="/vuln/published?days=7"><code>/vuln/published?days=</code></a></td>
+                            <td>CVEs published in the last N days</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
+            <p class="note">List routes accept <code>page</code> and <code>per_page</code>. Search covers KEV records only.</p>
         </section>
 
-        <section class="section">
-            <h2>Operations</h2>
-            <div class="info-grid">
-                <div class="info-card">
-                    <h4>Limits</h4>
-                    <p>2 requests per second per IP. One hour block on violations.</p>
-                    <p>Search is limited to KEV data only (as of 29 August 2023).</p>
-                </div>
-                <div class="info-card">
-                    <h4>Edge Cache</h4>
-                    <p>Edge cache set to 3 hours. Updates may be delayed if CVE data is stuck in cache.</p>
-                </div>
-                <div class="info-card">
-                    <h4>Policies</h4>
-                    <p><a href="https://kevin.gtfkd.com/agreement" target="_blank" rel="noopener">Terms of Agreement</a>
-                    </p>
-                    <p><a href="https://kevin.gtfkd.com/privacy-policy" target="_blank" rel="noopener">Privacy
-                            Policy</a></p>
-                </div>
-                <div class="info-card">
-                    <h4>Support</h4>
-                    <p>Open issues on <a href="https://github.com/synfinner/KEVin/issues" target="_blank"
-                            rel="noopener">GitHub</a>.</p>
-                    <p>Support infrastructure on the <a href="https://kevin.gtfkd.com/donate" target="_blank"
-                            rel="noopener">donations page</a>.</p>
-                </div>
-            </div>
-        </section>
+        <footer class="footer">
+            <p>2 requests per second per IP. Violations are blocked for one hour. Cached responses can lag the catalog by up to 3 hours.</p>
+            <nav aria-label="Site">
+                <a href="/about">About</a>
+                <a href="/agreement">Terms</a>
+                <a href="/privacy-policy">Privacy</a>
+                <a href="https://github.com/synfinner/KEVin/issues" target="_blank" rel="noopener">GitHub</a>
+                <a href="/donate">Donate</a>
+            </nav>
+        </footer>
     </div>
 
     <script>
         function getMetrics() {
-            fetch('/get_metrics')
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('metrics-cves').innerText = Number(data.cves_count).toLocaleString();
-                    document.getElementById('metrics-kevs').innerText = Number(data.kevs_count).toLocaleString();
+            fetch("/get_metrics")
+                .then(function (response) { return response.json(); })
+                .then(function (data) {
+                    document.getElementById("metrics-cves").textContent =
+                        Number(data.cves_count).toLocaleString();
+                    document.getElementById("metrics-kevs").textContent =
+                        Number(data.kevs_count).toLocaleString();
                 })
-                .catch(error => {
-                    console.error('Error fetching metrics:', error);
-                    document.getElementById('metrics-cves').innerText = 'Unavailable';
-                    document.getElementById('metrics-kevs').innerText = 'Unavailable';
+                .catch(function () {
+                    document.getElementById("metrics-cves").textContent = "Unavailable";
+                    document.getElementById("metrics-kevs").textContent = "Unavailable";
                 });
         }
 
+        function copySample() {
+            var sample = document.getElementById("curl-sample").textContent.trim();
+            var button = document.getElementById("copy-sample");
+            var markCopied = function () {
+                button.textContent = "Copied";
+                window.setTimeout(function () {
+                    button.textContent = "Copy";
+                }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(sample).then(markCopied).catch(function () {});
+            }
+        }
+
+        document.getElementById("copy-sample").addEventListener("click", copySample);
         getMetrics();
     </script>
 </body>
