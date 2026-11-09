@@ -1,6 +1,6 @@
-# Python 3.12.16 security release. This multi-arch index digest is the
-# python:3.12-slim image published 2026-11-02 (Debian trixie).
-FROM python:3.12.16-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
+# Python 3.12.16. This multi-arch index digest is the python:3.12-slim
+# image rebuilt 2026-11-05 and published 2026-11-08 (Debian trixie).
+FROM python:3.12.16-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 
 # Set environment variables to prevent Python from writing pyc files and buffering stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -21,7 +21,7 @@ WORKDIR /app
 # keeps the pip 25.0.1 installer, whose vendored CA bundle predates the
 # emSign distrust.
 COPY requirements.txt .
-RUN python -m pip install --no-cache-dir --upgrade "pip==26.2.2" \
+RUN python -m pip install --no-cache-dir --upgrade "pip==26.3" \
     && python -m pip install --no-cache-dir -r requirements.txt
 
 # Copy the application code
