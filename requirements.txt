@@ -2,8 +2,8 @@ aniso8601==10.0.1
 backports.zstd==1.8.0
 blinker==1.9.0
 Brotli==1.2.1
-certifi==2026.10.23
-charset-normalizer==3.5.2
+certifi==2026.11.20
+charset-normalizer==3.5.3
 click==8.5.1
 cramjam==2.14.0
 defusedxml==0.7.1
@@ -15,7 +15,7 @@ flask-orjson==2.0.0
 Flask-RESTful==0.3.10
 gevent==26.9.0
 greenlet==3.5.6
-gunicorn==26.2.0
+gunicorn==27.0.1
 idna==3.20
 iniconfig==2.3.1
 itsdangerous==2.2.0
@@ -24,13 +24,13 @@ MarkupSafe==3.0.4
 orjson==3.13.0
 packaging==26.3
 pluggy==1.7.0
-pymongo==4.19.0
+pymongo==4.20.1
 pytest==9.2.0
 python-dateutil==4.0.0
 python-dotenv==1.2.4
 python-snappy==0.7.3
 pytz==2026.6
-redis==8.1.0
+redis==8.2.0
 requests==2.34.2
 setuptools==84.2.1
 six==1.17.0
